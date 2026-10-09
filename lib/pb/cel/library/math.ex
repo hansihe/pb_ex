@@ -1,8 +1,8 @@
 defmodule PB.CEL.Library.Math do
   @moduledoc false
 
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Runtime.Math, as: RuntimeMath
 
   import Function, only: [arg: 1]

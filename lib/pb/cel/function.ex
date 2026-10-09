@@ -1,4 +1,4 @@
-defmodule PB.CEL.Library.Function do
+defmodule PB.CEL.Function do
   @moduledoc false
 
   alias PB.CEL.Call
@@ -38,12 +38,12 @@ defmodule PB.CEL.Library.Function do
 
     @type t :: %__MODULE__{
             id: String.t(),
-            args: PB.CEL.Library.Function.args(),
-            result: PB.CEL.Library.Function.result(),
-            eval: PB.CEL.Library.Function.eval(),
-            eval_context: [PB.CEL.Library.Function.eval_context()],
-            combine: PB.CEL.Library.Function.combine(),
-            on_dyn: PB.CEL.Library.Function.on_dyn()
+            args: PB.CEL.Function.args(),
+            result: PB.CEL.Function.result(),
+            eval: PB.CEL.Function.eval(),
+            eval_context: [PB.CEL.Function.eval_context()],
+            combine: PB.CEL.Function.combine(),
+            on_dyn: PB.CEL.Function.on_dyn()
           }
   end
 

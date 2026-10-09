@@ -1,9 +1,9 @@
 defmodule PB.CEL.Library do
   @moduledoc false
 
+  alias PB.CEL.Function
   alias PB.CEL.Library.Core
   alias PB.CEL.Library.Encoders
-  alias PB.CEL.Library.Function
   alias PB.CEL.Library.Intrinsics
   alias PB.CEL.Library.Math
   alias PB.CEL.Library.Strings

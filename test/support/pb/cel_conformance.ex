@@ -6,8 +6,8 @@ defmodule PB.TestSupport.CELConformance do
   alias PB.CEL.Checker.TypePattern
   alias PB.CEL.Env
   alias PB.CEL.Library
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Error
   alias PB.CEL.Value
   alias PB.Validate.CEL.MessageRuntime

@@ -4,8 +4,8 @@ defmodule PB.CEL.Checker.Signatures.Matcher do
   alias PB.CEL.Checker.Solver
   alias PB.CEL.Checker.TypePattern
   alias PB.CEL.Checker.Types, as: CType
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
 
   @type resolved :: %{
           required(:type) => CType.t(),

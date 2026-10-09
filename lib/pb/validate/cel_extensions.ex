@@ -1,8 +1,8 @@
 defmodule PB.Validate.CELExtensions do
   @moduledoc false
 
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Runtime.Math, as: RuntimeMath
   alias PB.Validate.CELExtensions.Rules
   alias PB.Validate.CELExtensions.Strings

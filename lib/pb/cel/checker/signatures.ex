@@ -6,7 +6,7 @@ defmodule PB.CEL.Checker.Signatures do
   alias PB.CEL.Checker.Signatures.Matcher
   alias PB.CEL.Checker.Solver
   alias PB.CEL.Checker.Types, as: CType
-  alias PB.CEL.Library.Function
+  alias PB.CEL.Function
 
   @type resolved :: %{
           required(:type) => CType.t(),

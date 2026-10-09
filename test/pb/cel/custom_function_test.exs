@@ -2,8 +2,8 @@ defmodule PB.CEL.CustomFunctionTest do
   use ExUnit.Case, async: true
 
   alias PB.CEL
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Value
 
   defmodule Handlers do

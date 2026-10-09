@@ -10,8 +10,8 @@ defmodule PB.CEL.Env do
   @moduledoc false
 
   alias PB.CEL.Library
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Runtime.NoMessageRuntime
   alias PB.CEL.Runtime.NoMessageSchema

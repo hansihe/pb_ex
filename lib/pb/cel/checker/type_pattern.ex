@@ -1,7 +1,7 @@
 defmodule PB.CEL.Checker.TypePattern do
   @moduledoc false
 
-  # Type-pattern language used by `PB.CEL.Library.Function.Overload` to declare
+  # Type-pattern language used by `PB.CEL.Function.Overload` to declare
   # argument patterns and by `PB.CEL.Checker.Signatures.Matcher` to match calls
   # against them.
   #

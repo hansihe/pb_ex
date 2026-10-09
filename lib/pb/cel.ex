@@ -57,8 +57,8 @@ defmodule PB.CEL do
   # An overload's `:eval_context` appends extra arguments; `:vars` passes the
   # variable bindings given to eval, keyed by string name.
   #
-  #     alias PB.CEL.Library.Function
-  #     alias PB.CEL.Library.Function.Overload
+  #     alias PB.CEL.Function
+  #     alias PB.CEL.Function.Overload
   #
   #     defmodule MyHandlers do
   #       def greet([{:string, name}]), do: {:ok, {:string, "Hello, " <> name}}

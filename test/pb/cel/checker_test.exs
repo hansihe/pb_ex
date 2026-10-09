@@ -8,8 +8,8 @@ defmodule PB.CEL.CheckerTest do
   alias PB.CEL.Type
   alias PB.CEL.Checker.TypePattern
   alias PB.CEL.Checker.Types, as: CType
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Runtime.Core, as: RuntimeCore
 
   defmodule WrappedMessageSchema do

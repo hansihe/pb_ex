@@ -1,8 +1,8 @@
 defmodule PB.CEL.Library.Intrinsics do
   @moduledoc false
 
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Runtime.Core, as: RuntimeCore
   alias PB.CEL.Runtime.Optional, as: RuntimeOptional
 

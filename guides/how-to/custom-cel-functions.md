@@ -24,8 +24,8 @@ anonymous functions are rejected at registration so functions stay
 introspectable.
 
 ```elixir
-alias PB.CEL.Library.Function
-alias PB.CEL.Library.Function.Overload
+alias PB.CEL.Function
+alias PB.CEL.Function.Overload
 
 defmodule MyHandlers do
   # Receives the list of evaluated PB.CEL.Value arguments.

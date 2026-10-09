@@ -20,7 +20,7 @@ defmodule PB.CEL.Checked do
 
   alias PB.CEL.Call
   alias PB.CEL.Checker.Types, as: CType
-  alias PB.CEL.Library.Function
+  alias PB.CEL.Function
   alias PB.CEL.Proto
   alias PB.CEL.Type
   alias PB.CEL.Value

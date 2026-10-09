@@ -5,7 +5,7 @@ defmodule PB.CEL.CallIntegrationTest do
   alias PB.CEL.Checked
   alias PB.CEL.Error
   alias PB.CEL.Library
-  alias PB.CEL.Library.Function
+  alias PB.CEL.Function
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Value
 

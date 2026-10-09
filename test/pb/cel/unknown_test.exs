@@ -3,8 +3,8 @@ defmodule PB.CEL.UnknownTest do
 
   alias PB.CEL
   alias PB.CEL.Error
-  alias PB.CEL.Library.Function
-  alias PB.CEL.Library.Function.Overload
+  alias PB.CEL.Function
+  alias PB.CEL.Function.Overload
   alias PB.CEL.Unknown
   alias PB.CEL.Value
 
