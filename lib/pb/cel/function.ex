@@ -32,6 +32,7 @@ defmodule PB.CEL.Function do
       :result,
       eval: nil,
       eval_context: [],
+      strict: true,
       combine: :assignable,
       on_dyn: :match
     ]
@@ -42,6 +43,7 @@ defmodule PB.CEL.Function do
             result: PB.CEL.Function.result(),
             eval: PB.CEL.Function.eval(),
             eval_context: [PB.CEL.Function.eval_context()],
+            strict: boolean,
             combine: PB.CEL.Function.combine(),
             on_dyn: PB.CEL.Function.on_dyn()
           }

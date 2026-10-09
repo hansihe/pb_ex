@@ -654,7 +654,8 @@ defmodule PB.CEL.Checker.Signatures.Matcher do
        type: Solver.resolve(solver, type),
        overload_id: overload.id,
        eval: overload.eval,
-       eval_context: overload.eval_context
+       eval_context: overload.eval_context,
+       strict: overload.strict
      }, solver}
   end
 end

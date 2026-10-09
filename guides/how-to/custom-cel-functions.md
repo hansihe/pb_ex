@@ -67,7 +67,12 @@ PB.CEL.Value.to_native(value)
   `{:unknown, reason}` makes the call's result unknown; `reason` is any term and
   is reported in the `PB.CEL.Unknown` entry `{{:call, name, expr_id}, reason}`.
 - The function is not called when an argument is an error or unknown; the call
-  returns that error or unknown instead.
+  returns that error or unknown instead. Set `strict: false` on the overload to
+  be called anyway: such arguments then arrive as `{:error, %PB.CEL.Error{}}` and
+  `{:unknown, %PB.CEL.Unknown{}}`, and returning one of them passes it through
+  unchanged. A non-strict
+  function that turns an unknown into a value decides the result without that
+  input, so the result no longer reflects that the input was unknown.
 - An overload's `:eval_context` lists extra arguments appended after the
   argument list. `:vars` passes the variable bindings given to eval, as a map
   keyed by string name, so a function can read results fetched before

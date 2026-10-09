@@ -155,7 +155,8 @@ defmodule PB.CEL.Library.Intrinsics do
           id: "not_strictly_false",
           args: [:dyn],
           result: :bool,
-          eval: {:mfa, {RuntimeCore, :not_strictly_false}}
+          eval: {:mfa, {RuntimeCore, :not_strictly_false}},
+          strict: false
         }
       ],
       overloads: [
@@ -163,7 +164,8 @@ defmodule PB.CEL.Library.Intrinsics do
           id: "not_strictly_false",
           args: [:bool],
           result: :bool,
-          eval: {:mfa, {RuntimeCore, :not_strictly_false}}
+          eval: {:mfa, {RuntimeCore, :not_strictly_false}},
+          strict: false
         }
       ]
     },

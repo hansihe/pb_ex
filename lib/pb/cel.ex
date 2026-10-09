@@ -54,6 +54,9 @@ defmodule PB.CEL do
   # The eval target receives the list of evaluated `PB.CEL.Value` arguments.
   # For receiver-mode calls the target value is prepended to that list. The
   # target must return `{:ok, value} | {:unknown, reason} | {:error, reason}`.
+  # It is not called with error or unknown arguments unless the overload sets
+  # `strict: false`, in which case they arrive as `{:error, %PB.CEL.Error{}}`
+  # and `{:unknown, %PB.CEL.Unknown{}}`.
   # An overload's `:eval_context` appends extra arguments; `:vars` passes the
   # variable bindings given to eval, keyed by string name.
   #

@@ -12,6 +12,14 @@ defmodule PB.CEL.UnknownTest do
     def lookup([{:string, "missing"}]), do: {:unknown, :not_fetched}
     def lookup([{:string, key}]), do: {:ok, Value.int(String.length(key))}
 
+    def default([{:unknown, _unknown}, fallback]), do: {:ok, fallback}
+    def default([{:error, %Error{}} = error, _fallback]), do: error
+    def default([value, _fallback]), do: {:ok, value}
+
+    def inspect_arg([{:unknown, %Unknown{}} = unknown]), do: unknown
+    def inspect_arg([{:error, %Error{}}]), do: {:ok, Value.string("error")}
+    def inspect_arg([_value]), do: {:ok, Value.string("value")}
+
     def twice([{:int, value}]) do
       send(self(), {:twice_called, value})
       {:ok, Value.int(value * 2)}
@@ -35,7 +43,33 @@ defmodule PB.CEL.UnknownTest do
       ]
     }
 
-    CEL.Env.build(vars: @vars, functions: [lookup, twice])
+    default = %Function{
+      name: "default",
+      overloads: [
+        %Overload{
+          id: "default_bool",
+          args: [:bool, :bool],
+          result: :bool,
+          eval: {Handlers, :default},
+          strict: false
+        }
+      ]
+    }
+
+    inspect_arg = %Function{
+      name: "inspectArg",
+      overloads: [
+        %Overload{
+          id: "inspect_arg_int",
+          args: [:int],
+          result: :string,
+          eval: {Handlers, :inspect_arg},
+          strict: false
+        }
+      ]
+    }
+
+    CEL.Env.build(vars: @vars, functions: [lookup, twice, default, inspect_arg])
   end
 
   defp eval(source, bindings \\ %{}) do
@@ -142,6 +176,25 @@ defmodule PB.CEL.UnknownTest do
 
     assert {:error, %Error{message: "division by zero"}} = eval("optional.none().orValue(1 / 0)")
     assert {:error, %Error{message: "no such overload"}} = eval("dyn(1).orValue(2)")
+  end
+
+  describe "non-strict custom functions" do
+    test "receive unknown and error arguments as values" do
+      assert eval("default(x > 1, false)") == {:ok, Value.bool(false)}
+      assert eval("default(x > 1, true) && y > 1") == eval("y > 1")
+      assert eval("default(1 > 0, false)") == {:ok, Value.bool(true)}
+      assert {:error, %Error{message: "division by zero"}} = eval("default(1 / 0 > 1, false)")
+
+      assert eval("inspectArg(1 / 0)") == {:ok, Value.string("error")}
+      assert eval("inspectArg(1)") == {:ok, Value.string("value")}
+    end
+
+    test "can return an unknown or error argument unchanged" do
+      assert unknown_entries("inspectArg(x + y)") ==
+               [{{:var, "x"}, :timeout}, {{:var, "y"}, :missing}]
+
+      assert {:error, %Error{message: "division by zero"}} = eval("default(1 / 0 > 1, false)")
+    end
   end
 
   test "an unknown result can be bound as an input" do

@@ -12,7 +12,8 @@ defmodule PB.CEL.Checker.Signatures do
           required(:type) => CType.t(),
           required(:overload_id) => String.t(),
           required(:eval) => Function.eval(),
-          required(:eval_context) => [Function.eval_context()]
+          required(:eval_context) => [Function.eval_context()],
+          optional(:strict) => boolean
         }
 
   @spec resolve(Call.t(), CType.t() | nil, [CType.t()], Solver.t(), Env.t()) ::

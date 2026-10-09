@@ -105,13 +105,6 @@ defmodule PB.CEL.Evaluator do
     eval_enum_constructor_call(expr_ref(id), op, state)
   end
 
-  # `@not_strictly_false` is non-strict: comprehension loop conditions use it
-  # so an error or unknown in one iteration does not stop the loop.
-  defp eval_op(_id, {:call, %{name: "@not_strictly_false", arg_ids: [arg_id]}}, state) do
-    {value, state} = eval_captured(arg_id, state)
-    {:ok, Value.bool(value != Value.bool(false)), state}
-  end
-
   # `or` and `orValue` evaluate their alternative only when the receiver is
   # empty, as in cel-go.
   defp eval_op(id, {:call, %{overload_id: overload_id, target_id: target_id} = op}, state)
@@ -227,11 +220,30 @@ defmodule PB.CEL.Evaluator do
     end
   end
 
+  # A non-strict overload is called even when arguments are errors or
+  # unknowns, and receives them as `{:error, %Error{}}` and
+  # `{:unknown, %Unknown{}}`. `@not_strictly_false` is one: comprehension loop
+  # conditions use it so an error or unknown in one iteration does not stop
+  # the loop.
+  defp eval_registered_call(expr, %{strict: false} = op, state) do
+    {values, state} =
+      Enum.map_reduce(List.wrap(op.target_id) ++ op.arg_ids, state, fn id, state ->
+        {value, state} = eval_captured(id, state)
+        {non_strict_arg(value), state}
+      end)
+
+    apply_registered_call(expr, op, values, state)
+  end
+
   defp eval_registered_call(expr, %{target_id: target_id, arg_ids: arg_ids} = op, state) do
     with {:ok, values, state} <- eval_ids(List.wrap(target_id) ++ arg_ids, state) do
       apply_registered_call(expr, op, values, state)
     end
   end
+
+  defp non_strict_arg({:__cel_error__, %Error{} = error}), do: {:error, error}
+  defp non_strict_arg({:__cel_unknown__, %Unknown{} = unknown}), do: {:unknown, unknown}
+  defp non_strict_arg(value), do: value
 
   defp eval_optional_map_call(
          expr,
@@ -506,7 +518,9 @@ defmodule PB.CEL.Evaluator do
 
     case apply(mod, fun, args) do
       {:ok, value} -> {:ok, value, state}
+      {:unknown, %Unknown{} = unknown} -> {:unknown, unknown}
       {:unknown, reason} -> {:unknown, Unknown.new({:call, op.name, expr.id}, reason)}
+      {:error, %Error{} = error} -> {:error, error}
       {:error, reason} -> error(expr, reason)
     end
   end

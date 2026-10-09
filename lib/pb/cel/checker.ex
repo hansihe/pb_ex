@@ -1232,6 +1232,7 @@ defmodule PB.CEL.Checker do
         arg_ids: expr_ids(call.args)
       }
       |> maybe_put_eval_context(Map.get(resolved, :eval_context, []))
+      |> maybe_put_non_strict(Map.get(resolved, :strict, true))
 
     case call_special_kind(call, resolved.overload_id) do
       nil ->
@@ -1253,6 +1254,9 @@ defmodule PB.CEL.Checker do
 
   defp maybe_put_eval_context(map, []), do: map
   defp maybe_put_eval_context(map, eval_context), do: Map.put(map, :eval_context, eval_context)
+
+  defp maybe_put_non_strict(map, true), do: map
+  defp maybe_put_non_strict(map, false), do: Map.put(map, :strict, false)
 
   defp put_select_op(%State{} = state, expr, field, overload_id, operand_type, field_ref) do
     op =

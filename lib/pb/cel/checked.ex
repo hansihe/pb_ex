@@ -50,6 +50,7 @@ defmodule PB.CEL.Checked do
              required(:overload_id) => String.t(),
              required(:eval) => Function.eval(),
              optional(:eval_context) => [Function.eval_context()],
+             optional(:strict) => false,
              required(:target_id) => expr_id | nil,
              required(:arg_ids) => [expr_id]
            }}
