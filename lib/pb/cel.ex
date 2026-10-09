@@ -91,6 +91,7 @@ defmodule PB.CEL do
   alias PB.CEL.Proto
   alias PB.CEL.Syntax.MacroExpander
   alias PB.CEL.Syntax.Parser
+  alias PB.CEL.Unknown
   alias PB.CEL.Value
 
   @doc """
@@ -201,9 +202,13 @@ defmodule PB.CEL do
 
   The evaluator returns tagged `PB.CEL.Value` terms so CEL runtime
   distinctions such as `int`/`uint` and `string`/`bytes` are preserved.
+
+  A variable bound to `{:unknown, reason}` is unknown. When the result depends
+  on unknown inputs, the result is `{:unknown, %PB.CEL.Unknown{}}`; see
+  `PB.CEL.Unknown`.
   """
   @spec eval(String.t(), keyword | map, Env.t()) ::
-          {:ok, Value.t()} | {:error, Error.t()}
+          {:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}
   def eval(source, values \\ %{}, env \\ Env.empty())
 
   def eval(source, values, %Env{} = env) when is_binary(source) do
@@ -213,14 +218,12 @@ defmodule PB.CEL do
   end
 
   @doc """
-  Evaluates CEL source against `env`, raising on parse, check, or eval errors.
+  Evaluates CEL source against `env`, raising on parse, check, or eval errors
+  and on unknown results.
   """
   @spec eval!(String.t(), keyword | map, Env.t()) :: Value.t()
   def eval!(source, values \\ %{}, env \\ Env.empty()) do
-    case eval(source, values, env) do
-      {:ok, value} -> value
-      {:error, %Error{} = error} -> raise error
-    end
+    source |> eval(values, env) |> Program.unwrap!()
   end
 
   @doc """
@@ -231,13 +234,14 @@ defmodule PB.CEL do
   functions, or container at eval time.
   """
   @spec eval_program(Program.t(), keyword | map) ::
-          {:ok, Value.t()} | {:error, Error.t()}
+          {:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}
   def eval_program(%Program{} = program, values \\ %{}) do
     Program.eval(program, values)
   end
 
   @doc """
-  Evaluates a pre-compiled `PB.CEL.Program`, raising on errors. Delegates
+  Evaluates a pre-compiled `PB.CEL.Program`, raising on errors and unknown
+  results. Delegates
   to `PB.CEL.Program.eval!/2`.
   """
   @spec eval_program!(Program.t(), keyword | map) :: Value.t()

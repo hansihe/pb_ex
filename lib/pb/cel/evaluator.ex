@@ -15,6 +15,7 @@ defmodule PB.CEL.Evaluator do
   alias PB.CEL.Runtime.Enum, as: RuntimeEnum
   alias PB.CEL.Runtime.NoMessageRuntime
   alias PB.CEL.Runtime.NoMessageSchema
+  alias PB.CEL.Unknown
   alias PB.CEL.Value
   alias PB.CEL.WellKnownTypes
 
@@ -32,7 +33,7 @@ defmodule PB.CEL.Evaluator do
     ]
   end
 
-  @type result :: {:ok, Value.t()} | {:error, Error.t()}
+  @type result :: {:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}
 
   @spec eval(Checked.t(), keyword | map, keyword) :: result
   def eval(%Checked{expr: expr} = checked, vars \\ %{}, opts \\ []) do
@@ -49,6 +50,7 @@ defmodule PB.CEL.Evaluator do
 
     case eval_id(expr.id, state) do
       {:ok, value, _state} -> {:ok, value}
+      {:unknown, %Unknown{} = unknown} -> {:unknown, unknown}
       {:error, %Error{} = error} -> {:error, error}
     end
   end
@@ -104,7 +106,8 @@ defmodule PB.CEL.Evaluator do
   end
 
   # `@not_strictly_false` is the only non-strict call: comprehension loop
-  # conditions use it so an error in one iteration does not stop the loop.
+  # conditions use it so an error or unknown in one iteration does not stop
+  # the loop.
   defp eval_op(_id, {:call, %{name: "@not_strictly_false", arg_ids: [arg_id]}}, state) do
     {value, state} = eval_captured(arg_id, state)
     {:ok, Value.bool(value != Value.bool(false)), state}
@@ -122,11 +125,10 @@ defmodule PB.CEL.Evaluator do
   end
 
   defp eval_op(id, {:map, %{entries: entries}}, state) do
-    with {:ok, entries, state} <- eval_map_entries(entries, state) do
-      {:ok, Value.map(Map.new(entries)), state}
-    else
-      {:error, %Error{} = error} -> {:error, error}
-      {:error, reason} -> error(expr_ref(id), reason)
+    case eval_map_entries(entries, [], nil, state) do
+      {:ok, entries, state} -> {:ok, Value.map(Map.new(entries)), state}
+      {:error, reason} when is_binary(reason) -> error(expr_ref(id), reason)
+      other -> other
     end
   end
 
@@ -187,6 +189,12 @@ defmodule PB.CEL.Evaluator do
       {:ok, {:__cel_error__, %Error{} = error}} ->
         {:error, error}
 
+      {:ok, {:unknown, reason}} ->
+        {:unknown, Unknown.new({:var, name}, reason)}
+
+      {:ok, %Unknown{} = unknown} ->
+        {:unknown, unknown}
+
       {:ok, value} ->
         case coerce_runtime_value(value, type, state) do
           {:ok, value} -> {:ok, value, put_cached_root_var(state, name, value)}
@@ -201,6 +209,7 @@ defmodule PB.CEL.Evaluator do
   defp eval_local(expr, name, state) do
     case fetch_local(state.scopes, name) do
       {:ok, {:__cel_error__, %Error{} = error}} -> {:error, error}
+      {:ok, {:__cel_unknown__, %Unknown{} = unknown}} -> {:unknown, unknown}
       {:ok, value} -> {:ok, value, state}
       :error -> error(expr, "missing value for #{inspect(name)}")
     end
@@ -213,9 +222,8 @@ defmodule PB.CEL.Evaluator do
   end
 
   defp eval_registered_call(expr, %{target_id: target_id, arg_ids: arg_ids} = op, state) do
-    with {:ok, target, state} <- eval_target_id(target_id, state),
-         {:ok, args, state} <- eval_ids(arg_ids, state) do
-      apply_registered_call(expr, op, target, args, state)
+    with {:ok, values, state} <- eval_ids(List.wrap(target_id) ++ arg_ids, state) do
+      apply_registered_call(expr, op, values, state)
     end
   end
 
@@ -261,9 +269,8 @@ defmodule PB.CEL.Evaluator do
         |> push_scope()
         |> put_local(var, init)
 
-      case eval_id(body_id, state) do
-        {:ok, result, state} -> {:ok, result, pop_scope(state)}
-        {:error, %Error{} = error} -> {:error, error}
+      with {:ok, result, state} <- eval_id(body_id, state) do
+        {:ok, result, pop_scope(state)}
       end
     end
   end
@@ -279,9 +286,9 @@ defmodule PB.CEL.Evaluator do
     eval_logic(expr, left_id, right_id, true, state)
   end
 
-  # `&&` and `||` are commutative over errors: `decisive` (false for `&&`,
-  # true for `||`) on either side determines the result, otherwise the first
-  # error wins.
+  # `&&` and `||` are commutative: `decisive` (false for `&&`, true for `||`)
+  # on either side determines the result. Otherwise unknowns win over errors,
+  # because a known value for them could still decide the result.
   defp eval_logic(expr, left_id, right_id, decisive, state) do
     {left, state} = eval_logic_operand(left_id, expr, state)
 
@@ -292,6 +299,7 @@ defmodule PB.CEL.Evaluator do
 
       cond do
         right == Value.bool(decisive) -> {:ok, right, state}
+        unknown = captured_unknown([left, right]) -> {:unknown, unknown}
         match?({:__cel_error__, _error}, left) -> {:error, elem(left, 1)}
         match?({:__cel_error__, _error}, right) -> {:error, elem(right, 1)}
         true -> {:ok, Value.bool(not decisive), state}
@@ -306,75 +314,89 @@ defmodule PB.CEL.Evaluator do
     end
   end
 
-  defp eval_ids(ids, state) do
-    Enum.reduce_while(ids, {:ok, [], state}, fn id, {:ok, values, state} ->
-      case eval_id(id, state) do
-        {:ok, value, state} -> {:cont, {:ok, [value | values], state}}
-        {:error, error} -> {:halt, {:error, error}}
-      end
-    end)
-    |> case do
-      {:ok, values, state} -> {:ok, Enum.reverse(values), state}
-      {:error, error} -> {:error, error}
+  # Strict operands are evaluated left to right. The first error wins, as the
+  # result no longer depends on any unknown operand; otherwise the unknowns of
+  # all operands are merged.
+  defp eval_ids(ids, state), do: eval_ids(ids, [], nil, state)
+
+  defp eval_ids([], values, nil, state), do: {:ok, Enum.reverse(values), state}
+  defp eval_ids([], _values, %Unknown{} = unknown, _state), do: {:unknown, unknown}
+
+  defp eval_ids([id | ids], values, unknown, state) do
+    case eval_id(id, state) do
+      {:ok, value, state} -> eval_ids(ids, [value | values], unknown, state)
+      {:unknown, other} -> eval_ids(ids, values, merge_unknown(unknown, other), state)
+      {:error, %Error{}} = error -> error
     end
   end
 
-  defp eval_map_entries(entries, state) do
-    Enum.reduce_while(entries, {:ok, [], state}, fn entry, {:ok, entries, state} ->
-      with {:ok, key, state} <- eval_id(entry.key_id, state),
-           {:ok, value, state} <- eval_id(entry.value_id, state),
-           {:ok, maybe_entry} <-
-             optional_entry({key, value}, entry.optional?) do
-        cond do
-          is_nil(maybe_entry) ->
-            {:cont, {:ok, entries, state}}
+  defp eval_map_entries([], entries, nil, state), do: {:ok, Enum.reverse(entries), state}
+  defp eval_map_entries([], _entries, %Unknown{} = unknown, _state), do: {:unknown, unknown}
 
-          repeated_key?(entries, elem(maybe_entry, 0)) ->
-            {:halt, error(%{id: entry.value_id}, "repeated key")}
+  defp eval_map_entries([entry | rest], entries, unknown, state) do
+    case eval_ids([entry.key_id, entry.value_id], state) do
+      {:ok, [key, value], state} ->
+        case optional_entry({key, value}, entry.optional?) do
+          {:ok, nil} ->
+            eval_map_entries(rest, entries, unknown, state)
 
-          true ->
-            {:cont, {:ok, [maybe_entry | entries], state}}
+          {:ok, {key, _value} = entry_value} ->
+            if repeated_key?(entries, key) do
+              error(%{id: entry.value_id}, "repeated key")
+            else
+              eval_map_entries(rest, [entry_value | entries], unknown, state)
+            end
+
+          {:error, reason} ->
+            {:error, reason}
         end
-      else
-        {:error, error} -> {:halt, {:error, error}}
-      end
-    end)
-    |> case do
-      {:ok, entries, state} -> {:ok, Enum.reverse(entries), state}
-      {:error, error} -> {:error, error}
+
+      {:unknown, other} ->
+        eval_map_entries(rest, entries, merge_unknown(unknown, other), state)
+
+      {:error, %Error{}} = error ->
+        error
     end
   end
 
   defp eval_message_literal(expr, %{message: message_name, fields: fields} = op, state, mode) do
-    with {:ok, fields, state} <- eval_message_fields(fields, state) do
-      case message_value(mode, message_name, fields, state, Map.get(op, :wkt_unwrap?, true)) do
-        {:error, reason} -> error(expr, reason)
-        value -> {:ok, value, state}
-      end
-    else
-      {:error, %Error{} = error} -> {:error, error}
-      {:error, reason} -> error(expr, reason)
+    case eval_message_fields(fields, [], nil, state) do
+      {:ok, fields, state} ->
+        case message_value(mode, message_name, fields, state, Map.get(op, :wkt_unwrap?, true)) do
+          {:error, reason} -> error(expr, reason)
+          value -> {:ok, value, state}
+        end
+
+      {:error, reason} when is_binary(reason) ->
+        error(expr, reason)
+
+      other ->
+        other
     end
   end
 
-  defp eval_message_fields(fields, state) do
-    Enum.reduce_while(fields, {:ok, [], state}, fn field, {:ok, fields, state} ->
-      with {:ok, value, state} <- eval_message_field_value(field, state),
-           {:ok, maybe_entry} <- optional_entry({field.field, value}, field.optional?) do
-        fields =
-          case maybe_entry do
-            nil -> fields
-            {_key, value} -> [Map.put(field, :value, value) | fields]
-          end
+  defp eval_message_fields([], fields, nil, state), do: {:ok, Enum.reverse(fields), state}
+  defp eval_message_fields([], _fields, %Unknown{} = unknown, _state), do: {:unknown, unknown}
 
-        {:cont, {:ok, fields, state}}
-      else
-        {:error, error} -> {:halt, {:error, error}}
-      end
-    end)
-    |> case do
-      {:ok, fields, state} -> {:ok, Enum.reverse(fields), state}
-      {:error, error} -> {:error, error}
+  defp eval_message_fields([field | rest], fields, unknown, state) do
+    case eval_message_field_value(field, state) do
+      {:ok, value, state} ->
+        case optional_entry({field.field, value}, field.optional?) do
+          {:ok, nil} ->
+            eval_message_fields(rest, fields, unknown, state)
+
+          {:ok, {_key, value}} ->
+            eval_message_fields(rest, [Map.put(field, :value, value) | fields], unknown, state)
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      {:unknown, other} ->
+        eval_message_fields(rest, fields, merge_unknown(unknown, other), state)
+
+      {:error, %Error{}} = error ->
+        error
     end
   end
 
@@ -429,44 +451,36 @@ defmodule PB.CEL.Evaluator do
   defp apply_registered_call(
          %{id: id} = expr,
          %{eval: {:mfa, {PB.CEL.Runtime.Strings, :matches}}} = op,
-         target,
-         args,
+         values,
          state
        ) do
-    values = call_values(target, args)
-
     case Map.fetch(state.regexes, id) do
       {:ok, %Regex{} = regex} ->
         dispatch_precompiled_matches(expr, values, state, regex)
 
       :error ->
-        dispatch_mfa_call(
-          expr,
-          PB.CEL.Runtime.Strings,
-          :matches,
-          values,
-          state,
-          op[:eval_context] || []
-        )
+        dispatch_mfa_call(expr, op, PB.CEL.Runtime.Strings, :matches, values, state)
     end
   end
 
-  defp apply_registered_call(expr, %{eval: {:mfa, {mod, fun}}} = op, target, args, state) do
-    dispatch_mfa_call(expr, mod, fun, call_values(target, args), state, op[:eval_context] || [])
+  defp apply_registered_call(expr, %{eval: {:mfa, {mod, fun}}} = op, values, state) do
+    dispatch_mfa_call(expr, op, mod, fun, values, state)
   end
 
   # eval: nil is the check-only-declaration path used when proto type_env
   # registers declarations without executable targets (for example the
   # conformance harness).
-  defp apply_registered_call(expr, %{eval: nil, name: name}, _target, _args, _state) do
+  defp apply_registered_call(expr, %{eval: nil, name: name}, _values, _state) do
     error(expr, "unsupported function #{name}")
   end
 
-  defp dispatch_mfa_call(expr, mod, fun, values, state, eval_context) do
+  defp dispatch_mfa_call(expr, op, mod, fun, values, state) do
+    eval_context = Map.get(op, :eval_context, [])
     args = [values | Enum.map(eval_context, &eval_context_value(&1, state))]
 
     case apply(mod, fun, args) do
       {:ok, value} -> {:ok, value, state}
+      {:unknown, reason} -> {:unknown, Unknown.new({:call, op.name, expr.id}, reason)}
       {:error, reason} -> error(expr, reason)
     end
   end
@@ -480,9 +494,6 @@ defmodule PB.CEL.Evaluator do
 
   defp eval_context_value(:schema, state), do: state.schema
   defp eval_context_value(:message_runtime, state), do: state.message_runtime
-
-  defp call_values(nil, args), do: args
-  defp call_values(target, args), do: [target | args]
 
   defp apply_enum_constructor(expr, enum_name, [value], state) do
     case RuntimeEnum.construct(state.message_schema, state.schema, enum_name, value) do
@@ -545,8 +556,8 @@ defmodule PB.CEL.Evaluator do
     with {:ok, condition, state} <- eval_id(op.loop_condition_id, state),
          {:ok, condition} <- expect_bool(condition, expr) do
       if condition do
-        # The accumulator may hold an error: `exists` and `all` absorb it
-        # when a later iteration decides the result.
+        # The accumulator may hold an error or unknown: `exists` and `all`
+        # absorb it when a later iteration decides the result.
         {accu, state} = eval_captured(op.loop_step_id, state)
 
         state
@@ -585,13 +596,14 @@ defmodule PB.CEL.Evaluator do
   defp expect_bool({:bool, value}, _expr), do: {:ok, value}
   defp expect_bool(value, expr), do: error(expr, "expected bool, got #{value_kind(value)}")
 
-  # Non-strict evaluation for the operators that may absorb an error: the
-  # outcome is captured as a value instead of aborting evaluation. Strict
-  # consumers never see these values, because reading a variable or local
-  # that holds one returns the error.
+  # Non-strict evaluation for the operators that may absorb an error or
+  # unknown: the outcome is captured as a value instead of aborting
+  # evaluation. Strict consumers never see these values, because reading a
+  # variable or local that holds one returns the error or unknown.
   defp eval_captured(id, state) do
     case eval_id(id, state) do
       {:ok, value, state} -> {value, state}
+      {:unknown, %Unknown{} = unknown} -> {{:__cel_unknown__, unknown}, state}
       {:error, %Error{} = error} -> {error_value(error), state}
     end
   end
@@ -604,6 +616,9 @@ defmodule PB.CEL.Evaluator do
       {{:__cel_error__, %Error{}} = value, state} ->
         {value, state}
 
+      {{:__cel_unknown__, %Unknown{}} = value, state} ->
+        {value, state}
+
       {value, state} ->
         {:error, error} = error(expr, "expected bool, got #{value_kind(value)}")
         {error_value(error), state}
@@ -611,6 +626,16 @@ defmodule PB.CEL.Evaluator do
   end
 
   defp error_value(%Error{} = error), do: {:__cel_error__, error}
+
+  defp captured_unknown(values) do
+    Enum.reduce(values, nil, fn
+      {:__cel_unknown__, %Unknown{} = unknown}, acc -> merge_unknown(acc, unknown)
+      _value, acc -> acc
+    end)
+  end
+
+  defp merge_unknown(nil, %Unknown{} = unknown), do: unknown
+  defp merge_unknown(%Unknown{} = acc, %Unknown{} = unknown), do: Unknown.merge(acc, unknown)
 
   defp coerce_runtime_value(value, {:message, name} = type, %State{} = state) do
     if cel_value?(value) do

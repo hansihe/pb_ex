@@ -23,6 +23,7 @@ defmodule PB.CEL.Program do
   alias PB.CEL.Env
   alias PB.CEL.Error
   alias PB.CEL.Evaluator
+  alias PB.CEL.Unknown
   alias PB.CEL.Value
 
   @enforce_keys [:checked, :env]
@@ -48,20 +49,26 @@ defmodule PB.CEL.Program do
   @doc """
   Evaluates a compiled program with the supplied variable bindings.
   """
-  @spec eval(t, map | keyword) :: {:ok, Value.t()} | {:error, Error.t()}
+  @spec eval(t, map | keyword) :: {:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}
   def eval(%__MODULE__{checked: checked, env: env}, values \\ %{}) do
     Evaluator.eval(checked, values, evaluator_opts(env))
   end
 
   @doc """
-  Evaluates a compiled program, raising on errors.
+  Evaluates a compiled program, raising on errors and unknown results.
   """
   @spec eval!(t, map | keyword) :: Value.t()
   def eval!(%__MODULE__{} = program, values \\ %{}) do
-    case eval(program, values) do
-      {:ok, value} -> value
-      {:error, %Error{} = error} -> raise error
-    end
+    program |> eval(values) |> unwrap!()
+  end
+
+  @doc false
+  @spec unwrap!({:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}) :: Value.t()
+  def unwrap!({:ok, value}), do: value
+  def unwrap!({:error, %Error{} = error}), do: raise(error)
+
+  def unwrap!({:unknown, %Unknown{} = unknown}) do
+    raise Error, phase: :eval, message: "result is unknown", details: %{unknown: unknown}
   end
 
   defp evaluator_opts(%Env{} = env) do
