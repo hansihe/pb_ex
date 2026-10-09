@@ -48,7 +48,7 @@ defmodule PB.CEL.Evaluator do
     }
 
     case eval_id(expr.id, state) do
-      {:ok, value, _state} -> return_value(value)
+      {:ok, value, _state} -> {:ok, value}
       {:error, %Error{} = error} -> {:error, error}
     end
   end
@@ -103,6 +103,13 @@ defmodule PB.CEL.Evaluator do
     eval_enum_constructor_call(expr_ref(id), op, state)
   end
 
+  # `@not_strictly_false` is the only non-strict call: comprehension loop
+  # conditions use it so an error in one iteration does not stop the loop.
+  defp eval_op(_id, {:call, %{name: "@not_strictly_false", arg_ids: [arg_id]}}, state) do
+    {value, state} = eval_captured(arg_id, state)
+    {:ok, Value.bool(value != Value.bool(false)), state}
+  end
+
   defp eval_op(id, {:call, op}, state) do
     eval_registered_call(expr_ref(id), op, state)
   end
@@ -135,7 +142,7 @@ defmodule PB.CEL.Evaluator do
 
   defp eval_comprehension(expr, op, state) do
     with {:ok, range, state} <- eval_id(op.iter_range_id, state),
-         {:ok, items} <- iteration_items(range),
+         {:ok, items} <- iteration_items(expr, range),
          {:ok, accu, state} <- eval_id(op.accu_init_id, state) do
       state =
         state
@@ -177,14 +184,13 @@ defmodule PB.CEL.Evaluator do
 
   defp fetch_and_coerce_root_var(expr, name, type, state) do
     case Map.fetch(state.vars, name) do
+      {:ok, {:__cel_error__, %Error{} = error}} ->
+        {:error, error}
+
       {:ok, value} ->
-        if error_value?(value) do
-          {:ok, value, state}
-        else
-          case coerce_runtime_value(value, type, state) do
-            {:ok, value} -> {:ok, value, put_cached_root_var(state, name, value)}
-            {:error, reason} -> error(expr, reason)
-          end
+        case coerce_runtime_value(value, type, state) do
+          {:ok, value} -> {:ok, value, put_cached_root_var(state, name, value)}
+          {:error, reason} -> error(expr, reason)
         end
 
       :error ->
@@ -194,6 +200,7 @@ defmodule PB.CEL.Evaluator do
 
   defp eval_local(expr, name, state) do
     case fetch_local(state.scopes, name) do
+      {:ok, {:__cel_error__, %Error{} = error}} -> {:error, error}
       {:ok, value} -> {:ok, value, state}
       :error -> error(expr, "missing value for #{inspect(name)}")
     end
@@ -265,53 +272,29 @@ defmodule PB.CEL.Evaluator do
   defp eval_target_id(id, state), do: eval_id(id, state)
 
   defp eval_and(expr, left_id, right_id, state) do
-    with {:ok, left, state} <- eval_logic_operand_id(left_id, state) do
-      case bool_or_error(left, expr) do
-        {:bool, false} ->
-          {:ok, Value.bool(false), state}
-
-        {:bool, true} ->
-          with {:ok, right, state} <- eval_logic_operand_id(right_id, state) do
-            case bool_or_error(right, expr) do
-              {:bool, value} -> {:ok, Value.bool(value), state}
-              error_value -> {:ok, error_value, state}
-            end
-          end
-
-        left_error ->
-          with {:ok, right, state} <- eval_logic_operand_id(right_id, state) do
-            case bool_or_error(right, expr) do
-              {:bool, false} -> {:ok, Value.bool(false), state}
-              {:bool, true} -> {:ok, left_error, state}
-              _right_error -> {:ok, left_error, state}
-            end
-          end
-      end
-    end
+    eval_logic(expr, left_id, right_id, false, state)
   end
 
   defp eval_or(expr, left_id, right_id, state) do
-    with {:ok, left, state} <- eval_logic_operand_id(left_id, state) do
-      case bool_or_error(left, expr) do
-        {:bool, true} ->
-          {:ok, Value.bool(true), state}
+    eval_logic(expr, left_id, right_id, true, state)
+  end
 
-        {:bool, false} ->
-          with {:ok, right, state} <- eval_logic_operand_id(right_id, state) do
-            case bool_or_error(right, expr) do
-              {:bool, value} -> {:ok, Value.bool(value), state}
-              error_value -> {:ok, error_value, state}
-            end
-          end
+  # `&&` and `||` are commutative over errors: `decisive` (false for `&&`,
+  # true for `||`) on either side determines the result, otherwise the first
+  # error wins.
+  defp eval_logic(expr, left_id, right_id, decisive, state) do
+    {left, state} = eval_logic_operand(left_id, expr, state)
 
-        left_error ->
-          with {:ok, right, state} <- eval_logic_operand_id(right_id, state) do
-            case bool_or_error(right, expr) do
-              {:bool, true} -> {:ok, Value.bool(true), state}
-              {:bool, false} -> {:ok, left_error, state}
-              _right_error -> {:ok, left_error, state}
-            end
-          end
+    if left == Value.bool(decisive) do
+      {:ok, left, state}
+    else
+      {right, state} = eval_logic_operand(right_id, expr, state)
+
+      cond do
+        right == Value.bool(decisive) -> {:ok, right, state}
+        match?({:__cel_error__, _error}, left) -> {:error, elem(left, 1)}
+        match?({:__cel_error__, _error}, right) -> {:error, elem(right, 1)}
+        true -> {:ok, Value.bool(not decisive), state}
       end
     end
   end
@@ -562,31 +545,33 @@ defmodule PB.CEL.Evaluator do
     with {:ok, condition, state} <- eval_id(op.loop_condition_id, state),
          {:ok, condition} <- expect_bool(condition, expr) do
       if condition do
-        with {:ok, accu, state} <- eval_id(op.loop_step_id, state) do
-          state
-          |> put_local(op.accu_var, accu)
-          |> then(&eval_loop(expr, op, rest, &1))
-        end
+        # The accumulator may hold an error: `exists` and `all` absorb it
+        # when a later iteration decides the result.
+        {accu, state} = eval_captured(op.loop_step_id, state)
+
+        state
+        |> put_local(op.accu_var, accu)
+        |> then(&eval_loop(expr, op, rest, &1))
       else
         {:ok, state}
       end
     end
   end
 
-  defp iteration_items({:list, values}) do
+  defp iteration_items(_expr, {:list, values}) do
     values
     |> Enum.with_index()
     |> Enum.map(fn {value, index} -> {:list, Value.int(index), value} end)
     |> then(&{:ok, &1})
   end
 
-  defp iteration_items({:map, values}) do
+  defp iteration_items(_expr, {:map, values}) do
     values
     |> Enum.map(fn {key, value} -> {:map, key, value} end)
     |> then(&{:ok, &1})
   end
 
-  defp iteration_items(value), do: {:error, "cannot iterate over #{inspect(value)}"}
+  defp iteration_items(expr, value), do: error(expr, "cannot iterate over #{value_kind(value)}")
 
   defp iter_values({:list, _index, value}, ""), do: {value, Value.null()}
   defp iter_values({:list, index, value}, _iter_var2), do: {index, value}
@@ -598,32 +583,34 @@ defmodule PB.CEL.Evaluator do
   end
 
   defp expect_bool({:bool, value}, _expr), do: {:ok, value}
-  defp expect_bool({:__cel_error__, %Error{} = error}, _expr), do: {:error, error}
   defp expect_bool(value, expr), do: error(expr, "expected bool, got #{value_kind(value)}")
 
-  defp eval_logic_operand_id(id, state) do
+  # Non-strict evaluation for the operators that may absorb an error: the
+  # outcome is captured as a value instead of aborting evaluation. Strict
+  # consumers never see these values, because reading a variable or local
+  # that holds one returns the error.
+  defp eval_captured(id, state) do
     case eval_id(id, state) do
-      {:ok, value, state} -> {:ok, value, state}
-      {:error, %Error{} = error} -> {:ok, error_value(error), state}
+      {:ok, value, state} -> {value, state}
+      {:error, %Error{} = error} -> {error_value(error), state}
     end
   end
 
-  defp bool_or_error({:bool, value}, _expr), do: {:bool, value}
-  defp bool_or_error({:__cel_error__, %Error{}} = error_value, _expr), do: error_value
+  defp eval_logic_operand(id, expr, state) do
+    case eval_captured(id, state) do
+      {{:bool, _value} = value, state} ->
+        {value, state}
 
-  defp bool_or_error(value, expr) do
-    expr
-    |> error("expected bool, got #{value_kind(value)}")
-    |> elem(1)
-    |> error_value()
+      {{:__cel_error__, %Error{}} = value, state} ->
+        {value, state}
+
+      {value, state} ->
+        {:error, error} = error(expr, "expected bool, got #{value_kind(value)}")
+        {error_value(error), state}
+    end
   end
 
-  defp return_value({:__cel_error__, %Error{} = error}), do: {:error, error}
-  defp return_value(value), do: {:ok, value}
-
   defp error_value(%Error{} = error), do: {:__cel_error__, error}
-  defp error_value?({:__cel_error__, %Error{}}), do: true
-  defp error_value?(_value), do: false
 
   defp coerce_runtime_value(value, {:message, name} = type, %State{} = state) do
     if cel_value?(value) do
