@@ -113,6 +113,7 @@ defmodule PB.CEL.Checked do
              optional(:eval) => Function.eval(),
              optional(:eval_context) => [Function.eval_context()],
              optional(:var) => String.t(),
+             optional(:var_id) => expr_id,
              optional(:enum) => String.t()
            }}
 
@@ -214,6 +215,13 @@ defmodule PB.CEL.Checked do
   @spec op(t, Proto.expr() | expr_id) :: op | nil
   def op(%__MODULE__{} = checked, %{id: id}), do: op(checked, id)
   def op(%__MODULE__{ops: ops}, id) when is_integer(id), do: Map.get(ops, id)
+
+  @doc """
+  Returns a read-only view of the expression as a tree of `PB.CEL.Expr`
+  nodes.
+  """
+  @spec expr(t) :: PB.CEL.Expr.t()
+  def expr(%__MODULE__{} = checked), do: PB.CEL.Expr.from_checked(checked)
 
   @doc """
   Returns what the expression reads: variable field paths and non-operator

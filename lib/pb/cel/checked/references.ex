@@ -3,21 +3,27 @@ defmodule PB.CEL.Checked.References do
   # later release. Original module doc retained below as reference.
   #
   # Derives what a checked expression reads: variable field paths and function
-  # calls with their constant arguments. Use it through
-  # `PB.CEL.Checked.references/1`.
+  # calls with their constant arguments, built on the `PB.CEL.Expr` view. Use
+  # it through `PB.CEL.Checked.references/1`.
   #
   # A variable read is the longest field selection rooted at a variable, so
   # `req.user.id` is one read with path `["user", "id"]`, not three. Locals are
-  # resolved to what they stand for: a `cel.bind` variable to its value, and a
-  # comprehension variable to its range followed by `"*"` for "any element",
-  # so `l.exists(i, i.score > 1)` reads `l` and `l.*.score`. Locals bound to
-  # anything other than a variable read are not reported.
+  # resolved to what they stand for: a `cel.bind` or `optMap` variable to its
+  # value, and a comprehension variable to its range followed by `"*"` for
+  # "any element", so `l.exists(i, i.score > 1)` reads `l` and `l.*.score`.
+  # Locals bound to anything other than a variable read are not reported.
   #
-  # Operators (`_==_`, `@in`, ...) are not reported as calls.
+  # Operators (`_==_`, `@in`, ...), `cel.bind`, `optMap` and enum constructors
+  # are not reported as calls.
   @moduledoc false
 
-  alias PB.CEL.Call
   alias PB.CEL.Checked
+  alias PB.CEL.Expr
+  alias PB.CEL.Expr.Call
+  alias PB.CEL.Expr.Comprehension
+  alias PB.CEL.Expr.Const
+  alias PB.CEL.Expr.Ident
+  alias PB.CEL.Expr.Select
 
   @type expr_id :: Checked.expr_id()
   @type var_read :: %{name: String.t(), path: [String.t()], expr_id: expr_id}
@@ -31,130 +37,102 @@ defmodule PB.CEL.Checked.References do
         }
   @type t :: %{vars: [var_read], calls: [call]}
 
+  @scoped_overloads ["cel_bind", "optional_opt_map", "optional_opt_flat_map"]
+
   @spec collect(Checked.t()) :: t
-  def collect(%Checked{expr: expr} = checked) do
-    %{vars: vars, calls: calls} = walk(expr.id, %{}, checked, %{vars: [], calls: []})
+  def collect(%Checked{} = checked) do
+    %{vars: vars, calls: calls} = walk(Expr.from_checked(checked), %{}, %{vars: [], calls: []})
     %{vars: Enum.reverse(vars), calls: Enum.reverse(calls)}
   end
 
-  defp walk(nil, _locals, _checked, acc), do: acc
-
-  defp walk(id, locals, checked, acc) do
-    case resolve(id, locals, checked) do
-      {:ok, name, path} -> add(acc, :vars, %{name: name, path: path, expr_id: id})
-      :error -> walk_op(id, Checked.op(checked, id), locals, checked, acc)
+  defp walk(node, locals, acc) do
+    case resolve(node, locals) do
+      {:ok, name, path} -> add(acc, :vars, %{name: name, path: path, expr_id: node.id})
+      :error -> walk_node(node, locals, acc)
     end
   end
 
-  defp walk_op(_id, {:select, %{receiver_id: receiver_id}}, locals, checked, acc) do
-    walk(receiver_id, locals, checked, acc)
+  # `cel.bind(var, init, body)` and `target.optMap(var, body)` bind `var`
+  # in `body` to the value before it.
+  defp walk_node(%Call{overload_id: overload_id} = call, locals, acc)
+       when overload_id in @scoped_overloads do
+    {value, var, body} =
+      case call do
+        %Call{target: nil, args: [var, init, body]} -> {init, var, body}
+        %Call{target: target, args: [var, body]} -> {target, var, body}
+      end
+
+    acc = walk(value, locals, acc)
+    walk(body, bind_local(locals, var.name, resolve(value, locals)), acc)
   end
 
-  defp walk_op(id, {:call, %{name: name} = op}, locals, checked, acc) do
+  defp walk_node(%Call{} = call, locals, acc) do
     acc =
-      if Call.intrinsic?(name) do
+      if PB.CEL.Call.intrinsic?(call.function) or call.overload_id == "enum_constructor" do
         acc
       else
         add(acc, :calls, %{
-          function: name,
-          overload_id: op.overload_id,
-          expr_id: id,
-          target: op.target_id && arg(op.target_id, locals, checked),
-          args: Enum.map(op.arg_ids, &arg(&1, locals, checked))
+          function: call.function,
+          overload_id: call.overload_id,
+          expr_id: call.id,
+          target: call.target && arg(call.target, locals),
+          args: Enum.map(call.args, &arg(&1, locals))
         })
       end
 
-    walk_all([op.target_id | op.arg_ids], locals, checked, acc)
+    walk_all(Expr.children(call), locals, acc)
   end
 
-  defp walk_op(
-         _id,
-         {:special, %{kind: :bind, arg_ids: [init_id, body_id], var: var}},
-         locals,
-         checked,
-         acc
-       ) do
-    acc = walk(init_id, locals, checked, acc)
-    walk(body_id, bind_local(locals, var, resolve(init_id, locals, checked)), checked, acc)
-  end
-
-  defp walk_op(_id, {:special, %{kind: kind} = op}, locals, checked, acc)
-       when kind in [:optional_map, :optional_flat_map] do
-    %{target_id: target_id, arg_ids: [_var_id, body_id], var: var} = op
-    acc = walk(target_id, locals, checked, acc)
-    walk(body_id, bind_local(locals, var, resolve(target_id, locals, checked)), checked, acc)
-  end
-
-  defp walk_op(_id, {:special, op}, locals, checked, acc) do
-    walk_all([Map.get(op, :target_id) | op.arg_ids], locals, checked, acc)
-  end
-
-  defp walk_op(_id, {:comprehension, op}, locals, checked, acc) do
-    acc = walk(op.iter_range_id, locals, checked, acc)
+  defp walk_node(%Comprehension{} = comprehension, locals, acc) do
+    acc = walk(comprehension.iter_range, locals, acc)
 
     element =
-      case resolve(op.iter_range_id, locals, checked) do
+      case resolve(comprehension.iter_range, locals) do
         {:ok, name, path} -> {:ok, name, path ++ ["*"]}
         :error -> :error
       end
 
     inner =
       locals
-      |> bind_local(op.iter_var, element)
-      |> bind_local(op.iter_var2, element)
-      |> bind_local(op.accu_var, :error)
+      |> bind_local(comprehension.iter_var, element)
+      |> bind_local(comprehension.iter_var2, element)
+      |> bind_local(comprehension.accu_var, :error)
 
-    acc = walk(op.accu_init_id, locals, checked, acc)
-    walk_all([op.loop_condition_id, op.loop_step_id, op.result_id], inner, checked, acc)
+    acc = walk(comprehension.accu_init, locals, acc)
+
+    walk_all(
+      [comprehension.loop_condition, comprehension.loop_step, comprehension.result],
+      inner,
+      acc
+    )
   end
 
-  defp walk_op(_id, {:list, %{elem_ids: elem_ids}}, locals, checked, acc) do
-    walk_all(elem_ids, locals, checked, acc)
-  end
+  defp walk_node(node, locals, acc), do: walk_all(Expr.children(node), locals, acc)
 
-  defp walk_op(_id, {:map, %{entries: entries}}, locals, checked, acc) do
-    ids = Enum.flat_map(entries, &[&1.key_id, &1.value_id])
-    walk_all(ids, locals, checked, acc)
-  end
+  defp walk_all(nodes, locals, acc), do: Enum.reduce(nodes, acc, &walk(&1, locals, &2))
 
-  defp walk_op(_id, {:message_literal, %{fields: fields}}, locals, checked, acc) do
-    walk_all(Enum.map(fields, & &1.value_id), locals, checked, acc)
-  end
+  defp resolve(%Ident{scope: :var, name: name}, _locals), do: {:ok, name, []}
+  defp resolve(%Ident{scope: :local, name: name}, locals), do: Map.get(locals, name, :error)
 
-  defp walk_op(_id, _op, _locals, _checked, acc), do: acc
-
-  defp walk_all(ids, locals, checked, acc) do
-    Enum.reduce(ids, acc, &walk(&1, locals, checked, &2))
-  end
-
-  defp resolve(id, locals, checked) do
-    case Checked.op(checked, id) do
-      {:ident, %{kind: :var, name: name}} ->
-        {:ok, name, []}
-
-      {:ident, %{kind: :local, name: name}} ->
-        Map.get(locals, name, :error)
-
-      {:select, %{receiver_id: receiver_id, field: field}} ->
-        case resolve(receiver_id, locals, checked) do
-          {:ok, name, path} -> {:ok, name, path ++ [field]}
-          :error -> :error
-        end
-
-      _op ->
-        :error
+  defp resolve(%Select{operand: operand, field: field}, locals) do
+    case resolve(operand, locals) do
+      {:ok, name, path} -> {:ok, name, path ++ [field]}
+      :error -> :error
     end
   end
 
-  defp arg(id, locals, checked) do
-    case {Checked.op(checked, id), resolve(id, locals, checked)} do
-      {{:const, %{value: value}}, _resolved} -> {:const, value}
-      {_op, {:ok, name, path}} -> {:var, name, path}
-      {_op, :error} -> :dynamic
+  defp resolve(_node, _locals), do: :error
+
+  defp arg(%Const{value: value}, _locals), do: {:const, value}
+
+  defp arg(node, locals) do
+    case resolve(node, locals) do
+      {:ok, name, path} -> {:var, name, path}
+      :error -> :dynamic
     end
   end
 
-  defp bind_local(locals, "", _resolved), do: locals
+  defp bind_local(locals, nil, _resolved), do: locals
   defp bind_local(locals, name, resolved), do: Map.put(locals, name, resolved)
 
   defp add(acc, key, item), do: Map.update!(acc, key, &[item | &1])

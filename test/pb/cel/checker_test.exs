@@ -535,7 +535,7 @@ defmodule PB.CEL.CheckerTest do
 
   test "checks cel.bind as a lexical special form" do
     checked = CEL.check!(~S|cel.bind(x, "a", x + "b")|)
-    %{expr_kind: {:call_expr, %{args: [_var, init, body]}}} = checked.expr
+    %{expr_kind: {:call_expr, %{args: [var, init, body]}}} = checked.expr
 
     assert root_type(checked) == CType.string()
 
@@ -547,7 +547,8 @@ defmodule PB.CEL.CheckerTest do
                 overload_id: "cel_bind",
                 target_id: nil,
                 arg_ids: [init.id, body.id],
-                var: "x"
+                var: "x",
+                var_id: var.id
               }}
   end
 

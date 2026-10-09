@@ -404,7 +404,8 @@ defmodule PB.CEL.Checker do
               overload_id: "cel_bind",
               target_id: nil,
               arg_ids: [init.id, body.id],
-              var: var_name
+              var: var_name,
+              var_id: var_expr.id
             }
           })
 
