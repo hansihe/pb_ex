@@ -51,10 +51,11 @@ defmodule PB.CEL do
   # does not check module/function existence, so a missing `Mod.Fun/arity` at
   # dispatch time raises `:undef` to the caller.
   #
-  # The eval target receives a single argument: the list of evaluated
-  # `PB.CEL.Value` arguments. For receiver-mode calls the target value is
-  # prepended to that list. The target must return `{:ok, value} | {:error,
-  # reason}`.
+  # The eval target receives the list of evaluated `PB.CEL.Value` arguments.
+  # For receiver-mode calls the target value is prepended to that list. The
+  # target must return `{:ok, value} | {:unknown, reason} | {:error, reason}`.
+  # An overload's `:eval_context` appends extra arguments; `:vars` passes the
+  # variable bindings given to eval, keyed by string name.
   #
   #     alias PB.CEL.Library.Function
   #     alias PB.CEL.Library.Function.Overload

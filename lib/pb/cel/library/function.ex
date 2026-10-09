@@ -14,7 +14,7 @@ defmodule PB.CEL.Library.Function do
   @type on_dyn :: :match | :fallback
   @type mfa_target :: {module, atom}
   @type eval :: nil | :intrinsic | {:mfa, mfa_target} | mfa_target
-  @type eval_context :: :schema | :message_runtime
+  @type eval_context :: :schema | :message_runtime | :vars
 
   @type t :: %__MODULE__{
           name: String.t(),

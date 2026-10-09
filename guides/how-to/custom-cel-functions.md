@@ -63,7 +63,35 @@ PB.CEL.Value.to_native(value)
 - The target receives **one argument**: the list of evaluated `PB.CEL.Value`
   arguments. For receiver-mode calls (`x.greet(y)`) the target value is prepended
   to that list.
-- It must return `{:ok, value} | {:error, reason}`.
+- It must return `{:ok, value} | {:unknown, reason} | {:error, reason}`.
+  `{:unknown, reason}` makes the call's result unknown; `reason` is any term and
+  is reported in the `PB.CEL.Unknown` entry `{{:call, name, expr_id}, reason}`.
+- The function is not called when an argument is an error or unknown; the call
+  returns that error or unknown instead.
+- An overload's `:eval_context` lists extra arguments appended after the
+  argument list. `:vars` passes the variable bindings given to eval, as a map
+  keyed by string name, so a function can read results fetched before
+  evaluation:
+
+  ```elixir
+  defmodule Labels do
+    def label([{:string, name}], vars) do
+      case Map.fetch(vars, "labels") do
+        {:ok, {:unknown, _reason} = unknown} -> unknown
+        {:ok, labels} -> {:ok, {:bool, name in labels}}
+        :error -> {:unknown, :labels_not_fetched}
+      end
+    end
+  end
+
+  %Overload{
+    id: "label_string",
+    args: [:string],
+    result: :bool,
+    eval: {Labels, :label},
+    eval_context: [:vars]
+  }
+  ```
 - Registration validates only the MFA *shape* (both elements must be atoms). It
   does not check that the module/function exists, so a missing `Mod.fun/arity` at
   dispatch time raises `:undef` to the caller.

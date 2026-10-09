@@ -15,6 +15,14 @@ defmodule PB.CEL.CustomFunctionTest do
     end
 
     def boom(_args), do: {:error, "boom!"}
+
+    def label([{:string, name}], vars) do
+      case Map.fetch(vars, "labels") do
+        {:ok, {:unknown, _reason} = unknown} -> unknown
+        {:ok, labels} -> {:ok, Value.bool(name in labels)}
+        :error -> {:unknown, :labels_not_fetched}
+      end
+    end
   end
 
   defp greet_function do
@@ -236,6 +244,33 @@ defmodule PB.CEL.CustomFunctionTest do
 
     assert {:error, %CEL.Error{phase: :eval, message: "unsupported function stub"}} =
              CEL.eval("stub()", %{}, env(functions: [check_only]))
+  end
+
+  test "passes the variable bindings to functions that request :vars" do
+    label = %Function{
+      name: "label",
+      overloads: [
+        %Overload{
+          id: "label_string",
+          args: [:string],
+          result: :bool,
+          eval: {Handlers, :label},
+          eval_context: [:vars]
+        }
+      ]
+    }
+
+    env = env(vars: [score: :int], functions: [label])
+    source = ~s{label("vip") || score > 10}
+
+    assert CEL.eval(source, %{score: 1, labels: ["vip"]}, env) == {:ok, Value.bool(true)}
+    assert CEL.eval(source, %{score: 1, labels: []}, env) == {:ok, Value.bool(false)}
+
+    assert {:unknown, unknown} = CEL.eval(source, %{score: 1}, env)
+    assert [{{:call, "label", _expr_id}, :labels_not_fetched}] = CEL.Unknown.entries(unknown)
+
+    assert {:unknown, unknown} = CEL.eval(source, %{score: 1, labels: {:unknown, :timeout}}, env)
+    assert [{{:call, "label", _expr_id}, :timeout}] = CEL.Unknown.entries(unknown)
   end
 
   defp env(opts), do: CEL.Env.build(opts)
