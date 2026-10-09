@@ -60,6 +60,9 @@ defmodule PB.CEL.Call do
     end
   end
 
+  @spec intrinsic?(String.t()) :: boolean
+  def intrinsic?(function), do: MapSet.member?(@intrinsic_functions, function)
+
   @spec namespace?(t(), String.t()) :: boolean
   def namespace?(%__MODULE__{shape: {:namespace, namespace}}, namespace), do: true
   def namespace?(%__MODULE__{}, _namespace), do: false

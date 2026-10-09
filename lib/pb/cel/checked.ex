@@ -19,6 +19,7 @@ defmodule PB.CEL.Checked do
   @moduledoc false
 
   alias PB.CEL.Call
+  alias PB.CEL.Checked.References
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Function
   alias PB.CEL.Proto
@@ -212,6 +213,14 @@ defmodule PB.CEL.Checked do
   @spec op(t, Proto.expr() | expr_id) :: op | nil
   def op(%__MODULE__{} = checked, %{id: id}), do: op(checked, id)
   def op(%__MODULE__{ops: ops}, id) when is_integer(id), do: Map.get(ops, id)
+
+  @doc """
+  Returns what the expression reads: variable field paths and non-operator
+  function calls with their constant arguments, in evaluation order. See
+  `PB.CEL.Checked.References` for how locals are resolved.
+  """
+  @spec references(t) :: References.t()
+  def references(%__MODULE__{} = checked), do: References.collect(checked)
 
   @spec to_proto(t) :: Proto.checked_expr()
   def to_proto(%__MODULE__{} = checked) do
