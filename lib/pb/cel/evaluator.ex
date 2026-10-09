@@ -105,12 +105,18 @@ defmodule PB.CEL.Evaluator do
     eval_enum_constructor_call(expr_ref(id), op, state)
   end
 
-  # `@not_strictly_false` is the only non-strict call: comprehension loop
-  # conditions use it so an error or unknown in one iteration does not stop
-  # the loop.
+  # `@not_strictly_false` is non-strict: comprehension loop conditions use it
+  # so an error or unknown in one iteration does not stop the loop.
   defp eval_op(_id, {:call, %{name: "@not_strictly_false", arg_ids: [arg_id]}}, state) do
     {value, state} = eval_captured(arg_id, state)
     {:ok, Value.bool(value != Value.bool(false)), state}
+  end
+
+  # `or` and `orValue` evaluate their alternative only when the receiver is
+  # empty, as in cel-go.
+  defp eval_op(id, {:call, %{overload_id: overload_id, target_id: target_id} = op}, state)
+       when overload_id in ["optional_or", "optional_or_value"] and is_integer(target_id) do
+    eval_optional_or(expr_ref(id), op, state)
   end
 
   defp eval_op(id, {:call, op}, state) do
@@ -250,6 +256,26 @@ defmodule PB.CEL.Evaluator do
 
         _other ->
           error(expr, "optional map requires optional receiver")
+      end
+    end
+  end
+
+  defp eval_optional_or(expr, %{target_id: target_id, arg_ids: [alternative_id]} = op, state) do
+    with {:ok, target, state} <- eval_id(target_id, state) do
+      case {op.overload_id, target} do
+        {"optional_or", {:optional, {:some, _value}}} ->
+          {:ok, target, state}
+
+        {"optional_or_value", {:optional, {:some, value}}} ->
+          {:ok, value, state}
+
+        {_overload_id, {:optional, :none}} ->
+          with {:ok, alternative, state} <- eval_id(alternative_id, state) do
+            apply_registered_call(expr, op, [target, alternative], state)
+          end
+
+        _other ->
+          error(expr, "no such overload")
       end
     end
   end

@@ -129,6 +129,21 @@ defmodule PB.CEL.UnknownTest do
     end
   end
 
+  test "optional or and orValue evaluate the alternative only for an empty receiver" do
+    assert eval("optional.of(1).orValue(x)") == {:ok, Value.int(1)}
+    assert eval("optional.of(1).or(optional.of(x)).value()") == {:ok, Value.int(1)}
+    assert eval("optional.of(1).orValue(1 / 0)") == {:ok, Value.int(1)}
+
+    assert unknown_entries("optional.none().orValue(x)") == [{{:var, "x"}, :timeout}]
+
+    assert unknown_entries("optional.none().or(optional.of(x)).value()") == [
+             {{:var, "x"}, :timeout}
+           ]
+
+    assert {:error, %Error{message: "division by zero"}} = eval("optional.none().orValue(1 / 0)")
+    assert {:error, %Error{message: "no such overload"}} = eval("dyn(1).orValue(2)")
+  end
+
   test "an unknown result can be bound as an input" do
     assert {:unknown, unknown} = eval("x < 30 && y > 1")
 
