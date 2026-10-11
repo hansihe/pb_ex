@@ -620,7 +620,7 @@ defmodule PB.RepeatedEncodingTest do
              }
     end
 
-    test "map entries with closed enum unknown values are preserved as unknown fields" do
+    test "only map entries with closed enum unknown values become unknown fields" do
       desc = %{
         file: [
           %{
@@ -678,6 +678,11 @@ defmodule PB.RepeatedEncodingTest do
                  %PB.UnknownField{number: 1, wire_type: 2, raw: bin}
                ]
              }
+
+      # roles["a"] = ADMIN with an unknown field 3 inside the entry: as in C++,
+      # the entry is kept and the unknown field dropped.
+      bin = <<0x0A, 7, 0x0A, 1, ?a, 0x10, 1, 0x18, 7>>
+      assert PB.decode(bin, schema, :"closedm.Msg") == {:ok, %{roles: %{"a" => :ADMIN}}}
     end
   end
 end

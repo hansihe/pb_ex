@@ -484,9 +484,19 @@ defmodule PB.Runtime.Decoder.Scan do
     end
   end
 
+  # As in C++, a map entry whose closed enum value was rejected (and so kept
+  # as an unknown field of the entry) moves whole to the unknown fields; any
+  # other unknown field inside an entry is dropped and the entry kept.
   defp unknown_map_entry?(schema, field, value) do
-    RuntimeSchema.map_entry_message(schema, field) != nil and is_map(value) and
-      Map.has_key?(value, UnknownField.key())
+    case RuntimeSchema.map_entry_message(schema, field) do
+      %{fields_by_name: %{value: %{number: number}}} when is_map(value) ->
+        value
+        |> Map.get(UnknownField.key(), [])
+        |> Enum.any?(&(&1.number == number))
+
+      _other ->
+        false
+    end
   end
 
   defp interpret(schema, field, raw, depth, opts, path) do
