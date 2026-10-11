@@ -28,6 +28,8 @@ defmodule PB.Runtime.Frontend do
   alias PB.Runtime.Codec
   alias PB.Runtime.MessageView
 
+  @extension_key :__extensions__
+
   @doc """
   Converts a decoded proto-map for message `fqn`/`msg` into the schema's native
   representation. Returns `{:ok, term}` or `{:error, reason}` (raw reason /
@@ -89,10 +91,12 @@ defmodule PB.Runtime.Frontend do
 
   # ── shared recursion ─────────────────────────────────────────────────
 
-  # Convert message-typed values in place — regular fields first, then the
-  # member held by each oneof (stored as `oneof.name => {member_field, value}`).
+  # Convert message-typed values in place — regular fields first, then known
+  # extensions (stored under `:__extensions__` by full name), then the member
+  # held by each oneof (stored as `oneof.name => {member_field, value}`).
   defp recurse(fields, msg, schema, child) when is_map(fields) and not is_struct(fields) do
-    with {:ok, fields} <- recurse_regular(fields, msg, schema, child) do
+    with {:ok, fields} <- recurse_regular(fields, msg, schema, child),
+         {:ok, fields} <- recurse_extensions(fields, msg, schema, child) do
       recurse_oneofs(fields, msg, schema, child)
     end
   end
@@ -113,6 +117,30 @@ defmodule PB.Runtime.Frontend do
       end
     end)
   end
+
+  # Names the schema does not know are left for encode validation to report.
+  defp recurse_extensions(%{@extension_key => extensions} = fields, msg, schema, child)
+       when is_map(extensions) do
+    extensions
+    |> Enum.reduce_while({:ok, %{}}, fn {name, value}, {:ok, acc} ->
+      case Map.fetch(msg.extensions_by_name, name) do
+        {:ok, field} ->
+          case convert_value(field, value, schema, child) do
+            {:ok, value} -> {:cont, {:ok, Map.put(acc, name, value)}}
+            {:error, _reason} = error -> {:halt, error}
+          end
+
+        :error ->
+          {:cont, {:ok, Map.put(acc, name, value)}}
+      end
+    end)
+    |> case do
+      {:ok, extensions} -> {:ok, Map.put(fields, @extension_key, extensions)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp recurse_extensions(fields, _msg, _schema, _child), do: {:ok, fields}
 
   defp recurse_oneofs(fields, msg, schema, child) do
     Enum.reduce_while(msg.oneofs, {:ok, fields}, fn {_index, oneof}, {:ok, acc} ->
