@@ -97,6 +97,32 @@ PB.CEL.Value.to_native(value)
     eval_context: [:vars]
   }
   ```
+- `:call` passes `%{function: name, overload_id: id}`, naming the function and
+  the overload the checker chose, so one handler can serve several registered
+  functions. `name` includes the namespace for namespaced calls (`ns.fn`).
+  Context arguments follow in the order the list gives them:
+
+  ```elixir
+  defmodule Rules do
+    def call([{:string, user}], %{function: "is_" <> label}),
+      do: {:ok, {:bool, Labels.has?(user, label)}}
+  end
+
+  for label <- ["spam", "bot"] do
+    %Function{
+      name: "is_" <> label,
+      overloads: [
+        %Overload{
+          id: "is_" <> label <> "_string",
+          args: [:string],
+          result: :bool,
+          eval: {Rules, :call},
+          eval_context: [:call]
+        }
+      ]
+    }
+  end
+  ```
 - Registration validates only the MFA *shape* (both elements must be atoms). It
   does not check that the module/function exists, so a missing `Mod.fun/arity` at
   dispatch time raises `:undef` to the caller.

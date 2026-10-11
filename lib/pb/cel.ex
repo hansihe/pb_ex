@@ -58,7 +58,8 @@ defmodule PB.CEL do
   # `strict: false`, in which case they arrive as `{:error, %PB.CEL.Error{}}`
   # and `{:unknown, %PB.CEL.Unknown{}}`.
   # An overload's `:eval_context` appends extra arguments; `:vars` passes the
-  # variable bindings given to eval, keyed by string name.
+  # variable bindings given to eval, keyed by string name, and `:call` passes
+  # `%{function: name, overload_id: id}` for the call being evaluated.
   #
   #     alias PB.CEL.Function
   #     alias PB.CEL.Function.Overload

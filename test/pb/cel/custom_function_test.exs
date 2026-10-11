@@ -23,6 +23,11 @@ defmodule PB.CEL.CustomFunctionTest do
         :error -> {:unknown, :labels_not_fetched}
       end
     end
+
+    def record(args, call, vars) do
+      send(self(), {:called, args, call, vars})
+      {:ok, Value.bool(true)}
+    end
   end
 
   defp greet_function do
@@ -271,6 +276,40 @@ defmodule PB.CEL.CustomFunctionTest do
 
     assert {:unknown, unknown} = CEL.eval(source, %{score: 1, labels: {:unknown, :timeout}}, env)
     assert [{{:call, "label", _expr_id}, :timeout}] = CEL.Unknown.entries(unknown)
+  end
+
+  test "tells a function requesting :call which function and overload it serves" do
+    functions =
+      for {name, mode, args} <- [
+            {"first", :global, [:int]},
+            {"second", :receiver, [:int, :int]},
+            {"third", {:namespace, "ns"}, [:int]}
+          ] do
+        %Function{
+          name: name,
+          modes: [mode],
+          overloads: [
+            %Overload{
+              id: name <> "_int",
+              args: args,
+              result: :bool,
+              eval: {Handlers, :record},
+              eval_context: [:call, :vars]
+            }
+          ]
+        }
+      end
+
+    env = env(vars: [x: :int], functions: functions)
+
+    assert CEL.eval("first(x)", %{x: 1}, env) == {:ok, Value.bool(true)}
+    assert_received {:called, [int: 1], %{function: "first", overload_id: "first_int"}, %{"x" => 1}}
+
+    assert CEL.eval("x.second(2)", %{x: 1}, env) == {:ok, Value.bool(true)}
+    assert_received {:called, [int: 1, int: 2], %{function: "second", overload_id: "second_int"}, _}
+
+    assert CEL.eval("ns.third(x)", %{x: 1}, env) == {:ok, Value.bool(true)}
+    assert_received {:called, [int: 1], %{function: "ns.third", overload_id: "third_int"}, _}
   end
 
   defp env(opts), do: CEL.Env.build(opts)

@@ -514,7 +514,7 @@ defmodule PB.CEL.Evaluator do
 
   defp dispatch_mfa_call(expr, op, mod, fun, values, state) do
     eval_context = Map.get(op, :eval_context, [])
-    args = [values | Enum.map(eval_context, &eval_context_value(&1, state))]
+    args = [values | Enum.map(eval_context, &eval_context_value(&1, op, state))]
 
     case apply(mod, fun, args) do
       {:ok, value} -> {:ok, value, state}
@@ -532,9 +532,12 @@ defmodule PB.CEL.Evaluator do
     end
   end
 
-  defp eval_context_value(:schema, state), do: state.schema
-  defp eval_context_value(:message_runtime, state), do: state.message_runtime
-  defp eval_context_value(:vars, state), do: state.vars
+  defp eval_context_value(:schema, _op, state), do: state.schema
+  defp eval_context_value(:message_runtime, _op, state), do: state.message_runtime
+  defp eval_context_value(:vars, _op, state), do: state.vars
+
+  defp eval_context_value(:call, op, _state),
+    do: %{function: op.name, overload_id: op.overload_id}
 
   defp apply_enum_constructor(expr, enum_name, [value], state) do
     case RuntimeEnum.construct(state.message_schema, state.schema, enum_name, value) do
