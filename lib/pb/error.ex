@@ -16,7 +16,7 @@ defmodule PB.Error do
     * `PB.OptionError` — option failures (`unknown_options`, `invalid_option`,
       `invalid_options`).
     * `PB.DecodeError` — structurally invalid serialized input (`malformed`
-      wire bytes, `malformed_json`, `duplicate_field`).
+      wire bytes, `malformed_json`, `malformed_text`, `duplicate_field`).
     * `PB.AdapterError` — an adapter `to_proto`/`from_proto` callback failed.
 
   Non-bang APIs return `{:error, error}` where `error` is one of the structs
@@ -42,6 +42,7 @@ defmodule PB.Error do
           | :normalize
           | :json_encode
           | :json_decode
+          | :text_decode
           | :validate
           | :message_equal
           | :introspect

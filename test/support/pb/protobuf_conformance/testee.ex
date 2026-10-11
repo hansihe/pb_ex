@@ -109,13 +109,11 @@ defmodule PB.TestSupport.ProtobufConformance.Testee do
   defp decode_input(_schema, _message_name, %{payload: {:jspb_payload, _payload}}),
     do: {:skip, "JSPB conformance is not supported by PB"}
 
-  # Text-format parsing is being built up behind the text-format failure list.
-  # Until the parser lands, only lexical errors are reported as parse errors.
-  defp decode_input(_schema, _message_name, %{payload: {:text_payload, payload}})
+  defp decode_input(schema, message_name, %{payload: {:text_payload, payload}})
        when is_binary(payload) do
-    case PB.TextFormat.Lexer.tokenize(payload) do
-      {:ok, _tokens} -> {:runtime_error, "text-format parsing is not implemented yet"}
-      {:error, %{message: message}} -> {:parse_error, message}
+    case PB.TextFormat.decode(payload, schema, message_name) do
+      {:ok, decoded} -> {:ok, decoded}
+      {:error, error} -> {:parse_error, Exception.message(error)}
     end
   end
 

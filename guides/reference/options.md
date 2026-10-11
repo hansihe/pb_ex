@@ -52,6 +52,12 @@ See [Decoding into structs](../how-to/structs-and-representation.md) and
 |--------|--------|---------|
 | `:ignore_unknown` | `boolean` | `false` |
 
+## `PB.TextFormat` decode (`decode/4`)
+
+| Option | Values | Default |
+|--------|--------|---------|
+| `:ignore_unknown` | `boolean` | `false` |
+
 ## `PB.Validate.validate/4`
 
 | Option | Values | Notes |

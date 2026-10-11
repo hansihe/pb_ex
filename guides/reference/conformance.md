@@ -21,10 +21,12 @@ Intentional deviations:
   tracked as expected failures.
 - JSPB conformance cases are intentionally skipped by the testee; PB does not
   implement that format.
-- Text-format support is in progress. Its cases run and are tracked separately
-  in `test/fixtures/protobuf_conformance/text_format_failures.txt`; the runner
-  fails when a listed case starts passing, so the list only shrinks. Text-output
-  cases stay listed until a text-format printer exists.
+- Text-format parsing (`PB.TextFormat`) is in progress. Its cases are tracked
+  separately in `test/fixtures/protobuf_conformance/text_format_failures.txt`;
+  the runner fails when a listed case starts passing, so the list only shrinks.
+  Still listed: every text-output case (there is no printer yet), and parsing
+  of group and delimited fields by type name or as extensions, expanded
+  `google.protobuf.Any` values, and reserved field names.
 
 ## CEL
 

@@ -110,6 +110,7 @@ defmodule PB.MixProject do
       Core: [
         PB,
         PB.JSON,
+        PB.TextFormat,
         PB.UnknownField
       ],
       "Schema & introspection": [

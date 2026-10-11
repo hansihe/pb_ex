@@ -1,16 +1,19 @@
 defmodule PB.DecodeError do
   @moduledoc """
   Structurally invalid serialized input: protobuf wire bytes that are truncated
-  or malformed, or JSON text that is not well-formed for the target. The
-  `:format` field discriminates `:wire` from `:json`. See `PB.Error`.
+  or malformed, or JSON or text format input that is not well-formed for the
+  target. The `:format` field discriminates `:wire`, `:json` and `:text`.
+
+  Text format errors carry the 1-based `:line` and `:column` of the problem in
+  `:details`. See `PB.Error`.
   """
 
   @typedoc "Which structural-decode failure this is."
-  @type kind :: :malformed | :malformed_json | :duplicate_field
+  @type kind :: :malformed | :malformed_json | :malformed_text | :duplicate_field
 
   @type t :: %__MODULE__{
           kind: kind | nil,
-          format: :wire | :json | nil,
+          format: :wire | :json | :text | nil,
           operation: PB.Error.operation() | nil,
           message_name: atom | nil,
           path: [PB.Error.path_element()],
@@ -34,11 +37,35 @@ defmodule PB.DecodeError do
     "malformed protobuf input#{PB.Error.format_location(path)}#{PB.Error.format_reason(reason)}"
   end
 
+  defp format(%__MODULE__{kind: :malformed_text} = error),
+    do: "malformed text format input#{text_location(error)}"
+
+  defp format(%__MODULE__{kind: :duplicate_field, format: :text} = error),
+    do: "duplicate field#{text_location(error)}"
+
   defp format(%__MODULE__{kind: :duplicate_field, path: path, reason: reason}) do
     "duplicate field#{PB.Error.format_location(path)}#{PB.Error.format_reason(reason)}"
   end
 
   defp format(%__MODULE__{path: path, reason: reason}) do
     "malformed JSON input#{PB.Error.format_location(path)}#{PB.Error.format_reason(reason)}"
+  end
+
+  # " at line 3, column 7 (field a.b): reason"
+  defp text_location(%__MODULE__{} = error) do
+    position =
+      case error.details do
+        %{line: line, column: column} -> " at line #{line}, column #{column}"
+        _ -> ""
+      end
+
+    field = if error.path == [], do: "", else: " (field #{PB.Error.format_path(error.path)})"
+
+    reason =
+      if is_binary(error.reason),
+        do: ": #{error.reason}",
+        else: PB.Error.format_reason(error.reason)
+
+    position <> field <> reason
   end
 end
