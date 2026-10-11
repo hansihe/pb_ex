@@ -27,6 +27,16 @@ defmodule PB.CEL.Library.Intrinsics do
   @add_types [:int, :uint, :double, :string, :bytes]
   @ordered_types [:bool, :int, :uint, :double, :string, :bytes, :timestamp, :duration]
 
+  # Ordering is defined within each type, and across the numeric types with
+  # cel-go's overload ids (`less_int64_double`, ...).
+  @ordered_pairs (for type <- @ordered_types, do: {type, type, @matcher_suffixes[type]}) ++
+                   for(
+                     left <- @numeric_types,
+                     right <- @numeric_types,
+                     left != right,
+                     do: {left, right, @matcher_suffixes[left] <> "_" <> @matcher_suffixes[right]}
+                   )
+
   @equality_functions (for {name, id, runtime} <- [
                              {"_==_", "_equals_", :equals},
                              {"_!=_", "_not_equals_", :not_equals}
@@ -115,10 +125,10 @@ defmodule PB.CEL.Library.Intrinsics do
                              }
                            ],
                            overloads:
-                             for type <- @ordered_types do
+                             for {left, right, suffix} <- @ordered_pairs do
                                %Overload{
-                                 id: prefix <> "_" <> Map.fetch!(@matcher_suffixes, type),
-                                 args: [type, type],
+                                 id: prefix <> "_" <> suffix,
+                                 args: [left, right],
                                  result: :bool,
                                  eval: {:mfa, {RuntimeCore, runtime}}
                                }

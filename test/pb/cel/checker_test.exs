@@ -65,6 +65,22 @@ defmodule PB.CEL.CheckerTest do
     assert ref(checked, checked.expr.id).overload_id == ["add_uint64"]
   end
 
+  test "orders mixed numeric types without dyn, as the CEL spec allows" do
+    for {source, overload_id, result} <- [
+          {"1 < 2.5", "less_int64_double", true},
+          {"-1 <= 0u", "less_equals_int64_uint64", true},
+          {"18446744073709551615u > 1.0", "greater_uint64_double", true},
+          {"2.0 >= 3", "greater_equals_double_int64", false}
+        ] do
+      checked = CEL.check!(source)
+      assert root_type(checked) == CType.bool()
+      assert ref(checked, checked.expr.id).overload_id == [overload_id]
+      assert CEL.eval(source) == {:ok, {:bool, result}}
+    end
+
+    assert {:error, %Error{phase: :check}} = CEL.check("1 < 2.5 + 1u")
+  end
+
   test "dyn defers mixed-type operator resolution" do
     checked = CEL.check!("dyn(1) + 2u")
 
