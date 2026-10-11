@@ -27,7 +27,8 @@ defmodule PB.CEL.Env do
             container: "",
             schema: nil,
             message_schema: NoMessageSchema,
-            message_runtime: NoMessageRuntime
+            message_runtime: NoMessageRuntime,
+            validate_literals: []
 
   @type t :: %__MODULE__{
           vars: %{String.t() => CType.t()},
@@ -35,7 +36,8 @@ defmodule PB.CEL.Env do
           container: String.t(),
           schema: term(),
           message_schema: module(),
-          message_runtime: module()
+          message_runtime: module(),
+          validate_literals: [PB.CEL.Checker.Literals.kind()]
         }
 
   @spec new(keyword | map | t) :: t
@@ -68,6 +70,11 @@ defmodule PB.CEL.Env do
         functions: [my_function],
         container: "my.pkg"
       )
+
+  `validate_literals: [:duration, :timestamp, :regex]` (any subset) makes
+  checking reject literal arguments the evaluator would reject:
+  `duration('30d')`, `timestamp('nope')` or `s.matches('[')`. By default these
+  fail when evaluated, as CEL specifies.
   """
   @spec build(keyword) :: t
   def build(opts) when is_list(opts), do: from_options(opts)
@@ -83,7 +90,20 @@ defmodule PB.CEL.Env do
     |> put_container(Keyword.get(opts, :container, nil))
     |> merge_vars(Keyword.get(opts, :vars, %{}))
     |> merge_functions(Keyword.get(opts, :functions, []))
+    |> put_validate_literals(Keyword.get(opts, :validate_literals))
     |> register_library_functions()
+  end
+
+  defp put_validate_literals(env, nil), do: env
+
+  defp put_validate_literals(env, kinds) do
+    unless is_list(kinds) and kinds -- PB.CEL.Checker.Literals.kinds() == [] do
+      raise ArgumentError,
+            "expected :validate_literals to be a list of " <>
+              "#{inspect(PB.CEL.Checker.Literals.kinds())}, got: #{inspect(kinds)}"
+    end
+
+    %{env | validate_literals: kinds}
   end
 
   @spec put_message_schema(t, module() | nil) :: t

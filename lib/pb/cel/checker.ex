@@ -11,6 +11,7 @@ defmodule PB.CEL.Checker do
 
   alias PB.CEL.Call
   alias PB.CEL.Checked
+  alias PB.CEL.Checker.Literals
   alias PB.CEL.Checker.NameResolution
   alias PB.CEL.Checker.Signatures
   alias PB.CEL.Checker.Solver
@@ -40,20 +41,17 @@ defmodule PB.CEL.Checker do
   def check(%{expr: expr, source_info: source_info}, opts \\ []) when is_map(expr) do
     state = %State{env: Env.from_options(opts), solver: Solver.new()}
 
-    case infer(expr, state) do
-      {:ok, _type, state} ->
-        types = finalize_types(state)
-
-        {:ok,
-         Checked.new(
-           expr: expr,
-           source_info: source_info,
-           types: types,
-           ops: state.ops
-         )}
-
-      {:error, error} ->
-        {:error, locate(error, source_info)}
+    with {:ok, _type, state} <- infer(expr, state),
+         :ok <- Literals.validate(state.ops, state.env.validate_literals) do
+      {:ok,
+       Checked.new(
+         expr: expr,
+         source_info: source_info,
+         types: finalize_types(state),
+         ops: state.ops
+       )}
+    else
+      {:error, error} -> {:error, locate(error, source_info)}
     end
   end
 

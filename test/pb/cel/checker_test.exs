@@ -77,6 +77,30 @@ defmodule PB.CEL.CheckerTest do
     assert {:error, %Error{offset: 13, location: "rules/foo.txtpb"}} = CEL.check(parsed)
   end
 
+  test "validate_literals rejects literal arguments the evaluator would reject" do
+    env = env(vars: %{x: :string}, validate_literals: [:duration, :timestamp, :regex])
+
+    for {source, message, offset} <- [
+          {"duration('30d')", "invalid duration", 9},
+          {"timestamp('0000-01-01T00:00:00Z')", "timestamp range", 10},
+          {"x.matches('[')", "invalid regex at 1: missing terminating ] for character class", 10},
+          {"matches(x, '(')", "invalid regex at 1: missing closing parenthesis", 11}
+        ] do
+      assert {:error, %Error{phase: :check, message: ^message, offset: ^offset}} =
+               CEL.check(source, env)
+
+      assert {:ok, _checked} = CEL.check(source, env(vars: %{x: :string}))
+    end
+
+    for source <- ["duration(x) > duration('1s')", "x.matches('^a+$')", "timestamp(x)"] do
+      assert {:ok, _checked} = CEL.check(source, env)
+    end
+
+    assert {:ok, _checked} = CEL.check("duration('30d')", env(validate_literals: [:regex]))
+
+    assert_raise ArgumentError, ~r/validate_literals/, fn -> env(validate_literals: [:int]) end
+  end
+
   test "orders mixed numeric types without dyn, as the CEL spec allows" do
     for {source, overload_id, result} <- [
           {"1 < 2.5", "less_int64_double", true},
