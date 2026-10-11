@@ -171,7 +171,7 @@ defmodule PB.Validate.CELExtensions.Strings do
   defp valid_hostname?(""), do: false
 
   defp valid_hostname?(hostname) do
-    normalized = String.trim_trailing(hostname, ".")
+    normalized = String.replace_suffix(hostname, ".", "")
 
     hostname_length_ok?(hostname) and normalized != "" and
       normalized
@@ -185,7 +185,7 @@ defmodule PB.Validate.CELExtensions.Strings do
   end
 
   defp valid_hostname_labels?(labels) do
-    Enum.all?(labels, &valid_hostname_label?/1) and not all_digits?(List.last(labels))
+    Enum.all?(labels, &valid_hostname_label?/1) and not digits?(List.last(labels))
   end
 
   defp valid_hostname_label?(label) do
@@ -560,8 +560,7 @@ defmodule PB.Validate.CELExtensions.Strings do
   defp hex_value(char) when char in ?A..?F, do: char - ?A + 10
   defp hex_value(char) when char in ?a..?f, do: char - ?a + 10
 
-  defp digits?(value), do: Regex.match?(~r/^[0-9]+$/, value)
-  defp all_digits?(value), do: Regex.match?(~r/^[0-9]+$/, value)
+  defp digits?(value), do: Regex.match?(~r/\A[0-9]+\z/, value)
 
   defp bool(value), do: {:ok, Value.bool(value)}
   defp no_such_overload, do: {:error, "no such overload"}

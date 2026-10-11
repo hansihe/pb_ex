@@ -825,7 +825,7 @@ defmodule PB.JSON.WKT do
   end
 
   defp parse_fractional_nanos(frac) when byte_size(frac) >= 1 and byte_size(frac) <= 9 do
-    if frac =~ ~r/^[0-9]+$/ do
+    if frac =~ ~r/\A[0-9]+\z/ do
       padded = frac <> String.duplicate("0", 9 - byte_size(frac))
       {:ok, String.to_integer(padded)}
     else
@@ -838,7 +838,7 @@ defmodule PB.JSON.WKT do
   defp parse_unsigned(""), do: :error
 
   defp parse_unsigned(s) do
-    if s =~ ~r/^[0-9]+$/, do: {:ok, String.to_integer(s)}, else: :error
+    if s =~ ~r/\A[0-9]+\z/, do: {:ok, String.to_integer(s)}, else: :error
   end
 
   defp take_digits(input, n) when byte_size(input) >= n do

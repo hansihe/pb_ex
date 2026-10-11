@@ -1366,6 +1366,11 @@ defmodule PB.JSONTest do
 
       assert {:error, %PB.ValueError{kind: :invalid_value}} =
                JSON.from_term("abc", schema, @duration)
+
+      for input <- ["5\ns", "1.5\ns", "0.\n5s"] do
+        assert {:error, %PB.ValueError{kind: :invalid_value}} =
+                 JSON.from_term(input, schema, @duration)
+      end
     end
 
     test "decode rejects explicit '+' prefix (spec allows only '-')", %{schema: schema} do
@@ -1453,6 +1458,11 @@ defmodule PB.JSONTest do
 
       assert {:error, %PB.ValueError{kind: :invalid_value}} =
                JSON.from_term("not-a-timestamp", schema, @timestamp)
+
+      for input <- ["1970-01-0\nT00:00:00Z", "1970-01-01T00:00:00.5\nZ"] do
+        assert {:error, %PB.ValueError{kind: :invalid_value}} =
+                 JSON.from_term(input, schema, @timestamp)
+      end
     end
 
     test "Timestamp nested on host message round-trips", %{schema: schema} do

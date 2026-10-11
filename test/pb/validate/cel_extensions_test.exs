@@ -14,6 +14,8 @@ defmodule PB.Validate.CELExtensionsTest do
     assert {:ok, {:bool, false}} = eval(~s|"foo_bar.com".isHostname()|)
     assert {:ok, {:bool, false}} = eval(~s|"a.1".isHostname()|)
     assert {:ok, {:bool, false}} = eval(~s|"你好.com".isHostname()|)
+    assert {:ok, {:bool, false}} = eval(~s|"a..".isHostname()|)
+    assert {:ok, {:bool, false}} = eval(~s|"a.1\\n".isHostname()|)
   end
 
   test "validates email addresses" do
@@ -34,6 +36,7 @@ defmodule PB.Validate.CELExtensionsTest do
     assert {:ok, {:bool, false}} = eval(~s|"example.com:080".isHostAndPort(false)|)
     assert {:ok, {:bool, false}} = eval(~s|"example.com:65536".isHostAndPort(false)|)
     assert {:ok, {:bool, false}} = eval(~s|"[127.0.0.1]".isHostAndPort(false)|)
+    assert {:ok, {:bool, false}} = eval(~s|"example.com:80\\n".isHostAndPort(true)|)
   end
 
   test "validates IP addresses" do
