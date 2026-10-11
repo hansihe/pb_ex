@@ -177,7 +177,7 @@ defmodule PB.CEL.Runtime.Math do
   end
 
   defp bit_shift(:right, {:int, value}, {:int, offset}) do
-    {:ok, Value.int(shift_right(unsigned_64(value), offset))}
+    {:ok, Value.int(value |> unsigned_64() |> shift_right(offset) |> signed_64())}
   end
 
   defp bit_shift(:right, {:uint, value}, {:int, offset}) do

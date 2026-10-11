@@ -604,6 +604,9 @@ defmodule PB.CEL.EvaluatorTest do
     assert CEL.eval!("math.isNaN(0.0 / 0.0)") == Value.bool(true)
     assert CEL.eval!("math.isInf(1.0 / 0.0)") == Value.bool(true)
     assert CEL.eval!("math.isFinite(1.0 / 1.5)") == Value.bool(true)
+    assert CEL.eval!("math.bitShiftRight(-8, 0)") == Value.int(-8)
+    assert CEL.eval!("math.bitShiftRight(-8, 1)") == Value.int(9_223_372_036_854_775_804)
+    assert CEL.eval!("math.bitShiftLeft(-8, 0)") == Value.int(-8)
 
     assert CEL.eval!("math.greatest(5.4, 10, 3u, -5.0, 9223372036854775807)") ==
              Value.int(9_223_372_036_854_775_807)
