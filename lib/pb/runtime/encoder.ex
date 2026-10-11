@@ -177,11 +177,7 @@ defmodule PB.Runtime.Encoder do
         end
 
       oneof = find_oneof(msg, key) ->
-        if value == nil do
-          {:cont, {:ok, acc}}
-        else
-          encode_oneof_field(schema, msg, oneof, key, value, path, acc, opts)
-        end
+        encode_oneof_field(schema, msg, oneof, key, value, path, acc, opts)
 
       opts.unknown_fields == :ignore ->
         {:cont, {:ok, acc}}
@@ -248,8 +244,6 @@ defmodule PB.Runtime.Encoder do
 
   defp identity_oneof?(_msg, _oneof), do: false
 
-  defp encode_extensions(_schema, _msg, _msg_name, nil, _path, _opts), do: {:ok, []}
-
   defp encode_extensions(_schema, _msg, _msg_name, extensions, _path, _opts)
        when extensions == %{},
        do: {:ok, []}
@@ -313,22 +307,12 @@ defmodule PB.Runtime.Encoder do
   defp encode_field(schema, field, value, path, opts) do
     cond do
       map_field?(schema, field) ->
-        cond do
-          value == nil ->
-            {:ok, []}
-
-          is_map(value) and not is_struct(value) ->
-            encode_map_field(schema, field, value, path, opts)
-
-          true ->
-            invalid_value(path, :map, value)
-        end
+        if is_map(value) and not is_struct(value),
+          do: encode_map_field(schema, field, value, path, opts),
+          else: invalid_value(path, :map, value)
 
       Features.packed?(field) ->
         encode_packed(schema, field, value, path)
-
-      Features.repeated?(field) and value == nil ->
-        {:ok, []}
 
       Features.repeated?(field) and is_list(value) ->
         encode_repeated(schema, field, value, path, opts)
@@ -378,7 +362,6 @@ defmodule PB.Runtime.Encoder do
   end
 
   defp encode_packed(_schema, _field, [], _path), do: {:ok, []}
-  defp encode_packed(_schema, _field, nil, _path), do: {:ok, []}
 
   defp encode_packed(schema, field, values, path) when is_list(values) do
     with {:ok, encoded} <-

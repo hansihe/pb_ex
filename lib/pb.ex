@@ -282,10 +282,13 @@ defmodule PB do
   public terms to the protobuf field shape at each message boundary before wire
   encoding.
 
-  Field presence is controlled by map keys. For implicit-presence scalar and
-  enum fields, `nil` is treated as the protobuf default and default values are
-  elided. For repeated and map fields, `nil` is treated as the empty collection.
-  For oneofs, `nil` is treated as no selected variant. Preserved unknown wire
+  Field presence is controlled by map keys, and a field set to `nil` is unset,
+  the same as a missing key, for every kind of field: scalars of either
+  presence, messages, repeated and map fields, extensions, and oneofs (no
+  selected variant). The exception is a message field whose type has an
+  adapter: `nil` goes to the adapter, which may read it as a value (a
+  `google.protobuf.Value` field holding JSON `null`). Implicit-presence fields
+  set to their default are elided. Preserved unknown wire
   fields may be supplied under the `:__unknown_fields__` map key and are
   emitted after known fields.
 

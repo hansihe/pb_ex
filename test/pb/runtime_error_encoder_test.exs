@@ -271,11 +271,35 @@ defmodule PB.RuntimeErrorEncoderTest do
   # ── T9 - Encoder edge cases ─────────────────────────────────────────
 
   describe "T9 - encoder edge cases" do
-    test "nil values encode as implicit defaults", %{schema: schema} do
+    test "nil values are unset", %{schema: schema} do
       {:ok, bin} = PB.encode(%{name: nil, id: 42}, schema, :"test.Person")
       {:ok, decoded} = PB.decode(IO.iodata_to_binary(bin), schema, :"test.Person")
       assert decoded == %{id: 42}
       refute Map.has_key?(decoded, :name)
+
+      # Explicit presence too: a nil field is not written, where it used to be
+      # written as its default.
+      proto2 = PB.TestSupport.TestSchema
+      message = :"cel.expr.conformance.proto2.TestAllTypes"
+
+      assert {:ok, ""} =
+               PB.encode(
+                 %{
+                   single_int32: nil,
+                   single_nested_message: nil,
+                   repeated_int32: nil,
+                   map_int32_int32: nil,
+                   nested_type: nil,
+                   __extensions__: nil
+                 },
+                 proto2,
+                 message
+               )
+
+      assert_error(PB.encode(%{bogus: nil}, schema, :"test.Person"),
+        kind: :unknown_field,
+        path: [:bogus]
+      )
     end
 
     test "unknown field names return errors by default", %{schema: schema} do

@@ -116,10 +116,13 @@ PB.encode(%{name: "Alice", typo: 1}, schema, :"mypackage.Person")
 ```
 
 Pass `unknown_fields: :ignore` to drop unknown keys. Presence is controlled by
-map keys: a missing key is absent. For implicit-presence scalar and enum fields,
-`nil` is treated as the protobuf default and default values are elided. For
-repeated and map fields, `nil` is treated as the empty collection. For oneofs,
-`nil` means no selected variant. String fields must be binaries, integer fields
+map keys: a missing key is absent, and a key set to `nil` is the same as a
+missing one, for every kind of field (for oneofs, no selected variant). This
+holds across encoding, ProtoJSON and text format, `PB.Validate` and
+`PB.message_equal?/4`. The exception is a message field whose type has an
+adapter: `nil` goes to the adapter, which may read it as a value (a
+`google.protobuf.Value` field holding JSON `null`). Implicit-presence fields
+set to their default are elided. String fields must be binaries, integer fields
 are range checked, and PB does not validate UTF-8 in the core wire codec.
 
 ## Schema format (hand-written schemas)

@@ -11,6 +11,20 @@ defmodule PB.MessageEqualityTest do
     assert PB.message_equal?(%{}, %{single_int32: 0}, @schema, @proto3)
   end
 
+  test "treats nil fields as unset" do
+    assert PB.message_equal?(%{single_int32: nil}, %{}, @schema, @proto2)
+    refute PB.message_equal?(%{single_int32: nil}, %{single_int32: 0}, @schema, @proto2)
+
+    assert PB.message_equal?(
+             %{single_nested_message: nil},
+             %{single_nested_message: nil},
+             @schema,
+             @proto2
+           )
+
+    assert PB.message_equal?(%{repeated_int32: nil, map_int32_int32: nil}, %{}, @schema, @proto2)
+  end
+
   test "compares repeated and map fields by protobuf value semantics" do
     assert PB.message_equal?(%{}, %{repeated_int32: []}, @schema, @proto2)
     assert PB.message_equal?(%{}, %{map_int32_int32: %{}}, @schema, @proto2)

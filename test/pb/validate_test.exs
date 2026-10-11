@@ -762,6 +762,29 @@ defmodule PB.ValidateTest do
     assert multiple.field == nil
   end
 
+  test "nil fields are unset", %{structural_schema: schema, predefined_schema: predefined} do
+    message = :"validate_structural.StructuralRules"
+
+    assert {:error, %Error{violations: [%{rule_id: "required"}]}} =
+             PB.Validate.validate(
+               %{choice: {:name, "set"}, required_value: nil},
+               schema,
+               message
+             )
+
+    oneofs = :"validate_structural.MessageOneofRules"
+    assert :ok = PB.Validate.validate(%{left: nil, right: "set"}, schema, oneofs)
+
+    assert {:error, %Error{violations: [%{rule_id: "message.oneof"}]}} =
+             PB.Validate.validate(%{left: nil}, schema, oneofs)
+
+    strings = :"validate_predefined.StringRules"
+    fields = %{email: "name@example.com", const: "foo", header_name: "X-Foo"}
+
+    assert PB.Validate.validate(Map.put(fields, :min_len, nil), predefined, strings) ==
+             PB.Validate.validate(fields, predefined, strings)
+  end
+
   test "nested message-level oneof rules include the parent field path",
        %{structural_nested_schema: schema} do
     message = :"validate_structural.Outer"
