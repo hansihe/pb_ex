@@ -57,6 +57,40 @@ defmodule PB.CEL.Checker.TypePattern do
           | {:optional, t}
           | {:repeat, t, non_neg_integer}
 
+  @types [:dyn, :dynamic, :null, :bool, :int, :uint, :double, :string, :bytes] ++
+           [:timestamp, :duration]
+  @arg_only [:any, :numeric, :integral, :list, :map, :message]
+  @primitives [:bool, :int, :uint, :double, :string, :bytes]
+
+  @doc """
+  Whether `pattern` is one the matcher understands as an argument (`:arg`) or
+  a result (`:result`): results cannot use the argument-only forms, but can
+  be `{:arg, index}`.
+  """
+  @spec valid?(term, :arg | :result) :: boolean
+  def valid?(type, _position) when type in @types, do: true
+  def valid?(pattern, :arg) when pattern in @arg_only, do: true
+  def valid?({:arg, index}, :result) when is_integer(index) and index >= 0, do: true
+  def valid?({:param, name}, _position) when is_binary(name) or is_atom(name), do: true
+  def valid?({:wrapper, primitive}, _position) when primitive in @primitives, do: true
+  def valid?({:message, name}, _position) when is_binary(name), do: true
+  def valid?({:enum, name}, _position) when is_binary(name), do: true
+  def valid?({:type, type}, position), do: valid?(type, position)
+  def valid?({:list, elem}, position), do: valid?(elem, position)
+  def valid?({:map, key, value}, position), do: valid?(key, position) and valid?(value, position)
+  def valid?({:optional, value}, position), do: valid?(value, position)
+
+  def valid?({:abstract, name, params}, position) when is_binary(name) and is_list(params),
+    do: Enum.all?(params, &valid?(&1, position))
+
+  def valid?({:one_of, patterns}, :arg) when is_list(patterns),
+    do: Enum.all?(patterns, &valid?(&1, :arg))
+
+  def valid?({:repeat, pattern, min}, :arg) when is_integer(min) and min >= 0,
+    do: valid?(pattern, :arg)
+
+  def valid?(_pattern, _position), do: false
+
   @spec param(atom) :: t
   def param(name) when is_atom(name), do: {:param, name}
 

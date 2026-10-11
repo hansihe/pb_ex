@@ -10,6 +10,7 @@ defmodule PB.CEL.Env do
   """
 
   alias PB.CEL.Checker.Literals
+  alias PB.CEL.Checker.TypePattern
   alias PB.CEL.Library
   alias PB.Runtime.Errors, as: RuntimeErrors
   alias PB.Runtime.Options
@@ -263,9 +264,35 @@ defmodule PB.CEL.Env do
   defp normalize_function(%Function{} = function) do
     %{
       function
-      | overloads: Enum.map(function.overloads, &normalize_overload(&1, function)),
-        dynamic_overloads: Enum.map(function.dynamic_overloads, &normalize_overload(&1, function))
+      | overloads: Enum.map(function.overloads, &check_overload(&1, function)),
+        dynamic_overloads: Enum.map(function.dynamic_overloads, &check_overload(&1, function))
     }
+  end
+
+  defp check_overload(%Overload{} = overload, function) do
+    unless is_binary(overload.id) do
+      reason = "#{inspect(function.name)} overload :id must be a string"
+      invalid_option!(:functions, overload.id, reason)
+    end
+
+    unless is_list(overload.args) and Enum.all?(overload.args, &TypePattern.valid?(&1, :arg)) do
+      invalid_signature!(function, overload, :args, overload.args)
+    end
+
+    unless TypePattern.valid?(overload.result, :result) do
+      invalid_signature!(function, overload, :result, overload.result)
+    end
+
+    normalize_overload(overload, function)
+  end
+
+  @spec invalid_signature!(Function.t(), Overload.t(), atom, term) :: no_return
+  defp invalid_signature!(function, overload, field, value) do
+    reason =
+      "#{inspect(function.name)} overload #{inspect(overload.id)} #{inspect(field)} " <>
+        "must be PB.CEL.Type shorthand"
+
+    invalid_option!(:functions, value, reason)
   end
 
   defp normalize_overload(%Overload{eval: nil} = overload, _function), do: overload

@@ -100,6 +100,25 @@ defmodule PB.CEL.CustomFunctionTest do
              CEL.eval("boom()", %{}, env(functions: [boom_function()]))
   end
 
+  test "rejects signatures that are not PB.CEL.Type shorthand at registration" do
+    for {overload, pattern} <- [
+          {[args: [:nonsense]], ~r/"bad" overload "bad_x" :args must be PB.CEL.Type shorthand/},
+          {[args: [{:list, :nope}]], ~r/:args must be/},
+          {[args: [{:wrapper, :timestamp}]], ~r/:args must be/},
+          {[args: [{:enum, :"pkg.Enum"}]], ~r/:args must be/},
+          {[args: :int], ~r/:args must be/},
+          {[result: :numeric], ~r/"bad_x" :result must be/},
+          {[result: {:one_of, [:int, :uint]}], ~r/:result must be/},
+          {[result: nil], ~r/:result must be/},
+          {[id: :bad_x], ~r/"bad" overload :id must be a string/}
+        ] do
+      fields = Keyword.merge([id: "bad_x", args: [:int], result: :int], overload)
+      function = %Function{name: "bad", overloads: [struct!(Overload, fields)]}
+
+      assert_raise PB.OptionError, pattern, fn -> env(functions: [function]) end
+    end
+  end
+
   test "rejects closures at registration with a clear error" do
     bad_function = %Function{
       name: "bad",
