@@ -8,12 +8,11 @@ defmodule PB.Validate.Compiler.CEL do
   alias PB.CEL
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Checked
+  alias PB.CEL.Regexes
   alias PB.CEL.Type
   alias PB.Validate.CELExtensions
   alias PB.Validate.CompileError
   alias PB.Validate.Schema, as: ValidateSchema
-
-  @matches_eval {:mfa, {PB.CEL.Runtime.Strings, :matches}}
 
   @doc """
   Merges compiled CEL ops into an entry's `:validate`, leaving it untouched when
@@ -157,7 +156,7 @@ defmodule PB.Validate.Compiler.CEL do
   defp rule_expression(%{expression: expression}), do: expression || ""
 
   defp compile_static_regexes!(%Checked{} = checked, vars, target, id) do
-    case compile_static_regexes(checked, vars) do
+    case Regexes.precompile(checked, vars) do
       {:ok, regexes} ->
         regexes
 
@@ -168,93 +167,6 @@ defmodule PB.Validate.Compiler.CEL do
           stage: :regex,
           cause: reason
     end
-  end
-
-  defp compile_static_regexes(%Checked{ops: ops}, vars) do
-    Enum.reduce_while(ops, {:ok, %{}}, fn
-      {id, {:call, %{eval: @matches_eval} = op}}, {:ok, regexes} ->
-        case static_match_pattern(op, ops, vars) do
-          {:ok, pattern} ->
-            case Regex.compile(pattern) do
-              {:ok, regex} ->
-                {:cont, {:ok, Map.put(regexes, id, regex)}}
-
-              {:error, {reason, at}} ->
-                {:halt, {:error, "invalid regex at #{at}: #{reason}"}}
-            end
-
-          :dynamic ->
-            {:cont, {:ok, regexes}}
-        end
-
-      _op, acc ->
-        {:cont, acc}
-    end)
-  end
-
-  defp static_match_pattern(%{arg_ids: []}, _ops, _vars), do: :dynamic
-
-  defp static_match_pattern(%{arg_ids: arg_ids}, ops, vars) do
-    arg_ids
-    |> List.last()
-    |> static_string(ops, vars)
-  end
-
-  defp static_string(id, ops, vars) do
-    case static_value(id, ops, vars, MapSet.new()) do
-      {:ok, value} when is_binary(value) -> {:ok, value}
-      _other -> :dynamic
-    end
-  end
-
-  defp static_value(id, ops, vars, seen) when is_integer(id) do
-    if MapSet.member?(seen, id) do
-      :dynamic
-    else
-      seen = MapSet.put(seen, id)
-
-      case Map.get(ops, id) do
-        {:const, %{value: {:string, value}}} ->
-          {:ok, value}
-
-        {:ident, %{kind: :var, name: name}} ->
-          Map.fetch(vars, name)
-
-        {:select, %{receiver_id: receiver_id} = select} ->
-          case static_value(receiver_id, ops, vars, seen) do
-            {:ok, receiver} -> static_select(receiver, select)
-            :dynamic -> :dynamic
-            :error -> :dynamic
-          end
-
-        _other ->
-          :dynamic
-      end
-    end
-  end
-
-  defp static_value(_id, _ops, _vars, _seen), do: :dynamic
-
-  defp static_select(value, select) when is_map(value) and not is_struct(value) do
-    select
-    |> static_select_keys()
-    |> Enum.find_value(:dynamic, fn key ->
-      case Map.fetch(value, key) do
-        {:ok, value} -> {:ok, value}
-        :error -> false
-      end
-    end)
-  end
-
-  defp static_select(_value, _select), do: :dynamic
-
-  defp static_select_keys(select) do
-    [
-      get_in(select, [:field_ref, :field]),
-      Map.get(select, :field)
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
   end
 
   defp valid_result_type?(type) do

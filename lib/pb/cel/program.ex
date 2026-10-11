@@ -23,13 +23,18 @@ defmodule PB.CEL.Program do
   alias PB.CEL.Env
   alias PB.CEL.Error
   alias PB.CEL.Evaluator
+  alias PB.CEL.Regexes
   alias PB.CEL.Unknown
   alias PB.CEL.Value
 
   @enforce_keys [:checked, :env]
-  defstruct [:checked, :env]
+  defstruct [:checked, :env, regexes: %{}]
 
-  @type t :: %__MODULE__{checked: Checked.t(), env: Env.t()}
+  @type t :: %__MODULE__{
+          checked: Checked.t(),
+          env: Env.t(),
+          regexes: %{Checked.expr_id() => Regex.t()}
+        }
 
   @doc """
   Bundles a previously checked expression with the environment it was checked
@@ -43,15 +48,23 @@ defmodule PB.CEL.Program do
   """
   @spec new(Checked.t(), Env.t()) :: t
   def new(%Checked{} = checked, %Env{} = env) do
-    %__MODULE__{checked: checked, env: env}
+    # Literal patterns compile once here. An invalid one is left to fail
+    # when evaluated, as CEL reports it.
+    regexes =
+      case Regexes.precompile(checked, %{}) do
+        {:ok, regexes} -> regexes
+        {:error, _reason} -> %{}
+      end
+
+    %__MODULE__{checked: checked, env: env, regexes: regexes}
   end
 
   @doc """
   Evaluates a compiled program with the supplied variable bindings.
   """
   @spec eval(t, map | keyword) :: {:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}
-  def eval(%__MODULE__{checked: checked, env: env}, values \\ %{}) do
-    Evaluator.eval(checked, values, evaluator_opts(env))
+  def eval(%__MODULE__{checked: checked, env: env, regexes: regexes}, values \\ %{}) do
+    Evaluator.eval(checked, values, [regexes: regexes] ++ evaluator_opts(env))
   end
 
   @doc """

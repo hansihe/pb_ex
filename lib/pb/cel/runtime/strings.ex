@@ -1,6 +1,7 @@
 defmodule PB.CEL.Runtime.Strings do
   @moduledoc false
 
+  alias PB.CEL.Regexes
   alias PB.CEL.Runtime.Strings.Format
   alias PB.CEL.Value
 
@@ -41,9 +42,8 @@ defmodule PB.CEL.Runtime.Strings do
 
   @spec matches([Value.t()]) :: result
   def matches([{:string, string}, {:string, pattern}]) do
-    case Regex.compile(pattern) do
-      {:ok, regex} -> {:ok, Value.bool(Regex.match?(regex, string))}
-      {:error, {reason, at}} -> {:error, "invalid regex at #{at}: #{reason}"}
+    with {:ok, regex} <- Regexes.compile(pattern) do
+      matches([{:string, string}, {:string, pattern}], regex)
     end
   end
 
@@ -51,7 +51,7 @@ defmodule PB.CEL.Runtime.Strings do
 
   @spec matches([Value.t()], Regex.t()) :: result
   def matches([{:string, string}, {:string, _pattern}], %Regex{} = regex) do
-    {:ok, Value.bool(Regex.match?(regex, string))}
+    with {:ok, matched} <- Regexes.match(regex, string), do: {:ok, Value.bool(matched)}
   end
 
   def matches(_values, %Regex{}), do: no_such_overload()

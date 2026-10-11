@@ -680,6 +680,31 @@ defmodule PB.CEL.EvaluatorTest do
              CEL.Evaluator.eval(checked, vars, regexes: %{matches_id => ~r/^a+$/})
   end
 
+  test "matches with RE2-like Unicode rules and a bounded match" do
+    # `.` matches a code point; `\w` stays ASCII, as in RE2.
+    assert CEL.eval!(~S|'é'.matches('^.$')|) == Value.bool(true)
+    assert CEL.eval!(~S|'é'.matches('^\\w$')|) == Value.bool(false)
+
+    # Catastrophic backtracking ends in an error rather than running on.
+    input = String.duplicate("a", 40) <> "b"
+
+    assert {:error, %Error{phase: :eval, message: "regex match exceeded" <> _}} =
+             CEL.eval(~s|'#{input}'.matches('^(a+)+$')|)
+  end
+
+  test "compiled programs compile literal patterns once" do
+    program = CEL.compile!(~S|value.matches('^a+$')|, env(vars: %{value: :string}))
+    assert [%Regex{source: "^a+$"}] = Map.values(program.regexes)
+    assert CEL.eval_program!(program, %{"value" => "aaa"}) == Value.bool(true)
+
+    # An invalid literal pattern is reported when evaluated.
+    program = CEL.compile!(~S|value.matches('(')|, env(vars: %{value: :string}))
+    assert program.regexes == %{}
+
+    assert {:error, %Error{message: "invalid regex" <> _}} =
+             CEL.eval_program(program, %{"value" => "a"})
+  end
+
   test "evaluates string format extension" do
     assert CEL.eval!(~S|'%d %s %x'.format([42, 'ok', b'AZ'])|) ==
              Value.string("42 ok 415a")
