@@ -864,6 +864,18 @@ defmodule PB.ValidateTest do
              ~s|PB failed to validate :"validate_phase2.FieldCEL": invalid value at <message>: expected :map, got :not_a_map|
   end
 
+  test "validate reports nested projection errors at the field path", %{phase2_schema: schema} do
+    message = :"validate_phase2.NowCEL"
+
+    assert {:error, %PB.ValueError{path: [:value], got: ~D[2020-01-01]}} =
+             PB.Validate.validate(%{value: ~D[2020-01-01]}, schema, message)
+
+    assert {:error, %PB.ValueError{kind: :message_name_mismatch} = error} =
+             PB.Validate.validate(%{value: %{__message_name__: :Bogus}}, schema, message)
+
+    assert error.path == [:value, :__message_name__]
+  end
+
   test "validate returns PB.Error for mismatched message-name metadata",
        %{phase2_schema: schema} do
     key = :__message_name__

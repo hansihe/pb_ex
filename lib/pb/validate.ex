@@ -194,6 +194,8 @@ defmodule PB.Validate do
     do: {:error, %Error{message_name: message_name, violations: violations}}
 
   defp project_message!(schema, message_name, message, data, path) do
+    path = Path.api_path(path)
+
     case MessageView.to_proto_fields(schema, message_name, message, data, path) do
       {:ok, data} ->
         data
@@ -253,7 +255,7 @@ defmodule PB.Validate do
       operation: :validate,
       message_name: message_name,
       kind: :invalid_value,
-      path: path,
+      path: Path.api_path(path),
       expected: :map,
       got: data,
       reason: "expected a message map"
@@ -266,7 +268,7 @@ defmodule PB.Validate do
       operation: :validate,
       message_name: expected,
       kind: :message_name_mismatch,
-      path: path ++ [@message_name_key],
+      path: Path.api_path(path) ++ [@message_name_key],
       expected: expected,
       got: actual
   end
