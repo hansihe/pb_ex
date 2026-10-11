@@ -97,9 +97,13 @@ PB.CEL.Value.to_native(value)
     eval_context: [:vars]
   }
   ```
-- `:call` passes `%{function: name, overload_id: id}`, naming the function and
-  the overload the checker chose, so one handler can serve several registered
-  functions. `name` includes the namespace for namespaced calls (`ns.fn`).
+- `:call` passes `%{function: name, overload_id: id, expr_id: id}`, naming the
+  function, the overload the checker chose and the call site, so one handler
+  can serve several registered functions. `name` includes the namespace for
+  namespaced calls (`ns.fn`). `expr_id` is the call's expression id, the same
+  one `PB.CEL.Checked.references/1` reports for the call and `PB.CEL.Unknown`
+  uses in `{:call, name, expr_id}`, so results computed per call site before
+  evaluation can be looked up by it.
   Context arguments follow in the order the list gives them:
 
   ```elixir

@@ -302,11 +302,21 @@ defmodule PB.CEL.CustomFunctionTest do
 
     env = env(vars: [x: :int], functions: functions)
 
-    assert CEL.eval("first(x)", %{x: 1}, env) == {:ok, Value.bool(true)}
-    assert_received {:called, [int: 1], %{function: "first", overload_id: "first_int"}, %{"x" => 1}}
+    {:ok, checked} = CEL.check("first(x) && first(2)", env)
+    [first_call, second_call] = for call <- CEL.Checked.references(checked).calls, do: call.expr_id
+    program = CEL.Program.new(checked, env)
+
+    assert CEL.eval_program(program, %{x: 1}) == {:ok, Value.bool(true)}
+
+    assert_received {:called, [int: 1],
+                     %{function: "first", overload_id: "first_int", expr_id: ^first_call},
+                     %{"x" => 1}}
+
+    assert_received {:called, [int: 2], %{expr_id: ^second_call}, _}
 
     assert CEL.eval("x.second(2)", %{x: 1}, env) == {:ok, Value.bool(true)}
-    assert_received {:called, [int: 1, int: 2], %{function: "second", overload_id: "second_int"}, _}
+    assert_received {:called, [int: 1, int: 2], %{function: "second", overload_id: "second_int"},
+                     _}
 
     assert CEL.eval("ns.third(x)", %{x: 1}, env) == {:ok, Value.bool(true)}
     assert_received {:called, [int: 1], %{function: "ns.third", overload_id: "third_int"}, _}
