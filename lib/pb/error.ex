@@ -37,7 +37,8 @@ defmodule PB.Error do
 
   @typedoc "The operation that produced an error."
   @type operation ::
-          :encode
+          :compile
+          | :encode
           | :decode
           | :normalize
           | :json_encode

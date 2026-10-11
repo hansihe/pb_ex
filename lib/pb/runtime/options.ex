@@ -4,10 +4,10 @@ defmodule PB.Runtime.Options do
   alias PB.Runtime.Errors
 
   @typedoc """
-  Accepted options, each with its allowed values (`:boolean` or a list) and
-  default.
+  Accepted options, each with its allowed values (`:boolean`, `:list` for any
+  list, or a list of the values themselves) and default.
   """
-  @type spec :: [{atom, {:boolean | [term], term}}]
+  @type spec :: [{atom, {:boolean | :list | [term], term}}]
 
   @doc """
   Validates a keyword list against `spec`, returning a map of every option in
@@ -40,5 +40,6 @@ defmodule PB.Runtime.Options do
   end
 
   defp allowed?(:boolean, value), do: is_boolean(value)
+  defp allowed?(:list, value), do: is_list(value)
   defp allowed?(values, value), do: value in values
 end

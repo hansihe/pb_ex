@@ -480,22 +480,10 @@ defmodule PB do
     PB.Runtime.Decoder.decode!(__compiled__(schema), message_name, binary, opts)
   end
 
-  defp compile_opts!(opts) when is_list(opts) do
-    if Keyword.keyword?(opts) do
-      unknown = Keyword.keys(opts) -- [:projections]
-
-      if unknown != [] do
-        raise ArgumentError, "unknown PB.compile option(s): #{inspect(unknown)}"
-      end
-
-      %{projections: Keyword.get(opts, :projections, [])}
-    else
-      raise ArgumentError, "expected PB.compile options to be a keyword list"
-    end
-  end
-
   defp compile_opts!(opts) do
-    raise ArgumentError,
-          "expected PB.compile options to be a keyword list, got: #{inspect(opts)}"
+    case PB.Runtime.Options.validate(opts, projections: {:list, []}) do
+      {:ok, opts} -> opts
+      {:error, reason} -> raise PB.Runtime.Errors.to_error(reason, :compile)
+    end
   end
 end

@@ -62,9 +62,13 @@ defmodule PB.AdapterTest do
       from_proto: {__MODULE__, :from_proto}
     }
 
+    for opts <- [[adapters: [@adapter]], [representation: [messages: %{}]]] do
+      assert_raise PB.OptionError, ~r/unknown option/, fn ->
+        PB.compile(@descriptor_set, opts)
+      end
+    end
+
     legacy_inputs = [
-      {[adapters: [@adapter]], ~r/unknown PB.compile option/},
-      {[representation: [messages: %{}]], ~r/unknown PB.compile option/},
       {[projections: [{@message, adapter: bare_keyword}]], ~r/must be a %PB.Adapter\{\}/},
       {[projections: [{@message, adapter: bare_map}]], ~r/must be a %PB.Adapter\{\}/},
       {[projections: [{@message, [bare_map]}]], ~r/to be a keyword list/}

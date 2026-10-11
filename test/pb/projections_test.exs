@@ -28,7 +28,7 @@ defmodule PB.ProjectionsTest do
 
   describe "entry parser" do
     test "rejects top-level non-list :projections" do
-      assert_raise ArgumentError, ~r/to be a list of \{fqn, options\} entries/, fn ->
+      assert_raise PB.OptionError, ~r/invalid value for :projections/, fn ->
         PB.compile(single_message_descriptor(), projections: %{})
       end
     end
