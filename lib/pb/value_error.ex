@@ -5,7 +5,9 @@ defmodule PB.ValueError do
 
   The relevant data is carried in typed fields (`:expected`, `:got`, `:min`,
   `:max`, `:value`, `:enum`, `:protobuf_message`, `:unknowns`, `:extensions`),
-  and `:path` locates the offending field. See `PB.Error` for the error model.
+  and `:path` locates the offending field. Errors from `PB.TextFormat` also
+  carry the 1-based `:line` and `:column` of the offending text. See
+  `PB.Error` for the error model.
   """
 
   @typedoc "Which value/shape failure this is."
@@ -37,7 +39,9 @@ defmodule PB.ValueError do
           protobuf_message: atom | nil,
           unknowns: term,
           extensions: term,
-          reason: term
+          reason: term,
+          line: pos_integer | nil,
+          column: pos_integer | nil
         }
 
   defexception kind: nil,
@@ -53,11 +57,15 @@ defmodule PB.ValueError do
                protobuf_message: nil,
                unknowns: nil,
                extensions: nil,
-               reason: nil
+               reason: nil,
+               line: nil,
+               column: nil
 
   @impl Exception
-  def message(%__MODULE__{} = error),
-    do: PB.Error.context(format(error), error.operation, error.message_name)
+  def message(%__MODULE__{} = error) do
+    position = PB.Error.format_position(error.line, error.column)
+    PB.Error.context(format(error) <> position, error.operation, error.message_name)
+  end
 
   defp format(%__MODULE__{kind: :absent}), do: "absent value"
 

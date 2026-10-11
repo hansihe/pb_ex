@@ -29,10 +29,10 @@ defmodule PB.TextFormat.Decoder do
   #     extension, with that number, and a reserved number is skipped, as C++
   #     does with `allow_field_number`; otherwise a number is an unknown name
   #
-  # Failures are thrown as `{:text_error, reason}` and returned by run/4. A
-  # reason is a `PB.Runtime.Errors` tuple carrying a path, or one of
-  # `{:malformed_text, message, offset, path}` and
-  # `{:duplicate_field, name, offset, path}` for problems tied to a position.
+  # Failures are thrown as `{:text_error, reason, offset}` and returned by
+  # run/4, with the offset of the text they are about (nil for a missing
+  # required field). A reason is a `PB.Runtime.Errors` tuple carrying a path,
+  # `{:malformed_text, message, path}` or `{:duplicate_field, name, path}`.
 
   alias PB.Runtime.{Oneofs, RequiredFields, Scalar}
   alias PB.Schema.Features
@@ -42,11 +42,12 @@ defmodule PB.TextFormat.Decoder do
   @any :"google.protobuf.Any"
   @extension_key :__extensions__
 
-  @spec run([PB.TextFormat.Parser.field()], map, atom, keyword) :: {:ok, map} | {:error, tuple}
+  @spec run([PB.TextFormat.Parser.field()], map, atom, map) ::
+          {:ok, map} | {:error, term, non_neg_integer | nil}
   def run(fields, schema, message_name, opts) do
     {:ok, decode_message(message_name, fields, schema, opts, [])}
   catch
-    {:text_error, reason} -> {:error, reason}
+    {:text_error, reason, offset} -> {:error, reason, offset}
   end
 
   # ── messages ─────────────────────────────────────────────────────────
@@ -173,7 +174,7 @@ defmodule PB.TextFormat.Decoder do
   defp unknown!(message_name, node, field_name, opts, path) do
     if opts.unknown_fields == :ignore,
       do: skip!(node, path),
-      else: throw({:text_error, {:unknown_field, message_name, path ++ [field_name]}})
+      else: fail!({:unknown_field, message_name, path ++ [field_name]}, node.offset)
   end
 
   # Like C++ `SkipField`, a skipped field without a colon must hold a message.
@@ -187,7 +188,7 @@ defmodule PB.TextFormat.Decoder do
     slot = {kind, field.name}
 
     if not Features.repeated?(field) and Map.has_key?(seen, slot) do
-      throw({:text_error, {:duplicate_field, field.name, node.offset, field_path}})
+      fail!({:duplicate_field, field.name, field_path}, node.offset)
     end
 
     seen =
@@ -195,7 +196,7 @@ defmodule PB.TextFormat.Decoder do
         case Map.fetch(seen, {:oneof, field.oneof_index}) do
           {:ok, other} ->
             reason = "#{field.name} is set along with #{other}, another member of the same oneof"
-            throw({:text_error, {:invalid_oneof, field_path, reason}})
+            fail!({:invalid_oneof, field_path, reason}, node.offset)
 
           :error ->
             Map.put(seen, {:oneof, field.oneof_index}, field.name)
@@ -265,7 +266,7 @@ defmodule PB.TextFormat.Decoder do
     bytes =
       case Any.pack(packed, schema, name) do
         {:ok, bytes} -> bytes
-        {:error, error} -> throw({:text_error, error})
+        {:error, error} -> fail!(error, node.offset)
       end
 
     fields =
@@ -338,7 +339,7 @@ defmodule PB.TextFormat.Decoder do
         type -> Scalars.integer(value, type)
       end
 
-    unwrap!(result, path)
+    unwrap!(result, value, path)
   end
 
   defp decode_message_value(name, %{kind: :message, fields: fields}, schema, opts, path),
@@ -353,12 +354,12 @@ defmodule PB.TextFormat.Decoder do
 
     if name && Map.has_key?(enum.by_name, name),
       do: name,
-      else: throw({:text_error, {:unknown_enum_value, path, field.type_name, value.value}})
+      else: fail!({:unknown_enum_value, path, field.type_name, value.value}, value.offset)
   end
 
   defp decode_enum(field, %{kind: :integer} = value, schema, path) do
     enum = schema.enums[field.type_name]
-    number = unwrap!(Scalars.integer(value, :TYPE_INT32), path)
+    number = unwrap!(Scalars.integer(value, :TYPE_INT32), value, path)
 
     case Map.fetch(enum.by_number, number) do
       {:ok, name} ->
@@ -366,31 +367,35 @@ defmodule PB.TextFormat.Decoder do
 
       :error ->
         if Features.closed_enum?(enum),
-          do: throw({:text_error, {:unknown_enum_value, path, field.type_name, number}}),
+          do: fail!({:unknown_enum_value, path, field.type_name, number}, value.offset),
           else: number
     end
   end
 
   defp decode_enum(_field, value, _schema, path),
-    do: throw({:text_error, {:invalid_value, path, :enum, Scalars.source(value)}})
+    do: fail!({:invalid_value, path, :enum, Scalars.source(value)}, value.offset)
 
   # ── helpers ──────────────────────────────────────────────────────────
 
-  defp unwrap!({:ok, value}, _path), do: value
+  defp unwrap!({:ok, value}, _node, _path), do: value
 
-  defp unwrap!({:error, {:invalid_value, expected, got}}, path),
-    do: throw({:text_error, {:invalid_value, path, expected, got}})
+  defp unwrap!({:error, {:invalid_value, expected, got}}, node, path),
+    do: fail!({:invalid_value, path, expected, got}, node.offset)
 
-  defp unwrap!({:error, {:value_out_of_range, min, max, value}}, path),
-    do: throw({:text_error, {:value_out_of_range, path, min, max, value}})
+  defp unwrap!({:error, {:value_out_of_range, min, max, value}}, node, path),
+    do: fail!({:value_out_of_range, path, min, max, value}, node.offset)
 
+  @spec fail!(term, non_neg_integer | nil) :: no_return
+  defp fail!(reason, offset), do: throw({:text_error, reason, offset})
+
+  @spec malformed!(String.t(), map, list) :: no_return
   defp malformed!(message, node, path),
-    do: throw({:text_error, {:malformed_text, message, node.offset, path}})
+    do: fail!({:malformed_text, message, path}, node.offset)
 
   defp check_required!(msg, fields, path) do
     case RequiredFields.missing_path(msg.required_fields, fields, path) do
       nil -> :ok
-      missing -> throw({:text_error, {:missing_required, missing}})
+      missing -> fail!({:missing_required, missing}, nil)
     end
   end
 

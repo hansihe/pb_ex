@@ -82,13 +82,14 @@ defmodule PB.TextFormat do
   ## Errors
 
   Text that is not well-formed returns a `PB.DecodeError` with
-  `kind: :malformed_text` and the 1-based `:line` and `:column` in `:details`.
-  So does a value that does not fit its field's syntax, such as a scalar field
-  without a colon or a list for a non-repeated field. A non-repeated field
-  given twice returns `kind: :duplicate_field`, also with a position. Values
-  that are well-formed but invalid for the field (out of range, unknown enum
-  value, invalid UTF-8 in a `string`) return a `PB.ValueError` locating the
-  field by `:path`, as `PB.JSON` does.
+  `kind: :malformed_text`. So does a value that does not fit its field's
+  syntax, such as a scalar field without a colon or a list for a non-repeated
+  field. A non-repeated field given twice returns `kind: :duplicate_field`.
+  Values that are well-formed but invalid for the field (an unknown field, out
+  of range, unknown enum value, invalid UTF-8 in a `string`) return a
+  `PB.ValueError`, as `PB.JSON` does. Every error locates the field by
+  `:path` and the text by its 1-based `:line` and `:column`, except a missing
+  required field, which has no position in the text.
 
   Message nesting is limited to a depth of 100, matching the wire and JSON
   decoders.
@@ -274,49 +275,52 @@ defmodule PB.TextFormat do
         {:ok, fields}
 
       {:error, %{message: message, offset: offset}} ->
-        {:error, malformed(text, message, offset, [], message_name)}
+        {:error, decode_error(text, {:malformed_text, message, []}, offset, message_name)}
     end
   end
 
   defp run_decoder(text, fields, schema, message_name, opts) do
     case Decoder.run(fields, schema, message_name, opts) do
-      {:ok, proto_map} ->
-        {:ok, proto_map}
-
-      {:error, {:malformed_text, message, offset, path}} ->
-        {:error, malformed(text, message, offset, path, message_name)}
-
-      {:error, {:duplicate_field, _name, offset, path}} ->
-        {line, column} = Lexer.position(text, offset)
-
-        {:error,
-         %DecodeError{
-           kind: :duplicate_field,
-           format: :text,
-           operation: @operation,
-           message_name: message_name,
-           path: path,
-           reason: "non-repeated field is specified more than once",
-           details: %{line: line, column: column}
-         }}
-
-      {:error, reason} ->
-        {:error, RuntimeErrors.to_error(reason, @operation, message_name)}
+      {:ok, proto_map} -> {:ok, proto_map}
+      {:error, reason, offset} -> {:error, decode_error(text, reason, offset, message_name)}
     end
   end
 
-  defp malformed(text, message, offset, path, message_name) do
-    {line, column} = Lexer.position(text, offset)
+  defp decode_error(text, reason, offset, message_name) do
+    reason
+    |> to_error(message_name)
+    |> at_position(text, offset)
+  end
 
+  defp to_error({:malformed_text, message, path}, message_name) do
     %DecodeError{
       kind: :malformed_text,
       format: :text,
       operation: @operation,
       message_name: message_name,
       path: path,
-      reason: message,
-      details: %{line: line, column: column}
+      reason: message
     }
+  end
+
+  defp to_error({:duplicate_field, _name, path}, message_name) do
+    %DecodeError{
+      kind: :duplicate_field,
+      format: :text,
+      operation: @operation,
+      message_name: message_name,
+      path: path,
+      reason: "non-repeated field is specified more than once"
+    }
+  end
+
+  defp to_error(reason, message_name), do: RuntimeErrors.to_error(reason, @operation, message_name)
+
+  defp at_position(error, _text, nil), do: error
+
+  defp at_position(error, text, offset) do
+    {line, column} = Lexer.position(text, offset)
+    %{error | line: line, column: column}
   end
 
   defp validate_opts(opts, allowed, operation, message_name) do

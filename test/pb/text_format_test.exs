@@ -289,7 +289,7 @@ defmodule PB.TextFormatTest do
     end
 
     test "a message field needs a message value" do
-      assert {:error, %DecodeError{kind: :malformed_text, details: %{line: 1, column: 26}}} =
+      assert {:error, %DecodeError{kind: :malformed_text, line: 1, column: 26}} =
                decode("optional_nested_message: 1")
     end
 
@@ -373,7 +373,7 @@ defmodule PB.TextFormatTest do
                 kind: :duplicate_field,
                 format: :text,
                 path: [:optional_int32],
-                details: %{line: 2, column: 1}
+                line: 2, column: 1
               } = error} = decode("optional_int32: 0\noptional_int32: 1")
 
       assert Exception.message(error) =~
@@ -652,7 +652,7 @@ defmodule PB.TextFormatTest do
     test "rejects prefixes C++ does not resolve and unknown types" do
       for url <- ["example.com/#{@nested}", "type.googleapis.com/no.Such", "a/b/#{@nested}"] do
         assert {:error,
-                %DecodeError{kind: :malformed_text, details: %{line: 1, column: 16}} = error} =
+                %DecodeError{kind: :malformed_text, line: 1, column: 16} = error} =
                  decode("optional_any { [#{url}] {} }"),
                url
 
@@ -897,12 +897,32 @@ defmodule PB.TextFormatTest do
                 format: :text,
                 operation: :text_decode,
                 message_name: @proto3,
-                details: %{line: 2, column: 18}
+                line: 2,
+                column: 18
               } = error} = decode("optional_int32: 1\noptional_string: 'x")
 
       assert Exception.message(error) ==
                "PB failed to text_decode #{inspect(@proto3)}: malformed text format input " <>
                  "at line 2, column 18: unterminated string literal"
+    end
+
+    test "value errors report the line and column of the offending text" do
+      text = "optional_int32: 1\n  optional_nested_message {\n    a: 'x'\n  }"
+
+      assert {:error, %ValueError{kind: :invalid_value, line: 3, column: 8}} = decode(text)
+
+      assert {:error, %ValueError{kind: :unknown_field, line: 2, column: 3} = error} =
+               decode("optional_int32: 1\n  publshed: 2")
+
+      assert Exception.message(error) ==
+               "PB failed to text_decode #{inspect(@proto3)}: unknown field \"publshed\" " <>
+                 "for #{inspect(@proto3)} at line 2, column 3"
+
+      assert {:error, %ValueError{kind: :unknown_enum_value, line: 1, column: 23}} =
+               decode("optional_nested_enum: NOPE")
+
+      assert {:error, %ValueError{kind: :value_out_of_range, line: 1, column: 17}} =
+               decode("optional_int32: 99999999999")
     end
 
     test "value errors carry the operation and message name" do

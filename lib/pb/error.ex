@@ -108,6 +108,10 @@ defmodule PB.Error do
   end
 
   @doc false
+  def format_position(nil, _column), do: ""
+  def format_position(line, column), do: " at line #{line}, column #{column}"
+
+  @doc false
   def format_location([]), do: ""
   def format_location(path), do: " at #{format_path(path)}"
 

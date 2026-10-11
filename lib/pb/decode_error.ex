@@ -4,8 +4,8 @@ defmodule PB.DecodeError do
   or malformed, or JSON or text format input that is not well-formed for the
   target. The `:format` field discriminates `:wire`, `:json` and `:text`.
 
-  Text format errors carry the 1-based `:line` and `:column` of the problem in
-  `:details`. See `PB.Error`.
+  Text format errors carry the 1-based `:line` and `:column` of the problem.
+  See `PB.Error`.
   """
 
   @typedoc "Which structural-decode failure this is."
@@ -18,6 +18,8 @@ defmodule PB.DecodeError do
           message_name: atom | nil,
           path: [PB.Error.path_element()],
           reason: term,
+          line: pos_integer | nil,
+          column: pos_integer | nil,
           details: map
         }
 
@@ -27,6 +29,8 @@ defmodule PB.DecodeError do
                message_name: nil,
                path: [],
                reason: nil,
+               line: nil,
+               column: nil,
                details: %{}
 
   @impl Exception
@@ -53,12 +57,7 @@ defmodule PB.DecodeError do
 
   # " at line 3, column 7 (field a.b): reason"
   defp text_location(%__MODULE__{} = error) do
-    position =
-      case error.details do
-        %{line: line, column: column} -> " at line #{line}, column #{column}"
-        _ -> ""
-      end
-
+    position = PB.Error.format_position(error.line, error.column)
     field = if error.path == [], do: "", else: " (field #{PB.Error.format_path(error.path)})"
 
     reason =
