@@ -5,6 +5,8 @@ defmodule PB.CEL.Runtime.Strings.Format do
   alias PB.CEL.Value
   alias PB.CEL.Runtime.Time
 
+  import Bitwise
+
   @type result :: {:ok, Value.t()} | {:error, String.t()}
 
   @spec format([Value.t()]) :: result
@@ -225,72 +227,85 @@ defmodule PB.CEL.Runtime.Strings.Format do
   defp maybe_case(value, :lower), do: String.downcase(value)
   defp maybe_case(value, :upper), do: String.upcase(value)
 
+  # Both clauses round the exact binary value half-to-even, as Go's strconv
+  # and C's printf do, using integer arithmetic so that no value overflows
+  # or loses digits.
   defp fixed_decimal(value, precision) do
     sign = if negative_float?(value), do: "-", else: ""
-    body = fixed_decimal_abs(abs(value), precision)
-    sign <> body
-  end
-
-  defp fixed_decimal_abs(value, precision) do
-    scale = pow10(precision)
-    rounded = round_half_even(value * scale)
-    integer = div(rounded, scale)
-    fraction = rem(rounded, scale)
-
-    cond do
-      precision == 0 ->
-        Integer.to_string(integer)
-
-      true ->
-        Integer.to_string(integer) <>
-          "." <>
-          (fraction |> Integer.to_string() |> String.pad_leading(precision, "0"))
-    end
-  end
-
-  defp scientific_decimal(value, precision) when value == 0.0 do
-    fixed_decimal_abs(0.0, precision) <> "e+00"
+    {num, den} = exact_fraction(value)
+    sign <> digits_with_point(round_div(num * pow10(precision), den), precision)
   end
 
   defp scientific_decimal(value, precision) do
     sign = if negative_float?(value), do: "-", else: ""
-    abs_value = abs(value)
-    exponent = floor(:math.log10(abs_value))
-    mantissa = abs_value / :math.pow(10, exponent)
-    body = fixed_decimal_abs(mantissa, precision)
+    {num, den} = exact_fraction(value)
 
-    {body, exponent} =
-      if scientific_overflow?(body, precision) do
-        {fixed_decimal_abs(1.0, precision), exponent + 1}
-      else
-        {body, exponent}
-      end
+    {digits, exponent} =
+      if num == 0, do: {0, 0}, else: scientific_digits(abs(value), num, den, precision)
 
-    sign <> body <> "e" <> exponent_string(exponent)
+    sign <> digits_with_point(digits, precision) <> "e" <> exponent_string(exponent)
   end
 
-  defp scientific_overflow?(body, 0), do: body == "10"
-  defp scientific_overflow?(body, _precision), do: String.starts_with?(body, "10.")
+  # The value rounded to `precision + 1` significant digits, and the decimal
+  # exponent of the first one.
+  defp scientific_digits(value, num, den, precision) do
+    exponent = decimal_exponent(value, num, den)
+    digits = round_div(scale(num, precision - exponent), scale(den, exponent - precision))
+
+    if digits == pow10(precision + 1),
+      do: {pow10(precision), exponent + 1},
+      else: {digits, exponent}
+  end
+
+  # floor(log10(value)) for value == num / den: estimated in floating point,
+  # then corrected exactly.
+  defp decimal_exponent(value, num, den) do
+    estimate = floor(:math.log10(value))
+
+    cond do
+      scale(num, -estimate) < scale(den, estimate) -> estimate - 1
+      scale(num, -estimate - 1) >= scale(den, estimate + 1) -> estimate + 1
+      true -> estimate
+    end
+  end
+
+  defp scale(value, power) when power > 0, do: value * pow10(power)
+  defp scale(value, _power), do: value
+
+  defp digits_with_point(digits, 0), do: Integer.to_string(digits)
+
+  defp digits_with_point(digits, precision) do
+    text = digits |> Integer.to_string() |> String.pad_leading(precision + 1, "0")
+    split = byte_size(text) - precision
+    binary_part(text, 0, split) <> "." <> binary_part(text, split, precision)
+  end
 
   defp exponent_string(exponent) do
     sign = if exponent < 0, do: "-", else: "+"
     sign <> (exponent |> abs() |> Integer.to_string() |> String.pad_leading(2, "0"))
   end
 
-  defp pow10(precision) do
-    Enum.reduce(1..precision//1, 1, fn _index, acc -> acc * 10 end)
+  defp pow10(power), do: Integer.pow(10, power)
+
+  # |value| as an exact fraction of integers.
+  defp exact_fraction(value) do
+    <<_sign::1, exponent::11, fraction::52>> = <<value::float-64>>
+
+    {mantissa, power} =
+      if exponent == 0, do: {fraction, -1074}, else: {fraction + (1 <<< 52), exponent - 1075}
+
+    if power >= 0, do: {mantissa <<< power, 1}, else: {mantissa, 1 <<< -power}
   end
 
-  defp round_half_even(value) do
-    floor = floor(value)
-    fraction = value - floor
-    epsilon = 1.0e-12
+  defp round_div(num, den) do
+    quotient = div(num, den)
+    twice_remainder = 2 * rem(num, den)
 
     cond do
-      fraction > 0.5 + epsilon -> floor + 1
-      fraction < 0.5 - epsilon -> floor
-      rem(floor, 2) == 0 -> floor
-      true -> floor + 1
+      twice_remainder > den -> quotient + 1
+      twice_remainder < den -> quotient
+      rem(quotient, 2) == 0 -> quotient
+      true -> quotient + 1
     end
   end
 

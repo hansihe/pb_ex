@@ -6,6 +6,7 @@ defmodule PB.CEL.WellKnownTypes do
   alias PB.CEL.Runtime.Time
   alias PB.WellKnownTypes.Codec, as: WKTCodec
   alias PB.WellKnownTypes.Time, as: WKTTime
+  alias PB.Wire
 
   @type_url_prefix PB.WellKnownTypes.Any.default_prefix()
   @timestamp_type "google.protobuf.Timestamp"
@@ -235,10 +236,8 @@ defmodule PB.CEL.WellKnownTypes do
   end
 
   defp maybe_float32_wrapper({:double, value}, "google.protobuf.FloatValue")
-       when is_float(value) do
-    <<single::float-32>> = <<value::float-32>>
-    Value.double(single)
-  end
+       when is_float(value),
+       do: value |> Wire.encode_float32() |> Wire.decode_float32() |> Value.double()
 
   defp maybe_float32_wrapper(value, _message_name), do: value
 end

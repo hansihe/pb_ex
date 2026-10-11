@@ -255,6 +255,12 @@ defmodule PB.CEL.EvaluatorTest do
   test "evaluates well-known type message literals as CEL values" do
     assert CEL.eval!(~S|google.protobuf.Int32Value{value: 7}|, %{}, env([])) == Value.int(7)
 
+    assert CEL.eval!(~S|google.protobuf.FloatValue{value: 1.1}|, %{}, env([])) ==
+             Value.double(1.100000023841858)
+
+    assert CEL.eval!(~S|google.protobuf.FloatValue{value: -1e40}|, %{}, env([])) ==
+             Value.double(:negative_infinity)
+
     assert CEL.eval!(~S|google.protobuf.Value{string_value: "x"}|, %{}, env([])) ==
              Value.string("x")
 
@@ -680,6 +686,21 @@ defmodule PB.CEL.EvaluatorTest do
 
     assert CEL.eval!(~S|'%s'.format([[double('NaN'), null, {'b': 2, 'a': 1}]])|) ==
              Value.string("[NaN, null, {a: 1, b: 2}]")
+
+    assert CEL.eval!(~S|'%.2f %.0f %.20f'.format([1.005, 0.5, 0.1])|) ==
+             Value.string("1.00 0 0.10000000000000000555")
+
+    assert CEL.eval!(~S|'%f'.format([1e303])|) ==
+             Value.string(
+               "1000000000000000000161765076786456438212668646231659438295495017101117499" <>
+                 "2257387478652602430342139152537797735681803374160274458205677791996433915" <>
+                 "4160602606861115074612228497617725665004420052727680732706769046211266142" <>
+                 "7500197051226489898260678763391449376088547292320814127957486330655468919" <>
+                 "122263277568.000000"
+             )
+
+    assert CEL.eval!(~S|'%e %e %.2e %e'.format([5e-324, 1.7976931348623157e308, 9.996, -0.0])|) ==
+             Value.string("4.940656e-324 1.797693e+308 1.00e+01 -0.000000e+00")
 
     assert {:error, %Error{phase: :eval, message: message}} = CEL.eval(~S|'%d'.format([null])|)
     assert message =~ "decimal clause"
