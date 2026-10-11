@@ -69,8 +69,20 @@ defmodule PB.Validate.CEL.FieldReader do
 
   @spec present?(Schema.schema(), message_info(), fields(), field_name(), map()) :: boolean()
   def present?(schema, msg, fields, field, info) do
-    match?({:ok, _value}, fetch(schema, msg, fields, field, info))
+    case fetch(schema, msg, fields, field, info) do
+      {:ok, value} -> set?(info, value)
+      :error -> false
+    end
   end
+
+  # CEL's `has()`: a repeated or map field is set when non-empty, and a field
+  # without presence when it differs from its default, so a stored empty list
+  # or zero (as `PB.decode(defaults: true)` writes) is not set.
+  defp set?(%{cardinality: :repeated}, value), do: value != []
+  defp set?(%{cardinality: :map}, value), do: value != %{}
+
+  defp set?(info, value),
+    do: not (Scalar.implicit_presence?(info) and Scalar.default_value?(info, value))
 
   @doc """
   Reads a proto2 extension value. Resolved extensions are stored under
@@ -104,8 +116,12 @@ defmodule PB.Validate.CEL.FieldReader do
   def read_optional(schema, msg, fields, field, info) do
     case fetch(schema, msg, fields, field, info) do
       {:ok, value} ->
-        with {:ok, value} <- Message.field_value(schema, info, value) do
-          {:ok, Value.optional_some(value)}
+        if set?(info, value) do
+          with {:ok, value} <- Message.field_value(schema, info, value) do
+            {:ok, Value.optional_some(value)}
+          end
+        else
+          {:ok, Value.optional_none()}
         end
 
       :error ->

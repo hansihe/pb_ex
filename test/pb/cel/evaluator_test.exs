@@ -757,4 +757,26 @@ defmodule PB.CEL.EvaluatorTest do
     |> Keyword.put_new(:message_schema, PB.Validate.CEL.MessageSchema)
     |> CEL.Env.build()
   end
+
+  test "has() follows CEL presence for stored defaults, as PB.decode(defaults: true) writes" do
+    stored = %{single_int64: 0, repeated_int64: [], map_string_string: %{}, single_string: "a"}
+
+    for {field, set?} <- [
+          single_int64: false,
+          repeated_int64: false,
+          map_string_string: false,
+          single_string: true
+        ] do
+      assert CEL.eval("has(msg.#{field})", %{msg: stored}, presence_env()) == {:ok, {:bool, set?}}
+    end
+
+    assert CEL.eval("msg.?repeated_int64", %{msg: stored}, presence_env()) == {:ok, {:optional, :none}}
+  end
+
+  defp presence_env do
+    CEL.Env.build(
+      schema: PB.TestSupport.TestSchema,
+      vars: [msg: {:message, "cel.expr.conformance.proto3.TestAllTypes"}]
+    )
+  end
 end
