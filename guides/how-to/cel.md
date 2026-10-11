@@ -23,6 +23,11 @@ Types are `PB.CEL.Type` shorthand: `:int`, `:string`, `:timestamp`,
 `{:enum, "pkg.Enum"}` and so on. `:container` is the package names resolve in,
 so `User{name: "a"}` means `my.app.User{name: "a"}`.
 
+`:abbreviations` lets expressions use the last segment of names from other
+packages: with `abbreviations: ["other.pkg.Decision"]`, `Decision.REMOVED`
+means `other.pkg.Decision.REMOVED`, even when the container also has a
+`Decision`. Checked expressions carry the full names.
+
 ## Compile once, evaluate many times
 
 ```elixir

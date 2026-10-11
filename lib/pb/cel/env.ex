@@ -28,6 +28,7 @@ defmodule PB.CEL.Env do
   defstruct vars: %{},
             functions: [],
             container: "",
+            abbreviations: %{},
             schema: nil,
             message_schema: NoMessageSchema,
             message_runtime: NoMessageRuntime,
@@ -36,9 +37,12 @@ defmodule PB.CEL.Env do
   @typedoc "An environment; build one with `build/1`."
   @type t :: %__MODULE__{}
 
+  @qualified_name ~r/\A[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\z/
+
   @build_options [
     schema: {:any, nil},
     container: {:any, nil},
+    abbreviations: {:list, []},
     vars: {:any, []},
     functions: {:list, []},
     validate_literals: {:list, []},
@@ -68,6 +72,14 @@ defmodule PB.CEL.Env do
     * `:container` — the protobuf package names are resolved in, as with
       `container` in other CEL implementations: with `"my.pkg"`, `User`
       resolves to `my.pkg.User`.
+    * `:abbreviations` — fully qualified names expressions may refer to by
+      their last segment, as with `Abbrevs` in cel-go: with
+      `["my.pkg.Decision"]`, `Decision.REMOVED` means
+      `my.pkg.Decision.REMOVED` whatever the container. An abbreviation is
+      used instead of the container, even when the container would resolve
+      the name to something else, and hides a variable of the same name;
+      variables a macro binds still hide it. Abbreviations apply to
+      variables, types and enum values, not to function names.
     * `:validate_literals` — a subset of `[:duration, :timestamp, :regex]`.
       Checking then rejects literal arguments evaluation would reject, such as
       `duration('30d')`, `timestamp('nope')` or `s.matches('[')`. By default
@@ -105,6 +117,7 @@ defmodule PB.CEL.Env do
     )
     |> put_schema(schema)
     |> put_container(Keyword.get(opts, :container))
+    |> put_abbreviations(Keyword.get(opts, :abbreviations, []))
     |> merge_vars(Keyword.get(opts, :vars, []))
     |> merge_functions(Keyword.get(opts, :functions, []))
     |> put_validate_literals(Keyword.get(opts, :validate_literals))
@@ -155,6 +168,26 @@ defmodule PB.CEL.Env do
 
   defp put_container(_env, container),
     do: invalid_option!(:container, container, "expected a string")
+
+  defp put_abbreviations(env, names) do
+    Enum.reduce(names, env, fn name, env ->
+      unless is_binary(name) and name =~ @qualified_name do
+        invalid_option!(:abbreviations, name, "expected a qualified name such as \"pkg.Name\"")
+      end
+
+      short = name |> String.split(".") |> List.last()
+
+      if existing = env.abbreviations[short] do
+        invalid_option!(:abbreviations, name, "#{short} already abbreviates #{existing}")
+      end
+
+      if env.container == short or String.starts_with?(env.container, short <> ".") do
+        invalid_option!(:abbreviations, name, "#{short} collides with container #{env.container}")
+      end
+
+      %{env | abbreviations: Map.put(env.abbreviations, short, name)}
+    end)
+  end
 
   defp merge_vars(env, vars) when is_list(vars) or is_map(vars) do
     Enum.reduce(vars, env, fn

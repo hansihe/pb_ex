@@ -39,20 +39,11 @@ defmodule PB.CEL.Checker.NameResolution do
   end
 
   @spec resolve_message_name(String.t(), Env.t()) :: String.t()
-  def resolve_message_name("." <> name, %Env{} = env) do
-    case resolve_message(env, name) do
-      {:ok, message} -> Atom.to_string(message)
-      :error -> name
-    end
-  end
-
   def resolve_message_name(name, %Env{} = env) when is_binary(name) do
     candidates = candidates(name, env, false)
 
-    case Enum.find(candidates, &known_message_name?(env, &1)) do
-      nil -> fallback_message_name(name, env)
-      resolved -> resolved
-    end
+    Enum.find(candidates, &known_message_name?(env, &1)) ||
+      fallback_message_name(name, candidates)
   end
 
   @spec resolve_enum_call(PB.CEL.Call.t(), Env.t(), [%{String.t() => CType.t()}]) ::
@@ -232,16 +223,33 @@ defmodule PB.CEL.Checker.NameResolution do
     if local_name?(scopes, root), do: :error, else: :ok
   end
 
-  defp candidates("." <> name, _env, _absolute?), do: [name]
-  defp candidates(name, _env, true), do: [name]
+  # An abbreviation replaces the container search: its expansion is the only
+  # candidate, even for a name with a leading dot, as in cel-go and cel-cpp.
+  defp candidates("." <> name, env, _absolute?), do: candidates(name, env, true)
 
-  defp candidates(name, %Env{container: container}, _absolute?) when container in ["", nil],
-    do: [name]
+  defp candidates(name, %Env{} = env, absolute?) do
+    case expand_abbreviation(name, env) do
+      {:ok, expanded} -> [expanded]
+      :error when absolute? -> [name]
+      :error -> container_candidates(name, env.container)
+    end
+  end
 
-  defp candidates(name, %Env{container: container}, _absolute?) do
+  defp expand_abbreviation(name, %Env{abbreviations: abbreviations}) do
+    [first | rest] = String.split(name, ".", parts: 2)
+
+    case Map.fetch(abbreviations, first) do
+      {:ok, qualified} -> {:ok, Enum.join([qualified | rest], ".")}
+      :error -> :error
+    end
+  end
+
+  defp container_candidates(name, container) when container in ["", nil], do: [name]
+
+  defp container_candidates(name, container) do
     parts = String.split(container, ".", trim: true)
 
-    container_candidates =
+    prefixed =
       for size <- length(parts)..1//-1 do
         parts
         |> Enum.take(size)
@@ -249,15 +257,13 @@ defmodule PB.CEL.Checker.NameResolution do
         |> then(&(&1 <> "." <> name))
       end
 
-    container_candidates ++ [name]
+    prefixed ++ [name]
   end
 
-  defp fallback_message_name(name, %Env{container: container}) do
-    cond do
-      String.contains?(name, ".") -> name
-      container in ["", nil] -> name
-      true -> container <> "." <> name
-    end
+  # An unknown message is reported as written when qualified, otherwise as if
+  # in the container.
+  defp fallback_message_name(name, [first | _] = candidates) do
+    if String.contains?(name, "."), do: List.last(candidates), else: first
   end
 
   defp known_message_name?(env, name) do
