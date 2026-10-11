@@ -25,4 +25,20 @@ defmodule PB.WireTest do
                Wire.read_message_field(1, :delimited, bin)
     end
   end
+
+  describe "group bodies" do
+    test "are sub-binaries of the input, however deeply groups nest" do
+      payload = Wire.encode_tag(2, 2) <> Wire.encode_varint(1_000) <> :binary.copy("x", 1_000)
+
+      bin =
+        Enum.reduce(1..90, payload, fn _, inner ->
+          start_group(1) <> inner <> Wire.encode_tag(1, 4)
+        end) <> Wire.encode_tag(1, 4)
+
+      assert {:ok, body, raw, ""} = Wire.read_message_field(1, :delimited, bin)
+      assert raw == bin
+      assert byte_size(body) == byte_size(bin) - 1
+      assert :binary.referenced_byte_size(body) == byte_size(bin)
+    end
+  end
 end

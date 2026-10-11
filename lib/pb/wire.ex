@@ -221,24 +221,25 @@ defmodule PB.Wire do
   end
 
   defp read_group_field(field_number, bin, depth) do
-    read_group_body(field_number, bin, [], depth)
+    read_group_body(field_number, bin, bin, depth)
   end
 
-  defp read_group_body(_field_number, <<>>, _acc, _depth), do: malformed(:truncated_group)
+  # Scans to the matching end-group tag. `start` is the group's first byte and
+  # `bin` the unread rest; the body and raw value are sub-binaries of `start`,
+  # so nested groups are scanned once and never copied.
+  defp read_group_body(_field_number, _start, <<>>, _depth), do: malformed(:truncated_group)
 
-  defp read_group_body(field_number, bin, acc, depth) do
+  defp read_group_body(field_number, start, bin, depth) do
     with {:ok, tag_val, rest_after_tag} <- decode_tag(bin),
          fnum = tag_val >>> 3,
          wtype = tag_val &&& 0x07,
          :ok <- validate_field_number(fnum),
          :ok <- validate_wire_type(wtype) do
-      tag_size = byte_size(bin) - byte_size(rest_after_tag)
-      <<tag_raw::binary-size(^tag_size), _::binary>> = bin
-
       cond do
         wtype == 4 and fnum == field_number ->
-          body = IO.iodata_to_binary(Enum.reverse(acc))
-          {:ok, body, IO.iodata_to_binary([body, tag_raw]), rest_after_tag}
+          body = binary_part(start, 0, byte_size(start) - byte_size(bin))
+          raw = binary_part(start, 0, byte_size(start) - byte_size(rest_after_tag))
+          {:ok, body, raw, rest_after_tag}
 
         wtype == 4 ->
           malformed(:unexpected_end_group, %{
@@ -247,13 +248,13 @@ defmodule PB.Wire do
           })
 
         wtype == 3 ->
-          with {:ok, _body, raw, rest} <- read_group_field(fnum, rest_after_tag, depth + 1) do
-            read_group_body(field_number, rest, [raw, tag_raw | acc], depth)
+          with {:ok, _body, _raw, rest} <- read_group_field(fnum, rest_after_tag, depth + 1) do
+            read_group_body(field_number, start, rest, depth)
           end
 
         true ->
-          with {:ok, raw, rest} <- read_wire_raw(fnum, wtype, rest_after_tag) do
-            read_group_body(field_number, rest, [raw, tag_raw | acc], depth)
+          with {:ok, _raw, rest} <- read_wire_raw(fnum, wtype, rest_after_tag) do
+            read_group_body(field_number, start, rest, depth)
           end
       end
     end
