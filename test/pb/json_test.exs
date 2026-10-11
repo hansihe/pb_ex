@@ -109,6 +109,48 @@ defmodule PB.JSONTest do
 
   # ── Option validation ───────────────────────────────────────────────
 
+  describe "error paths" do
+    setup do
+      %{schema: PB.TestSupport.TestSchema.schema()}
+    end
+
+    @all_types :"protobuf_test_messages.proto3.TestAllTypesProto3"
+
+    test "decode errors locate the field from the root", %{schema: schema} do
+      json = %{"repeatedNestedMessage" => [%{}, %{"corecursive" => %{"optionalInt32" => "x"}}]}
+
+      assert {:error, %PB.ValueError{path: path}} = JSON.from_term(json, schema, @all_types)
+      assert path == [:repeated_nested_message, {:index, 1}, :corecursive, :optional_int32]
+
+      assert {:error, %PB.ValueError{path: [:map_string_nested_message, {:key, "k"}, :a]}} =
+               JSON.from_term(
+                 %{"mapStringNestedMessage" => %{"k" => %{"a" => true}}},
+                 schema,
+                 @all_types
+               )
+
+      json = %{"optionalNestedMessage" => %{"bogus" => 1}}
+
+      assert {:error,
+              %PB.ValueError{
+                kind: :unknown_field,
+                path: [:optional_nested_message, "bogus"],
+                protobuf_message: :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
+              }} = JSON.from_term(json, schema, @all_types)
+    end
+
+    test "encode errors locate the field from the root", %{schema: schema} do
+      assert {:error, %PB.ValueError{path: [:repeated_int32, {:index, 1}]}} =
+               JSON.to_term(%{repeated_int32: [1, "x"]}, schema, @all_types)
+
+      assert {:error, %PB.ValueError{path: [:oneof_field, :oneof_uint32]}} =
+               JSON.to_term(%{oneof_field: {:oneof_uint32, -1}}, schema, @all_types)
+
+      assert {:error, %PB.ValueError{path: [:map_int32_int32, {:key, 1}]}} =
+               JSON.to_term(%{map_int32_int32: %{1 => "x"}}, schema, @all_types)
+    end
+  end
+
   describe "option validation" do
     test "encode rejects unknown options (incl. the emit_default typo)", %{schema: schema} do
       assert {:error, %PB.OptionError{kind: :unknown_options, options: [:emit_default]}} =

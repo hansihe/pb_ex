@@ -54,13 +54,13 @@ defmodule PB.JSON.Decoder do
       _ ->
         case schema.messages[name] do
           nil -> Errors.raise!(:unknown_message, name, details: %{type_name: name})
-          msg -> decode_regular(msg, json, schema, opts, depth)
+          msg -> decode_regular(name, msg, json, schema, opts, depth)
         end
     end
   end
 
   # ── regular message ──────────────────────────────────────────────────
-  defp decode_regular(msg, json, schema, opts, depth) when is_map(json) do
+  defp decode_regular(name, msg, json, schema, opts, depth) when is_map(json) do
     lookup = field_lookup(msg)
 
     {fields, _oneof_seen, _field_seen} =
@@ -73,7 +73,7 @@ defmodule PB.JSON.Decoder do
             if opts.unknown_fields == :ignore do
               {acc, oneof_seen, field_seen}
             else
-              Errors.raise!(:unknown_field, key, path: [key])
+              Errors.raise!(:unknown_field, key, path: [key], details: %{type_name: name})
             end
 
           field ->
@@ -88,7 +88,11 @@ defmodule PB.JSON.Decoder do
               )
             end
 
-            {acc, oneof_seen} = decode_one(schema, field, value, acc, oneof_seen, opts, depth)
+            {acc, oneof_seen} =
+              Errors.at(field.name, fn ->
+                decode_one(schema, field, value, acc, oneof_seen, opts, depth)
+              end)
+
             {acc, oneof_seen, MapSet.put(field_seen, field.name)}
         end
       end)
@@ -97,7 +101,7 @@ defmodule PB.JSON.Decoder do
     Oneofs.wrap(fields, msg)
   end
 
-  defp decode_regular(_msg, json, _schema, _opts, _depth) do
+  defp decode_regular(_name, _msg, json, _schema, _opts, _depth) do
     Errors.raise!(:malformed_json, "expected JSON object",
       details: %{expected: :object, got: json}
     )
@@ -150,12 +154,9 @@ defmodule PB.JSON.Decoder do
           )
         end
 
-        Enum.flat_map(value, fn v ->
-          case decode_element(field, v, schema, opts, depth) do
-            :skip -> []
-            decoded -> [decoded]
-          end
-        end)
+        value
+        |> Errors.map_elements(&decode_element(field, &1, schema, opts, depth))
+        |> Enum.reject(&(&1 == :skip))
 
       true ->
         decode_element(field, value, schema, opts, depth)
@@ -168,12 +169,13 @@ defmodule PB.JSON.Decoder do
     value_field = ref.fields_by_name[:value]
 
     value
-    |> Enum.flat_map(fn {k, v} ->
+    |> Errors.map_elements(fn {k, v} ->
       case decode_element(value_field, v, schema, opts, depth) do
-        :skip -> []
-        decoded -> [{Scalars.parse_map_key(key_field, Scalars.stringify_key(k)), decoded}]
+        :skip -> :skip
+        decoded -> {Scalars.parse_map_key(key_field, Scalars.stringify_key(k)), decoded}
       end
     end)
+    |> Enum.reject(&(&1 == :skip))
     |> Map.new()
   end
 

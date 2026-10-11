@@ -32,6 +32,47 @@ defmodule PB.JSON.Errors do
   end
 
   @doc """
+  Runs `fun.()`, prefixing `element` to the path of a PB error it raises, so
+  errors locate the offending field from the root as the binary codec's do.
+  """
+  @spec at(PB.Error.path_element(), (-> result)) :: result when result: term
+  def at(element, fun) when is_function(fun, 0) do
+    fun.()
+  rescue
+    error in @pb_errors -> reraise PB.Error.prepend_path(error, [element]), __STACKTRACE__
+  end
+
+  @doc """
+  Maps `fun` over a list (or a map's entries), prefixing the failing
+  element's `{:index, i}` (or `{:key, k}`) to the path of a PB error it
+  raises. The elements are only walked again, to find the failing one, once
+  an error has been raised.
+  """
+  @spec map_elements(list | map, (term -> result)) :: [result] when result: term
+  def map_elements(elements, fun) do
+    Enum.map(elements, fun)
+  rescue
+    error in @pb_errors -> reraise locate(elements, fun, error), __STACKTRACE__
+  end
+
+  defp locate(elements, fun, error) do
+    elements
+    |> Enum.with_index()
+    |> Enum.find_value(error, fn {element, index} ->
+      try do
+        fun.(element)
+        nil
+      rescue
+        found in @pb_errors ->
+          PB.Error.prepend_path(found, [element_path(elements, element, index)])
+      end
+    end)
+  end
+
+  defp element_path(elements, {key, _value}, _index) when is_map(elements), do: {:key, key}
+  defp element_path(_elements, _element, index), do: {:index, index}
+
+  @doc """
   Builds an `{:error, _}` tuple for an unknown message-name target.
   """
   @spec unknown_message(atom, term) :: {:error, SchemaError.t()}

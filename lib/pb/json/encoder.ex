@@ -43,7 +43,7 @@ defmodule PB.JSON.Encoder do
       _ ->
         case schema.messages[name] do
           nil -> Errors.raise!(:unknown_message, name, details: %{type_name: name})
-          msg -> encode_regular(msg, data, schema, opts)
+          msg -> encode_regular(name, msg, data, schema, opts)
         end
     end
   end
@@ -68,7 +68,7 @@ defmodule PB.JSON.Encoder do
   end
 
   # ── regular message ──────────────────────────────────────────────────
-  defp encode_regular(msg, data, schema, opts) when is_map(data) do
+  defp encode_regular(name, msg, data, schema, opts) when is_map(data) do
     check_required!(msg, data)
 
     encoded =
@@ -78,21 +78,21 @@ defmodule PB.JSON.Encoder do
             maybe_put(acc, schema, msg, field, value, opts)
 
           oneof = find_oneof(msg.oneofs, key) ->
-            encode_oneof_wrapper(acc, schema, msg, oneof, value, opts)
+            Errors.at(key, fn -> encode_oneof_wrapper(acc, schema, msg, oneof, value, opts) end)
 
           # Unknown wire fields and extensions have no ProtoJSON form here.
           key in @storage_keys or opts.unknown_fields == :ignore ->
             acc
 
           true ->
-            Errors.raise!(:unknown_field, key, path: [key])
+            Errors.raise!(:unknown_field, key, path: [key], details: %{type_name: name})
         end
       end)
 
     if opts.emit_defaults, do: fill_defaults(encoded, schema, msg, opts), else: encoded
   end
 
-  defp encode_regular(_msg, data, _schema, _opts) do
+  defp encode_regular(_name, _msg, data, _schema, _opts) do
     Errors.raise!(:invalid_value, "expected message data map",
       details: %{expected: :map, got: data}
     )
@@ -107,13 +107,15 @@ defmodule PB.JSON.Encoder do
 
       field ->
         # Oneof members always have presence; emit even if value matches a default.
-        Map.put(acc, json_key(field, opts), encode_field(field, inner, schema, opts))
+        encoded = Errors.at(fname, fn -> encode_field(field, inner, schema, opts) end)
+        Map.put(acc, json_key(field, opts), encoded)
     end
   end
 
   defp maybe_put(acc, schema, msg, field, value, opts) do
     if should_emit?(schema, msg, field, value, opts) do
-      Map.put(acc, json_key(field, opts), encode_field(field, value, schema, opts))
+      encoded = Errors.at(field.name, fn -> encode_field(field, value, schema, opts) end)
+      Map.put(acc, json_key(field, opts), encoded)
     else
       acc
     end
@@ -139,7 +141,7 @@ defmodule PB.JSON.Encoder do
         encode_map(schema, field, value, opts)
 
       Features.repeated?(field) ->
-        Enum.map(value, &encode_scalar(field, &1, schema, opts))
+        Errors.map_elements(value, &encode_scalar(field, &1, schema, opts))
 
       true ->
         encode_scalar(field, value, schema, opts)
@@ -150,9 +152,11 @@ defmodule PB.JSON.Encoder do
     ref = schema.messages[field.type_name]
     value_field = ref.fields_by_name[:value]
 
-    Map.new(value, fn {k, v} ->
+    value
+    |> Errors.map_elements(fn {k, v} ->
       {Scalars.map_key_to_string(k), encode_scalar(value_field, v, schema, opts)}
     end)
+    |> Map.new()
   end
 
   # ── axis 3 ───────────────────────────────────────────────────────────
