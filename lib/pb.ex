@@ -18,6 +18,17 @@ defmodule PB do
       {:ok, binary} = PB.encode(%{name: "hello"}, schema, :"my.package.MyMessage")
       {:ok, decoded} = PB.decode(binary, schema, :"my.package.MyMessage")
 
+  ## Other formats
+
+  This module handles the protobuf wire format. The same schema, projections,
+  and value shapes work with the other formats:
+
+    * `PB.JSON` — ProtoJSON, the canonical protobuf JSON mapping.
+    * `PB.TextFormat` — protobuf text format, as used by `.textproto` files
+      and debugging output.
+
+  Validation against protovalidate rules lives in `PB.Validate`.
+
   ## Schema
 
   Message names, enum names, service names, and extension names are
@@ -66,7 +77,8 @@ defmodule PB do
   @type schema :: map()
 
   @typedoc """
-  Schema source accepted by public encode/decode/normalize/validate/JSON APIs.
+  Schema source accepted by public encode/decode/normalize/validate, JSON, and
+  text format APIs.
 
   Either a compiled schema map or a module that `use PB.Schema`. Module
   values are resolved by calling `__pb_schema__/0`.

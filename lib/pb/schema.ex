@@ -83,8 +83,8 @@ defmodule PB.Schema do
     * `validate/2,3` and `validate!/2,3` — call `PB.Validate.validate/4` and
       `PB.Validate.validate!/4`.
 
-  The top-level `PB`, `PB.Validate`, and `PB.JSON` entry points
-  accept the schema module directly in place of a compiled schema map.
+  The top-level `PB`, `PB.Validate`, `PB.JSON`, and `PB.TextFormat` entry
+  points accept the schema module directly in place of a compiled schema map.
 
   ## Introspection
 
