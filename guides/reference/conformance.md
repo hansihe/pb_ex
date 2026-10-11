@@ -19,8 +19,12 @@ Intentional deviations:
 - Protobuf and JSON conformance cases both run. The two
   `JsonInput.FieldNameExtension.Validator` cases (proto2 and editions) are
   tracked as expected failures.
-- Text-format and JSPB conformance cases are intentionally skipped by the testee;
-  PB does not implement those formats.
+- JSPB conformance cases are intentionally skipped by the testee; PB does not
+  implement that format.
+- Text-format support is in progress. Its cases run and are tracked separately
+  in `test/fixtures/protobuf_conformance/text_format_failures.txt`; the runner
+  fails when a listed case starts passing, so the list only shrinks. Text-output
+  cases stay listed until a text-format printer exists.
 
 ## CEL
 

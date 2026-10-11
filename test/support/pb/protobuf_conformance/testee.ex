@@ -109,8 +109,15 @@ defmodule PB.TestSupport.ProtobufConformance.Testee do
   defp decode_input(_schema, _message_name, %{payload: {:jspb_payload, _payload}}),
     do: {:skip, "JSPB conformance is not supported by PB"}
 
-  defp decode_input(_schema, _message_name, %{payload: {:text_payload, _payload}}),
-    do: {:skip, "text-format conformance is not supported by PB"}
+  # Text-format parsing is being built up behind the text-format failure list.
+  # Until the parser lands, only lexical errors are reported as parse errors.
+  defp decode_input(_schema, _message_name, %{payload: {:text_payload, payload}})
+       when is_binary(payload) do
+    case PB.TextFormat.Lexer.tokenize(payload) do
+      {:ok, _tokens} -> {:runtime_error, "text-format parsing is not implemented yet"}
+      {:error, %{message: message}} -> {:parse_error, message}
+    end
+  end
 
   defp decode_input(_schema, _message_name, _request),
     do: {:runtime_error, "request did not include a payload"}
@@ -139,8 +146,11 @@ defmodule PB.TestSupport.ProtobufConformance.Testee do
   defp encode_output(_schema, _message_name, _decoded, :JSPB),
     do: skipped("JSPB conformance is not supported by PB")
 
+  # Not skipped: the suite's expected-parse-failure cases request text output,
+  # so skipping would hide inputs PB wrongly accepts. Valid text-output cases
+  # stay on the text-format failure list until the printer lands.
   defp encode_output(_schema, _message_name, _decoded, :TEXT_FORMAT),
-    do: skipped("text-format conformance is not supported by PB")
+    do: runtime_error("text-format output is not implemented yet")
 
   defp encode_output(_schema, _message_name, _decoded, format),
     do: runtime_error("unsupported requested output format #{inspect(format)}")

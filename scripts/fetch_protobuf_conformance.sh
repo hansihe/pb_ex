@@ -47,6 +47,6 @@ done
   printf '}\n'
 } >>"$manifest"
 
-touch "$OUT_DIR/failures.txt"
+touch "$OUT_DIR/failures.txt" "$OUT_DIR/text_format_failures.txt"
 
 echo "Wrote protobuf conformance protos to $PROTO_DIR"
