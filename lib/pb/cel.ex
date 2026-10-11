@@ -36,7 +36,7 @@ defmodule PB.CEL do
   `{:unknown, %PB.CEL.Unknown{}}` when the result depends on a variable bound
   to `{:unknown, reason}` or on a custom function that returned one; see
   `PB.CEL.Unknown`. Parse and check errors are `PB.CEL.Error`s too, with the
-  offset of the problem in the source.
+  line and column of the problem in the source.
 
   ## Custom functions
 
@@ -51,6 +51,7 @@ defmodule PB.CEL do
   alias PB.CEL.Program
   alias PB.CEL.Syntax.MacroExpander
   alias PB.CEL.Syntax.Parser
+  alias PB.CEL.Syntax.Source
   alias PB.CEL.Unknown
   alias PB.CEL.Value
   alias PB.Runtime.Errors, as: RuntimeErrors
@@ -86,10 +87,19 @@ defmodule PB.CEL do
         {:error, reason} -> raise RuntimeErrors.to_error(reason)
       end
 
-    with {:ok, parsed} <- Parser.parse(source, location: opts.location) do
-      if opts.macros, do: MacroExpander.expand(parsed), else: {:ok, parsed}
+    source
+    |> Parser.parse(location: opts.location)
+    |> expand_macros(opts.macros)
+    |> case do
+      {:ok, parsed} -> {:ok, parsed}
+      {:error, %Error{} = error} ->
+        error = %{error | location: opts.location}
+        {:error, Source.locate(error, Source.line_offsets(source))}
     end
   end
+
+  defp expand_macros({:ok, parsed}, true), do: MacroExpander.expand(parsed)
+  defp expand_macros(result, _macros), do: result
 
   @doc """
   Parses CEL source into a `cel.expr.ParsedExpr` map, raising on errors.

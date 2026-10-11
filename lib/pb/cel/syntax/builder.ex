@@ -2,6 +2,7 @@ defmodule PB.CEL.Syntax.Builder do
   @moduledoc false
 
   alias PB.CEL.Proto
+  alias PB.CEL.Syntax.Source
 
   defstruct [:source, :location, :line_offsets, next_id: 1, positions: %{}]
 
@@ -18,7 +19,7 @@ defmodule PB.CEL.Syntax.Builder do
     %__MODULE__{
       source: source,
       location: Keyword.get(opts, :location, "<input>"),
-      line_offsets: line_offsets(source)
+      line_offsets: Source.line_offsets(source)
     }
   end
 
@@ -174,15 +175,4 @@ defmodule PB.CEL.Syntax.Builder do
      }}
   end
 
-  defp line_offsets(source) do
-    line_offsets(source, 0, [])
-  end
-
-  defp line_offsets("", _offset, acc), do: Enum.reverse(acc)
-
-  defp line_offsets(source, offset, acc) do
-    {codepoint, rest} = String.next_codepoint(source)
-    acc = if codepoint == "\n", do: [offset | acc], else: acc
-    line_offsets(rest, offset + 1, acc)
-  end
 end

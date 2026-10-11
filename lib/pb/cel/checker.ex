@@ -22,6 +22,7 @@ defmodule PB.CEL.Checker do
   alias PB.CEL.Runtime.Convert, as: RuntimeConvert
   alias PB.CEL.Runtime.Core, as: RuntimeCore
   alias PB.CEL.Schema.Field
+  alias PB.CEL.Syntax.Source
   alias PB.CEL.Value
   alias PB.CEL.WellKnownTypes
 
@@ -62,7 +63,9 @@ defmodule PB.CEL.Checker do
   # offset so callers need not look it up themselves.
   defp locate(%Error{expr_id: id} = error, source_info) do
     offset = source_info |> Map.get(:positions, %{}) |> Map.get(id)
+
     %{error | offset: offset, location: Map.get(source_info, :location)}
+    |> Source.locate(Map.get(source_info, :line_offsets, []))
   end
 
   defp infer(%{expr_kind: {:const_expr, constant}} = expr, state) do

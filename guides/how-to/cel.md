@@ -38,7 +38,7 @@ PB.CEL.Program.eval(program, %{user: %{age: 30}, now: DateTime.utc_now(), tags: 
 ```
 
 `PB.CEL.compile/2` parses and type-checks; type errors are reported here, with
-the offset of the offending expression, rather than when evaluating.
+the line and column of the offending expression, rather than when evaluating.
 `PB.CEL.eval/3` does both steps and evaluates, for a one-off.
 
 Variables are bound by atom or string name to plain Elixir terms, converted
@@ -74,6 +74,8 @@ evaluating anything:
     nodes, for allowlists and linting. Macros such as `exists` appear as
     written.
   * `PB.CEL.Checked.type/1` is the expression's result type.
+  * `PB.CEL.Checked.position/2` is where a node is in the source, to point at
+    it in a message.
 
 `PB.CEL.select/4` reads one of those variable paths from the bindings the way
 evaluation would, but returns `:absent` when a field along it is not set:

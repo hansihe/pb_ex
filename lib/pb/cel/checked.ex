@@ -6,6 +6,7 @@ defmodule PB.CEL.Checked do
 
     * `type/1` and `type/2` — the type of the expression, or of one
       subexpression by id, as a `t:PB.CEL.Type.t/0`.
+    * `position/2` — where a subexpression is in the source.
     * `expr/1` — the expression as a tree of `PB.CEL.Expr` nodes.
     * `references/1` — the variable paths it reads and the custom functions it
       calls, with their arguments when they are constants or variable paths.
@@ -21,6 +22,7 @@ defmodule PB.CEL.Checked do
   alias PB.CEL.Function
   alias PB.CEL.Proto
   alias PB.CEL.ProtoType
+  alias PB.CEL.Syntax.Source
   alias PB.CEL.Value
 
   defstruct [
@@ -192,6 +194,12 @@ defmodule PB.CEL.Checked do
   @typedoc "A type-checked expression; see the module docs."
   @type t :: %__MODULE__{}
 
+  @typedoc """
+  A place in the source: `offset` counts code points from the start, `line`
+  and `column` are 1-based and count code points too.
+  """
+  @type position :: %{offset: non_neg_integer, line: pos_integer, column: pos_integer}
+
   @typedoc "A variable path an expression reads, such as `req.user.id`."
   @type var_read :: %{name: String.t(), path: [String.t()], expr_id: expr_id}
 
@@ -239,6 +247,33 @@ defmodule PB.CEL.Checked do
     case Map.fetch(types, id) do
       {:ok, type} -> type |> CType.finalize() |> PB.CEL.Type.from_checker(checked.enums)
       :error -> nil
+    end
+  end
+
+  @doc """
+  Where the expression with the given id is in the source, or `nil` if the
+  parser recorded no position for it.
+
+  The position is the start of a literal, name, function call or message
+  literal; the operator of an operator such as `a + b` or `a[0]`; and the
+  `.` of a field selection or method call. Expressions a macro expands to
+  share the macro's position.
+
+      checked = PB.CEL.check!("1 +\n  x", PB.CEL.Env.build(vars: [x: :int]))
+      [_one, x] = PB.CEL.Checked.expr(checked).args
+
+      PB.CEL.Checked.position(checked, x.id)
+      #=> %{offset: 6, line: 2, column: 3}
+  """
+  @spec position(t, expr_id) :: position | nil
+  def position(%__MODULE__{source_info: source_info}, id) when is_integer(id) do
+    case source_info |> Map.get(:positions, %{}) |> Map.fetch(id) do
+      {:ok, offset} ->
+        {line, column} = Source.position(Map.get(source_info, :line_offsets, []), offset)
+        %{offset: offset, line: line, column: column}
+
+      :error ->
+        nil
     end
   end
 

@@ -66,11 +66,12 @@ defmodule PB.CEL.CheckerTest do
   end
 
   test "check errors carry the source offset and location of the expression" do
-    assert {:error, %Error{expr_id: id, offset: 7, location: "<input>"} = error} =
+    assert {:error, %Error{expr_id: id, offset: 7, line: 2, column: 3} = error} =
              CEL.check("1 + \n  x.foo")
 
+    assert error.location == "<input>"
     assert is_integer(id)
-    assert Exception.message(error) == ~s(undeclared identifier "x" at offset 7)
+    assert Exception.message(error) == ~s(undeclared identifier "x" at line 2, column 3)
 
     parsed = CEL.parse!("[1].map(y, y + 'a')", location: "rules/foo.txtpb")
 

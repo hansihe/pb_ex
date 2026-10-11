@@ -5,19 +5,24 @@ defmodule PB.CEL.Error do
   `:phase` discriminates `:parse`, `:check`, or `:eval`. Callers `rescue
   PB.CEL.Error` once and inspect `:phase` to discriminate if needed.
 
-  Parse and check errors set `:offset`, the byte offset in the source where
-  the error was found (for a check error, the position recorded for the
-  expression it is about, which for an operator is the operator itself), and
-  `:location`, the source's location as given to `PB.CEL.parse/2`.
+  Parse and check errors say where in the source the error was found: for a
+  check error, the position of the expression it is about, as
+  `PB.CEL.Checked.position/2` gives it.
+
+    * `:offset` — the offset in code points.
+    * `:line` and `:column` — the 1-based line and column, in code points.
+    * `:location` — the source's location, as given to `PB.CEL.parse/2`.
   """
 
-  defexception [:message, :phase, :offset, :location, :expr_id, :details]
+  defexception [:message, :phase, :offset, :line, :column, :location, :expr_id, :details]
 
   @type phase :: :parse | :check | :eval
   @type t :: %__MODULE__{
           message: String.t(),
           phase: phase,
           offset: non_neg_integer() | nil,
+          line: pos_integer() | nil,
+          column: pos_integer() | nil,
           location: String.t() | nil,
           expr_id: integer() | nil,
           details: map() | nil
@@ -35,6 +40,8 @@ defmodule PB.CEL.Error do
       message: message,
       phase: Keyword.fetch!(opts, :phase),
       offset: Keyword.get(opts, :offset),
+      line: Keyword.get(opts, :line),
+      column: Keyword.get(opts, :column),
       location: Keyword.get(opts, :location),
       expr_id: Keyword.get(opts, :expr_id),
       details: details
@@ -63,6 +70,9 @@ defmodule PB.CEL.Error do
   defp humanize(atom), do: atom |> Atom.to_string() |> String.replace("_", " ")
 
   @impl Exception
-  def message(%__MODULE__{message: msg, offset: nil}), do: msg
-  def message(%__MODULE__{message: msg, offset: offset}), do: "#{msg} at offset #{offset}"
+  def message(%__MODULE__{message: msg, line: nil, offset: nil}), do: msg
+  def message(%__MODULE__{message: msg, line: nil, offset: offset}),
+    do: "#{msg} at offset #{offset}"
+  def message(%__MODULE__{message: msg, line: line, column: column}),
+    do: msg <> PB.Error.format_position(line, column)
 end
