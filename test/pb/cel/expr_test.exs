@@ -9,6 +9,7 @@ defmodule PB.CEL.ExprTest do
   alias PB.CEL.Expr.Const
   alias PB.CEL.Expr.Ident
   alias PB.CEL.Expr.ListLiteral
+  alias PB.CEL.Expr.MacroCall
   alias PB.CEL.Expr.MapLiteral
   alias PB.CEL.Expr.Select
   alias PB.CEL.Function
@@ -27,7 +28,12 @@ defmodule PB.CEL.ExprTest do
     }
 
     CEL.Env.build(
-      vars: [req: {:map, :string, :dyn}, user: {:map, :string, :string}, l: {:list, :int}],
+      vars: [
+        req: {:map, :string, :dyn},
+        user: {:map, :string, :string},
+        l: {:list, :int},
+        m: {:map, :string, :int}
+      ],
       functions: [default, lookup]
     )
   end
@@ -61,8 +67,9 @@ defmodule PB.CEL.ExprTest do
     assert %Ident{name: "int", scope: :type} = expr("type(1) == int").args |> List.last()
   end
 
-  test "represents cel.bind and optMap as calls binding a local" do
-    assert %Call{
+  test "represents cel.bind and optMap as macro calls binding a local" do
+    assert %MacroCall{
+             expansion: nil,
              function: "cel.bind",
              args: [
                %Ident{name: "u", scope: :local, type: :dyn, id: var_id},
@@ -76,7 +83,7 @@ defmodule PB.CEL.ExprTest do
 
     assert is_integer(var_id)
 
-    assert %Call{
+    assert %MacroCall{
              function: "optMap",
              target: %Select{field: "name", optional: true},
              args: [%Ident{name: "n", scope: :local, type: :string}, %Call{function: "_+_"}]
@@ -96,15 +103,41 @@ defmodule PB.CEL.ExprTest do
              expr("{'a': 1}")
   end
 
-  test "represents macros as comprehensions" do
-    assert %Comprehension{
-             iter_var: "i",
-             iter_var2: nil,
-             iter_range: %Ident{name: "l", scope: :var},
-             accu_var: "__result__",
-             loop_step: %Call{function: "_||_"},
-             result: %Ident{name: "__result__", scope: :local}
+  test "represents macros as written, with their expansion alongside" do
+    assert %MacroCall{
+             function: "exists",
+             type: :bool,
+             target: %Ident{name: "l", scope: :var},
+             args: [
+               %Ident{name: "i", scope: :local, type: :int},
+               %Call{function: "_>_", args: [%Ident{name: "i", scope: :local}, _one]}
+             ],
+             expansion: %Comprehension{
+               iter_var: "i",
+               iter_var2: nil,
+               iter_range: %Ident{name: "l", scope: :var},
+               accu_var: "__result__",
+               loop_step: %Call{function: "_||_"},
+               result: %Ident{name: "__result__", scope: :local}
+             }
            } = expr("l.exists(i, i > 1)")
+
+    assert %MacroCall{
+             function: "all",
+             args: [%Ident{name: "k", type: :string}, %Ident{name: "v", type: :int}, _pred]
+           } = expr("m.all(k, v, v > 0)")
+
+    assert %MacroCall{
+             function: "map",
+             args: [
+               %Ident{name: "i"},
+               %MacroCall{function: "exists", target: %Ident{name: "l"}},
+               %Call{function: "_*_"}
+             ]
+           } = expr("l.map(i, l.exists(j, j == i), i * 2)")
+
+    assert [%Call{function: "_>_"}] =
+             Expr.filter(expr("l.exists(i, i > 1)"), &match?(%Call{}, &1))
   end
 
   test "children, reduce and filter visit nodes in evaluation order" do
@@ -128,7 +161,7 @@ defmodule PB.CEL.ExprTest do
       {:ok, checked} = CEL.check(parsed, env)
 
       tree = Checked.expr(checked)
-      ids = Expr.reduce(tree, MapSet.new(), &MapSet.put(&2, &1.id))
+      ids = node_ids(tree)
 
       # `x.?field` parses as `_?._(x, "field")`; the field name constant is not
       # evaluated and appears only as `Select.field`.
@@ -143,5 +176,16 @@ defmodule PB.CEL.ExprTest do
 
       assert %{vars: _vars, calls: _calls} = Checked.references(checked)
     end
+  end
+
+  # Every id in the tree, including those only in macro expansions.
+  defp node_ids(tree) do
+    Expr.reduce(tree, MapSet.new(), fn
+      %MacroCall{id: id, expansion: %Comprehension{} = expansion}, ids ->
+        ids |> MapSet.put(id) |> MapSet.union(node_ids(expansion))
+
+      node, ids ->
+        MapSet.put(ids, node.id)
+    end)
   end
 end

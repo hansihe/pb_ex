@@ -23,6 +23,7 @@ defmodule PB.CEL.Checked.References do
   alias PB.CEL.Expr.Comprehension
   alias PB.CEL.Expr.Const
   alias PB.CEL.Expr.Ident
+  alias PB.CEL.Expr.MacroCall
   alias PB.CEL.Expr.Select
 
   @type expr_id :: Checked.expr_id()
@@ -37,8 +38,6 @@ defmodule PB.CEL.Checked.References do
         }
   @type t :: %{vars: [var_read], calls: [call]}
 
-  @scoped_overloads ["cel_bind", "optional_opt_map", "optional_opt_flat_map"]
-
   @spec collect(Checked.t()) :: t
   def collect(%Checked{} = checked) do
     %{vars: vars, calls: calls} = walk(Expr.from_checked(checked), %{}, %{vars: [], calls: []})
@@ -52,14 +51,18 @@ defmodule PB.CEL.Checked.References do
     end
   end
 
+  # A comprehension macro is walked as its expansion, which says what each
+  # variable ranges over.
+  defp walk_node(%MacroCall{expansion: %Comprehension{} = expansion}, locals, acc),
+    do: walk_node(expansion, locals, acc)
+
   # `cel.bind(var, init, body)` and `target.optMap(var, body)` bind `var`
   # in `body` to the value before it.
-  defp walk_node(%Call{overload_id: overload_id} = call, locals, acc)
-       when overload_id in @scoped_overloads do
+  defp walk_node(%MacroCall{} = call, locals, acc) do
     {value, var, body} =
       case call do
-        %Call{target: nil, args: [var, init, body]} -> {init, var, body}
-        %Call{target: target, args: [var, body]} -> {target, var, body}
+        %MacroCall{target: nil, args: [var, init, body]} -> {init, var, body}
+        %MacroCall{target: target, args: [var, body]} -> {target, var, body}
       end
 
     acc = walk(value, locals, acc)

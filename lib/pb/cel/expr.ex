@@ -71,6 +71,11 @@ defmodule PB.CEL.Expr do
     defstruct [:id, :type, :message, fields: []]
   end
 
+  defmodule MacroCall do
+    @moduledoc false
+    defstruct [:id, :type, :function, :target, :expansion, args: []]
+  end
+
   defmodule Comprehension do
     @moduledoc false
     defstruct [
@@ -120,6 +125,14 @@ defmodule PB.CEL.Expr do
               message: String.t(),
               fields: [message_field]
             }
+          | %MacroCall{
+              id: Checked.expr_id(),
+              type: type,
+              function: String.t(),
+              target: t | nil,
+              args: [t],
+              expansion: t | nil
+            }
           | %Comprehension{
               id: Checked.expr_id(),
               type: type,
@@ -153,6 +166,8 @@ defmodule PB.CEL.Expr do
   def children(%Select{operand: operand}), do: [operand]
   def children(%Call{target: nil, args: args}), do: args
   def children(%Call{target: target, args: args}), do: [target | args]
+  def children(%MacroCall{target: nil, args: args}), do: args
+  def children(%MacroCall{target: target, args: args}), do: [target | args]
   def children(%ListLiteral{elements: elements}), do: elements
   def children(%MapLiteral{entries: entries}), do: Enum.flat_map(entries, &[&1.key, &1.value])
   def children(%MessageLiteral{fields: fields}), do: Enum.map(fields, & &1.value)
@@ -187,8 +202,48 @@ defmodule PB.CEL.Expr do
   end
 
   defp node(id, checked) do
-    build(id, Checked.op(checked, id), Checked.type(checked, id), checked)
+    op = Checked.op(checked, id)
+    type = Checked.type(checked, id)
+
+    case {op, checked.source_info |> Map.get(:macro_calls, %{}) |> Map.get(id)} do
+      {{:comprehension, comprehension}, %{expr_kind: {:call_expr, call}}} ->
+        macro_call(id, type, comprehension, call, build(id, op, type, checked), checked)
+
+      _other ->
+        build(id, op, type, checked)
+    end
   end
+
+  # A macro as written: the variables it binds, then its other arguments,
+  # whose ids are those of the same expressions in the expansion.
+  defp macro_call(id, type, comprehension, call, expansion, checked) do
+    target = Map.get(call, :target)
+    vars = if comprehension.iter_var2 in [nil, ""], do: 1, else: 2
+    {var_exprs, arg_exprs} = Enum.split(call.args, vars)
+    range_type = Checked.type(checked, comprehension.iter_range_id)
+
+    var_nodes =
+      var_exprs
+      |> Enum.zip(iter_var_types(range_type, vars))
+      |> Enum.map(fn {%{id: var_id, expr_kind: {:ident_expr, %{name: name}}}, var_type} ->
+        %Ident{id: var_id, type: var_type, name: name, scope: :local}
+      end)
+
+    %MacroCall{
+      id: id,
+      type: type,
+      function: call.function,
+      target: target && node(target.id, checked),
+      args: var_nodes ++ Enum.map(arg_exprs, &node(&1.id, checked)),
+      expansion: expansion
+    }
+  end
+
+  defp iter_var_types({:list, elem}, 1), do: [elem]
+  defp iter_var_types({:list, elem}, 2), do: [:int, elem]
+  defp iter_var_types({:map, key, _value}, 1), do: [key]
+  defp iter_var_types({:map, key, value}, 2), do: [key, value]
+  defp iter_var_types(_range, vars), do: List.duplicate(:dyn, vars)
 
   defp build(id, {:const, %{value: value}}, type, _checked) do
     %Const{id: id, type: type, value: value}
@@ -224,11 +279,10 @@ defmodule PB.CEL.Expr do
     [init_id, body_id] = op.arg_ids
     var = %Ident{id: op.var_id, type: Checked.type(checked, init_id), name: op.var, scope: :local}
 
-    %Call{
+    %MacroCall{
       id: id,
       type: type,
       function: "cel.bind",
-      overload_id: op.overload_id,
       args: [var, node(init_id, checked), node(body_id, checked)]
     }
   end
@@ -245,11 +299,10 @@ defmodule PB.CEL.Expr do
 
     var = %Ident{id: var_id, type: var_type, name: op.var, scope: :local}
 
-    %Call{
+    %MacroCall{
       id: id,
       type: type,
       function: op.name,
-      overload_id: op.overload_id,
       target: node(op.target_id, checked),
       args: [var, node(body_id, checked)]
     }
