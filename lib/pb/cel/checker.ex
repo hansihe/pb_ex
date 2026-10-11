@@ -40,17 +40,28 @@ defmodule PB.CEL.Checker do
   def check(%{expr: expr, source_info: source_info}, opts \\ []) when is_map(expr) do
     state = %State{env: Env.from_options(opts), solver: Solver.new()}
 
-    with {:ok, _type, state} <- infer(expr, state) do
-      types = finalize_types(state)
+    case infer(expr, state) do
+      {:ok, _type, state} ->
+        types = finalize_types(state)
 
-      {:ok,
-       Checked.new(
-         expr: expr,
-         source_info: source_info,
-         types: types,
-         ops: state.ops
-       )}
+        {:ok,
+         Checked.new(
+           expr: expr,
+           source_info: source_info,
+           types: types,
+           ops: state.ops
+         )}
+
+      {:error, error} ->
+        {:error, locate(error, source_info)}
     end
+  end
+
+  # Errors carry the id of the expression they are about; add its source
+  # offset so callers need not look it up themselves.
+  defp locate(%Error{expr_id: id} = error, source_info) do
+    offset = source_info |> Map.get(:positions, %{}) |> Map.get(id)
+    %{error | offset: offset, location: Map.get(source_info, :location)}
   end
 
   defp infer(%{expr_kind: {:const_expr, constant}} = expr, state) do

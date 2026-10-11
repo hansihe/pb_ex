@@ -4,6 +4,11 @@ defmodule PB.CEL.Error do
 
   `:phase` discriminates `:parse`, `:check`, or `:eval`. Callers `rescue
   PB.CEL.Error` once and inspect `:phase` to discriminate if needed.
+
+  Parse and check errors set `:offset`, the byte offset in the source where
+  the error was found (for a check error, the position recorded for the
+  expression it is about, which for an operator is the operator itself), and
+  `:location`, the source's location as given to `PB.CEL.parse/2`.
   """
 
   defexception [:message, :phase, :offset, :location, :expr_id, :details]

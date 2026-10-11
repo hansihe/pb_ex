@@ -65,6 +65,18 @@ defmodule PB.CEL.CheckerTest do
     assert ref(checked, checked.expr.id).overload_id == ["add_uint64"]
   end
 
+  test "check errors carry the source offset and location of the expression" do
+    assert {:error, %Error{expr_id: id, offset: 7, location: "<input>"} = error} =
+             CEL.check("1 + \n  x.foo")
+
+    assert is_integer(id)
+    assert Exception.message(error) == ~s(undeclared identifier "x" at offset 7)
+
+    parsed = CEL.parse!("[1].map(y, y + 'a')", location: "rules/foo.txtpb")
+
+    assert {:error, %Error{offset: 13, location: "rules/foo.txtpb"}} = CEL.check(parsed)
+  end
+
   test "orders mixed numeric types without dyn, as the CEL spec allows" do
     for {source, overload_id, result} <- [
           {"1 < 2.5", "less_int64_double", true},
