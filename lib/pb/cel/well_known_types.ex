@@ -4,15 +4,15 @@ defmodule PB.CEL.WellKnownTypes do
   alias PB.CEL.Type
   alias PB.CEL.Value
   alias PB.CEL.Runtime.Time
+  alias PB.WellKnownTypes.Any
   alias PB.WellKnownTypes.Codec, as: WKTCodec
   alias PB.WellKnownTypes.Time, as: WKTTime
   alias PB.Wire
 
-  @type_url_prefix PB.WellKnownTypes.Any.default_prefix()
   @timestamp_type "google.protobuf.Timestamp"
   @duration_type "google.protobuf.Duration"
-  @timestamp_type_url @type_url_prefix <> @timestamp_type
-  @duration_type_url @type_url_prefix <> @duration_type
+  @timestamp_type_url Any.type_url(@timestamp_type)
+  @duration_type_url Any.type_url(@duration_type)
 
   @wrapper_types %{
     "google.protobuf.Int32Value" => :int,
@@ -130,13 +130,16 @@ defmodule PB.CEL.WellKnownTypes do
   end
 
   @spec object_value(String.t(), binary) :: {:ok, Value.t()} | {:error, term}
-  def object_value(@timestamp_type_url, value) when is_binary(value) do
+  def object_value(type_url, value) when is_binary(type_url) and is_binary(value),
+    do: object_value(type_url_name(type_url), type_url, value)
+
+  defp object_value(@timestamp_type, _type_url, value) do
     with {:ok, message} <- WKTCodec.decode_timestamp(value) do
       WKTTime.from_proto_timestamp(message)
     end
   end
 
-  def object_value(@duration_type_url, value) when is_binary(value) do
+  defp object_value(@duration_type, _type_url, value) do
     with {:ok, message} <- WKTCodec.decode_duration(value),
          {:ok, {:duration, ns}} <- WKTTime.from_proto_duration(message),
          true <- Time.duration_ns?(ns) do
@@ -147,9 +150,7 @@ defmodule PB.CEL.WellKnownTypes do
     end
   end
 
-  def object_value(type_url, value) when is_binary(type_url) and is_binary(value) do
-    {:ok, Value.object(type_url, value)}
-  end
+  defp object_value(_name, type_url, value), do: {:ok, Value.object(type_url, value)}
 
   @spec to_object_value(Value.t()) :: {:ok, map} | {:error, term}
   def to_object_value({:timestamp, _ns} = value) do
@@ -175,9 +176,15 @@ defmodule PB.CEL.WellKnownTypes do
     end
   end
 
+  # Any host is accepted: the last path segment names the message, as for
+  # ProtoJSON and Go's resolvers.
   @spec type_url_name(String.t()) :: String.t()
-  def type_url_name(@type_url_prefix <> name), do: name
-  def type_url_name(type_url), do: type_url
+  def type_url_name(type_url) do
+    case Any.split_type_url(type_url) do
+      {:ok, _prefix, name} -> name
+      :error -> type_url
+    end
+  end
 
   defp wrapper_field_type(:int), do: Type.wrapper(:INT64)
   defp wrapper_field_type(:uint), do: Type.wrapper(:UINT64)

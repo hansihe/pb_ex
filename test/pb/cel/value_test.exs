@@ -106,6 +106,21 @@ defmodule PB.CEL.ValueTest do
            ) == {:ok, Value.int(2_000_000)}
   end
 
+  test "resolves object values by the last segment of any type URL" do
+    schema = PB.TestSupport.TestSchema.schema()
+    opts = [schema: schema, message_schema: MessageSchema, message_runtime: MessageRuntime]
+
+    object = fn type_url, value ->
+      Value.from_expr_value(%{kind: {:object_value, %{type_url: type_url, value: value}}}, opts)
+    end
+
+    assert object.("example.com/a/cel.expr.conformance.proto2.TestAllTypes", <<8, 17>>) ==
+             {:ok, {:message, :"cel.expr.conformance.proto2.TestAllTypes", %{single_int32: 17}}}
+
+    assert object.("type.googleprod.com/google.protobuf.Duration", <<8, 3>>) ==
+             {:ok, Value.duration(3_000_000_000)}
+  end
+
   test "decodes CEL type values" do
     assert Value.from_expr_value(%{kind: {:type_value, "null_type"}}) ==
              {:ok, {:type, Type.null()}}
