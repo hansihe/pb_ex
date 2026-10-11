@@ -132,6 +132,7 @@ defmodule PB.Schema.Compiled do
           required(:edition) => atom() | nil,
           required(:source) => map(),
           required(:features) => map(),
+          optional(:reserved_names) => [binary()],
           optional(:projection) => PB.Schema.Projection.t(),
           optional(:validate) => term()
         }
