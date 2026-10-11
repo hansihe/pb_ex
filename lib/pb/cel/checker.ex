@@ -976,8 +976,10 @@ defmodule PB.CEL.Checker do
                 {:ok, {key_type, second}}
 
               :error ->
-                {:error,
-                 "comprehension range must be list, map, or dyn; got #{CType.format(range_type)}"}
+                error(
+                  comprehension.iter_range,
+                  "comprehension range must be list, map, or dyn; got #{CType.format(range_type)}"
+                )
             end
         end
     end

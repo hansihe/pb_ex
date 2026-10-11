@@ -598,6 +598,19 @@ defmodule PB.CEL.CheckerTest do
              CType.map(CType.string(), CType.string())
   end
 
+  test "rejects comprehension ranges that are not lists or maps" do
+    assert {:error, %Error{phase: :check, message: message, expr_id: id}} =
+             CEL.check("1.all(x, true)")
+
+    assert message =~ "comprehension range must be list, map, or dyn"
+    assert is_integer(id)
+  end
+
+  test "widens literals whose element types cannot unify to dyn" do
+    assert root_type(CEL.check!("[].exists(x, [x, [x]] == [])")) == CType.bool()
+    assert {:ok, {:bool, false}} = CEL.eval("[].exists(x, [x, [x]] == [])", %{})
+  end
+
   test "finalizes unresolved empty literal type variables to dyn" do
     assert root_type(CEL.check!("[]")) == CType.list(CType.dyn())
     assert root_type(CEL.check!("{}")) == CType.map(CType.dyn(), CType.dyn())

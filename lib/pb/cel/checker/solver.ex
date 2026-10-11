@@ -32,10 +32,12 @@ defmodule PB.CEL.Checker.Solver do
   def common(%__MODULE__{} = solver, []), do: {:ok, Types.dyn(), solver}
 
   def common(%__MODULE__{} = solver, [type | rest]) do
-    Enum.reduce(rest, {:ok, type, solver}, fn next, {:ok, acc, solver} ->
-      {:ok, common, solver} = common_pair(solver, acc, next)
-      {:ok, common, solver}
-    end)
+    {common, solver} =
+      Enum.reduce(rest, {type, solver}, fn next, {acc, solver} ->
+        common_pair(solver, acc, next)
+      end)
+
+    {:ok, common, solver}
   end
 
   @spec assignable(t, Types.t(), Types.t()) :: {:ok, t} | :error
@@ -90,93 +92,76 @@ defmodule PB.CEL.Checker.Solver do
     end
   end
 
+  # The most specific type both sides are assignable to. Types with no common
+  # shape, including a variable that would have to contain itself, widen to
+  # dyn, as cel-go does for heterogeneous literals.
   defp common_pair(solver, left, right) do
     left = resolve(solver, left)
     right = resolve(solver, right)
 
     cond do
       left == right ->
-        {:ok, left, solver}
+        {left, solver}
 
       wrapper_primitive_pair?(left, right) ->
-        {:ok, wrapper_common(left, right), solver}
+        {wrapper_common(left, right), solver}
 
       Types.var?(left) or Types.var?(right) ->
-        unify(solver, left, right)
+        case unify(solver, left, right) do
+          {:ok, type, solver} -> {type, solver}
+          :error -> {Types.dyn(), solver}
+        end
 
       Types.dyn?(left) or Types.dyn?(right) ->
-        {:ok, Types.dyn(), solver}
+        {Types.dyn(), solver}
 
       left == Types.null() and Types.nullable?(right) ->
-        {:ok, right, solver}
+        {right, solver}
 
       right == Types.null() and Types.nullable?(left) ->
-        {:ok, left, solver}
+        {left, solver}
 
       true ->
-        case common_composite(solver, left, right) do
-          {:ok, type, solver} -> {:ok, type, solver}
-          :error -> {:ok, Types.dyn(), solver}
-        end
+        common_composite(solver, left, right)
     end
   end
 
   defp common_composite(solver, {:list, left}, {:list, right}) do
-    with {:ok, elem_type, solver} <- common_pair(solver, left, right) do
-      {:ok, Types.list(elem_type), solver}
-    end
+    {elem_type, solver} = common_pair(solver, left, right)
+    {Types.list(elem_type), solver}
   end
 
   defp common_composite(solver, {:map, left_key, left_value}, {:map, right_key, right_value}) do
-    with {:ok, key_type, solver} <- common_pair(solver, left_key, right_key),
-         {:ok, value_type, solver} <- common_pair(solver, left_value, right_value) do
-      {:ok, Types.map(key_type, value_type), solver}
-    end
+    {key_type, solver} = common_pair(solver, left_key, right_key)
+    {value_type, solver} = common_pair(solver, left_value, right_value)
+    {Types.map(key_type, value_type), solver}
   end
 
   defp common_composite(solver, {:optional, left}, {:optional, right}) do
-    with {:ok, value_type, solver} <- common_optional_param(solver, left, right) do
-      {:ok, Types.optional(value_type), solver}
-    end
+    {value_type, solver} = common_optional_param(solver, left, right)
+    {Types.optional(value_type), solver}
   end
 
   defp common_composite(solver, {:abstract, name, left}, {:abstract, name, right})
        when length(left) == length(right) do
-    with {:ok, params, solver} <- common_params(solver, left, right) do
-      {:ok, {:abstract, name, params}, solver}
-    end
+    {params, solver} =
+      left
+      |> Enum.zip(right)
+      |> Enum.map_reduce(solver, fn {left, right}, solver -> common_pair(solver, left, right) end)
+
+    {{:abstract, name, params}, solver}
   end
 
-  defp common_composite(_solver, _left, _right), do: :error
-
-  defp common_params(solver, left, right) do
-    left
-    |> Enum.zip(right)
-    |> Enum.reduce_while({:ok, [], solver}, fn {left, right}, {:ok, params, solver} ->
-      case common_pair(solver, left, right) do
-        {:ok, param, solver} -> {:cont, {:ok, [param | params], solver}}
-        :error -> {:halt, :error}
-      end
-    end)
-    |> case do
-      {:ok, params, solver} -> {:ok, Enum.reverse(params), solver}
-      :error -> :error
-    end
-  end
+  defp common_composite(solver, _left, _right), do: {Types.dyn(), solver}
 
   defp common_optional_param(solver, left, right) do
     left = resolve(solver, left)
     right = resolve(solver, right)
 
     cond do
-      left == Types.null() ->
-        {:ok, right, solver}
-
-      right == Types.null() ->
-        {:ok, left, solver}
-
-      true ->
-        common_pair(solver, left, right)
+      left == Types.null() -> {right, solver}
+      right == Types.null() -> {left, solver}
+      true -> common_pair(solver, left, right)
     end
   end
 
