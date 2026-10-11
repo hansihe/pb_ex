@@ -16,8 +16,12 @@ defmodule PB.TextFormat.Decoder do
   #     the field type; repeated fields may also be given once per occurrence
   #   * map fields are written as repeated entry messages; a missing key or
   #     value takes its default, and a repeated key keeps the last entry
-  #   * with `ignore_unknown`, unknown fields are skipped as C++ does with
-  #     `allow_unknown_field`
+  #   * a group-like field (delimited, named after its lowercased message type,
+  #     with the type nested in the same message) also answers to the type name
+  #   * extensions are named `[full.extension.name]` and stored under
+  #     `:__extensions__`
+  #   * reserved field names are skipped, and with `ignore_unknown` so are
+  #     unknown fields, as C++ does with `allow_unknown_field`
   #
   # Failures are thrown as `{:text_error, reason}` and returned by run/4. A
   # reason is a `PB.Runtime.Errors` tuple carrying a path, or one of
@@ -29,6 +33,7 @@ defmodule PB.TextFormat.Decoder do
   alias PB.TextFormat.Scalars
 
   @any :"google.protobuf.Any"
+  @extension_key :__extensions__
 
   @spec run([PB.TextFormat.Parser.field()], map, atom, keyword) :: {:ok, map} | {:error, tuple}
   def run(fields, schema, message_name, opts) do
@@ -43,39 +48,59 @@ defmodule PB.TextFormat.Decoder do
     msg = schema.messages[name]
 
     {acc, _seen} =
-      Enum.reduce(fields, {%{}, %{}}, fn node, {acc, seen} ->
+      Enum.reduce(fields, {%{field: %{}, extension: %{}}, %{}}, fn node, {acc, seen} ->
         case resolve(name, msg, node, opts, path) do
           :skip ->
             {acc, seen}
 
-          field ->
-            seen = claim!(field, node, seen, path)
-            {put_field(acc, field, node, schema, opts, path ++ [field.name]), seen}
+          {kind, field} ->
+            field_path = path ++ field_path(kind, field)
+            seen = claim!(kind, field, node, seen, field_path)
+            {Map.update!(acc, kind, &put_field(&1, field, node, schema, opts, field_path)), seen}
         end
       end)
 
+    fields = finish(acc.field)
+
     fields =
-      Map.new(acc, fn
-        {name, {:repeated, _count, reversed}} -> {name, Enum.reverse(reversed)}
-        entry -> entry
-      end)
+      if acc.extension == %{},
+        do: fields,
+        else: Map.put(fields, @extension_key, finish(acc.extension))
 
     check_required!(msg, fields, path)
     Oneofs.wrap(fields, msg)
   end
 
+  defp finish(values) do
+    Map.new(values, fn
+      {name, {:repeated, _count, reversed}} -> {name, Enum.reverse(reversed)}
+      entry -> entry
+    end)
+  end
+
+  defp field_path(:field, field), do: [field.name]
+  defp field_path(:extension, field), do: [@extension_key, field.name]
+
   defp resolve(name, msg, %{name: {:field, field_name}} = node, opts, path) do
-    case lookup(msg.fields_by_name, field_name) do
-      nil -> unknown!(name, node, field_name, opts, path)
-      field -> field
+    cond do
+      field = lookup(msg.fields_by_name, field_name) ->
+        {:field, field}
+
+      field = group_by_type_name(name, msg, field_name) ->
+        {:field, field}
+
+      field_name in Map.get(msg, :reserved_names, []) ->
+        skip!(node, path)
+
+      true ->
+        unknown!(name, node, field_name, opts, path)
     end
   end
 
   defp resolve(name, msg, %{name: {:extension, ext_name}} = node, opts, path) do
-    if lookup(msg.extensions_by_name, ext_name) do
-      malformed!("extension fields are not supported in text format yet", node, path)
-    else
-      unknown!(name, node, "[#{ext_name}]", opts, path)
+    case lookup(msg.extensions_by_name, ext_name) do
+      nil -> unknown!(name, node, "[#{ext_name}]", opts, path)
+      field -> {:extension, field}
     end
   end
 
@@ -85,31 +110,64 @@ defmodule PB.TextFormat.Decoder do
   defp resolve(_name, _msg, %{name: {:type_url, url}} = node, _opts, path),
     do: malformed!("\"[#{url}]\" is only allowed in a google.protobuf.Any", node, path)
 
-  # Like C++ `SkipField`, a skipped field without a colon must hold a message.
-  defp unknown!(message_name, node, field_name, opts, path) do
-    cond do
-      not Keyword.get(opts, :ignore_unknown, false) ->
-        throw({:text_error, {:unknown_field, message_name, path ++ [field_name]}})
+  # C++ also accepts a group-like field by its message type's name, spelled
+  # exactly: the lowercased text must name the field, and the text must be the
+  # type's simple name. Group-like means delimited, named after the lowercased
+  # type, and with the type nested in this message (so declared in the same
+  # file and scope, as C++ `IsGroupLike` requires).
+  defp group_by_type_name(message_name, msg, text) do
+    field = lookup(msg.fields_by_name, String.downcase(text, :ascii))
 
-      node.value.kind == :list and not node.colon ->
-        malformed!(~s(expected ":" before a list value), node.value, path)
+    if field && field.encoding == :delimited do
+      {scope, type} = split_name(field.type_name)
 
-      true ->
-        :skip
+      if type == text and Atom.to_string(field.name) == String.downcase(type, :ascii) and
+           scope == Atom.to_string(message_name),
+         do: field
     end
   end
 
-  defp claim!(field, node, seen, path) do
-    if not Features.repeated?(field) and Map.has_key?(seen, field.name) do
-      throw({:text_error, {:duplicate_field, field.name, node.offset, path ++ [field.name]}})
+  defp split_name(full_name) do
+    full_name = Atom.to_string(full_name)
+
+    case :binary.matches(full_name, ".") do
+      [] ->
+        {"", full_name}
+
+      matches ->
+        {dot, 1} = List.last(matches)
+
+        {binary_part(full_name, 0, dot),
+         binary_part(full_name, dot + 1, byte_size(full_name) - dot - 1)}
+    end
+  end
+
+  defp unknown!(message_name, node, field_name, opts, path) do
+    if Keyword.get(opts, :ignore_unknown, false),
+      do: skip!(node, path),
+      else: throw({:text_error, {:unknown_field, message_name, path ++ [field_name]}})
+  end
+
+  # Like C++ `SkipField`, a skipped field without a colon must hold a message.
+  defp skip!(node, path) do
+    if node.value.kind == :list and not node.colon,
+      do: malformed!(~s(expected ":" before a list value), node.value, path),
+      else: :skip
+  end
+
+  defp claim!(kind, field, node, seen, field_path) do
+    slot = {kind, field.name}
+
+    if not Features.repeated?(field) and Map.has_key?(seen, slot) do
+      throw({:text_error, {:duplicate_field, field.name, node.offset, field_path}})
     end
 
     seen =
-      if Features.oneof?(field) do
+      if kind == :field and Features.oneof?(field) do
         case Map.fetch(seen, {:oneof, field.oneof_index}) do
           {:ok, other} ->
             reason = "#{field.name} is set along with #{other}, another member of the same oneof"
-            throw({:text_error, {:invalid_oneof, path ++ [field.name], reason}})
+            throw({:text_error, {:invalid_oneof, field_path, reason}})
 
           :error ->
             Map.put(seen, {:oneof, field.oneof_index}, field.name)
@@ -118,7 +176,7 @@ defmodule PB.TextFormat.Decoder do
         seen
       end
 
-    Map.put(seen, field.name, true)
+    Map.put(seen, slot, true)
   end
 
   # ── fields ───────────────────────────────────────────────────────────

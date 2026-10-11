@@ -24,9 +24,8 @@ Intentional deviations:
 - Text-format parsing (`PB.TextFormat`) is in progress. Its cases are tracked
   separately in `test/fixtures/protobuf_conformance/text_format_failures.txt`;
   the runner fails when a listed case starts passing, so the list only shrinks.
-  Still listed: every text-output case (there is no printer yet), and parsing
-  of group and delimited fields by type name or as extensions, expanded
-  `google.protobuf.Any` values, and reserved field names.
+  Still listed: every text-output case (there is no printer yet) and the two
+  cases that parse expanded `google.protobuf.Any` values.
 
 ## CEL
 

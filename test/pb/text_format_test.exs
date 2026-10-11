@@ -7,6 +7,81 @@ defmodule PB.TextFormatTest do
   @proto3 :"protobuf_test_messages.proto3.TestAllTypesProto3"
   @proto2 :"protobuf_test_messages.proto2.TestAllTypesProto2"
   @required :"protobuf_test_messages.proto2.TestAllRequiredTypesProto2"
+  @edition2023 :"protobuf_test_messages.editions.TestAllTypesEdition2023"
+
+  defmodule Child do
+    defstruct [:id, :req]
+  end
+
+  @ext_descriptor_set %{
+    file: [
+      %{
+        name: "ext.proto",
+        package: :ext,
+        syntax: :proto2,
+        message_type: [
+          %{
+            name: :Msg,
+            field: [%{name: :id, number: 1, label: :LABEL_OPTIONAL, type: :TYPE_INT32}],
+            extension_range: [%{start: 100, end: 200}]
+          },
+          %{
+            name: :Child,
+            field: [
+              %{name: :id, number: 1, label: :LABEL_OPTIONAL, type: :TYPE_INT32},
+              %{name: :req, number: 2, label: :LABEL_REQUIRED, type: :TYPE_INT32}
+            ],
+            extension: [
+              %{
+                name: :scoped,
+                number: 104,
+                label: :LABEL_OPTIONAL,
+                type: :TYPE_STRING,
+                extendee: ".ext.Msg"
+              }
+            ]
+          }
+        ],
+        enum_type: [
+          %{name: :Color, value: [%{name: :RED, number: 0}, %{name: :GREEN, number: 1}]}
+        ],
+        extension: [
+          %{
+            name: :number,
+            number: 100,
+            label: :LABEL_OPTIONAL,
+            type: :TYPE_INT32,
+            extendee: ".ext.Msg"
+          },
+          %{
+            name: :child,
+            number: 101,
+            label: :LABEL_OPTIONAL,
+            type: :TYPE_MESSAGE,
+            type_name: ".ext.Child",
+            extendee: ".ext.Msg"
+          },
+          %{
+            name: :nums,
+            number: 102,
+            label: :LABEL_REPEATED,
+            type: :TYPE_INT32,
+            extendee: ".ext.Msg"
+          },
+          %{
+            name: :color,
+            number: 103,
+            label: :LABEL_OPTIONAL,
+            type: :TYPE_ENUM,
+            type_name: ".ext.Color",
+            extendee: ".ext.Msg"
+          }
+        ]
+      }
+    ]
+  }
+
+  defp ext_schema(opts \\ []), do: PB.compile(@ext_descriptor_set, opts)
 
   defp decode(text, message \\ @proto3, opts \\ []),
     do: TextFormat.decode(text, TestSchema, message, opts)
@@ -324,6 +399,134 @@ defmodule PB.TextFormatTest do
     test "a skipped field without a colon must hold a message" do
       assert {:error, %DecodeError{kind: :malformed_text}} =
                decode("a [1]", @proto3, ignore_unknown: true)
+    end
+  end
+
+  describe "extensions" do
+    test "are stored under :__extensions__ by full name" do
+      text = ~S"""
+      id: 1
+      [ext.number]: 5
+      [ext.nums]: [1, 2] [ext.nums]: 3
+      [ext.color]: GREEN
+      [ext.child] { id: 7 req: 8 }
+      [ext.Child.scoped]: "s"
+      """
+
+      assert TextFormat.decode(text, ext_schema(), :"ext.Msg") ==
+               {:ok,
+                %{
+                  id: 1,
+                  __extensions__: %{
+                    "ext.number": 5,
+                    "ext.nums": [1, 2, 3],
+                    "ext.color": :GREEN,
+                    "ext.child": %{id: 7, req: 8},
+                    "ext.Child.scoped": "s"
+                  }
+                }}
+    end
+
+    test "decode to the same value as a wire round trip" do
+      schema = ext_schema()
+
+      decoded =
+        TextFormat.decode!("[ext.nums]: [1, 2] [ext.child] { req: 1 }", schema, :"ext.Msg")
+
+      {:ok, wire} = PB.encode(decoded, schema, :"ext.Msg")
+      assert PB.decode(IO.iodata_to_binary(wire), schema, :"ext.Msg") == {:ok, decoded}
+    end
+
+    test "follow ordinary field rules" do
+      schema = ext_schema()
+
+      assert {:error,
+              %DecodeError{kind: :duplicate_field, path: [:__extensions__, :"ext.number"]}} =
+               TextFormat.decode("[ext.number]: 1 [ext.number]: 2", schema, :"ext.Msg")
+
+      assert {:error, %DecodeError{kind: :malformed_text}} =
+               TextFormat.decode("[ext.number] { }", schema, :"ext.Msg")
+
+      assert {:error,
+              %ValueError{kind: :value_out_of_range, path: [:__extensions__, :"ext.number"]}} =
+               TextFormat.decode("[ext.number]: 2147483648", schema, :"ext.Msg")
+
+      assert {:error,
+              %ValueError{kind: :missing_required, path: [:__extensions__, :"ext.child", :req]}} =
+               TextFormat.decode("[ext.child] { id: 1 }", schema, :"ext.Msg")
+    end
+
+    test "must use the full extension name" do
+      assert {:error, %ValueError{kind: :unknown_field, path: ["[number]"]}} =
+               TextFormat.decode("[number]: 1", ext_schema(), :"ext.Msg")
+
+      assert {:error, %ValueError{kind: :unknown_field}} =
+               TextFormat.decode("number: 1", ext_schema(), :"ext.Msg")
+    end
+
+    test "are decoded through the schema's projections" do
+      schema = ext_schema(projections: [{:"ext.Child", struct: Child}])
+
+      assert TextFormat.decode("[ext.child] { id: 1 req: 2 }", schema, :"ext.Msg") ==
+               {:ok, %{__extensions__: %{"ext.child": %Child{id: 1, req: 2}}}}
+
+      assert TextFormat.decode("req: 2", schema, :"ext.Child") == {:ok, %Child{req: 2}}
+    end
+  end
+
+  describe "group fields" do
+    test "answer to the field name or the exact type name" do
+      for text <- [
+            "data { group_int32: 1 }",
+            "Data: { group_int32: 1 }",
+            "Data < group_int32: 1 >"
+          ] do
+        assert decode!(text, @proto2) == %{data: %{group_int32: 1}}, text
+      end
+
+      assert decode!("MultiWordGroupField {}", @proto2) == %{multiwordgroupfield: %{}}
+    end
+
+    test "do not answer to other spellings of the type name" do
+      for text <- ["DATA {}", "dATA {}", "Multiwordgroupfield {}"] do
+        assert {:error, %ValueError{kind: :unknown_field}} = decode(text, @proto2), text
+      end
+    end
+
+    test "count the field once whichever name is used" do
+      assert {:error, %DecodeError{kind: :duplicate_field}} = decode("data {} Data {}", @proto2)
+    end
+
+    test "only a group-like delimited field answers to its type name" do
+      assert decode!("GroupLikeType { group_int32: 1 }", @edition2023) ==
+               %{groupliketype: %{group_int32: 1}}
+
+      assert decode!("delimited_field { group_int32: 1 }", @edition2023) ==
+               %{delimited_field: %{group_int32: 1}}
+    end
+
+    test "group extensions use the extension name, never the type name" do
+      assert %{__extensions__: %{"protobuf_test_messages.proto2.groupfield": %{group_int32: 1}}} =
+               decode!("[protobuf_test_messages.proto2.groupfield] { group_int32: 1 }", @proto2)
+
+      assert {:error, %ValueError{kind: :unknown_field}} =
+               decode("[protobuf_test_messages.proto2.GroupField] { group_int32: 1 }", @proto2)
+    end
+  end
+
+  describe "reserved names" do
+    test "are skipped whatever their value" do
+      for value <- ["true", "-123", "'x' 'y'", "{ a: 1 }", "< a: 1 >", "[1, 'x', {}]", "-inf"] do
+        assert decode!("reserved_field: #{value} optional_int32: 1") == %{optional_int32: 1},
+               value
+      end
+
+      assert decode!("reserved_field { nested { deeper: 1 } }") == %{}
+    end
+
+    test "must still be well-formed" do
+      assert {:error, %DecodeError{kind: :malformed_text}} = decode("reserved_field [1]")
+      assert {:error, %DecodeError{kind: :malformed_text}} = decode("reserved_field: -FOO")
     end
   end
 

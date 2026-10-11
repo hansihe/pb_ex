@@ -20,7 +20,10 @@ defmodule PB.TextFormat.FuzzTest do
     ~S(map_string_string { key: "k" value: "v" } map_int32_int32: [{key: 1}]),
     ~S(map_string_nested_message { key: "a" value { a: 1 } }),
     ~S(oneof_uint32: 7 # trailing comment),
-    ~S([pkg.ext]: 1 [type.googleapis.com/pkg.Msg] { a: 1 })
+    ~S([pkg.ext]: 1 [type.googleapis.com/pkg.Msg] { a: 1 }),
+    ~S(Data { group_int32: 1 } multiwordgroupfield < group_uint32: 2 >),
+    ~S([protobuf_test_messages.proto2.extension_int32]: 5 [protobuf_test_messages.proto2.groupfield] { group_int32: 1 }),
+    ~S(reserved_field: [1, 'x', {a: 1}] reserved_field { b: -inf } optional_int32: 1)
   ]
 
   @fragments [

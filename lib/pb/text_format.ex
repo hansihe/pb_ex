@@ -22,6 +22,12 @@ defmodule PB.TextFormat do
   suffix on floats, and hex or octal integers. Out-of-range float literals
   become infinity or zero rather than errors.
 
+  Extensions are written with their full name in brackets, `[pkg.ext]: 1`, and
+  decode under `:__extensions__` as they do from the wire. A group field (or an
+  editions delimited field shaped like one) also answers to its message type's
+  name, so `Data { ... }` sets the field `data`. Fields named after one of the
+  message's reserved names are skipped.
+
   PB is stricter than C++ in two places. A non-repeated field given twice is
   always rejected (C++ lets an implicit-presence field repeat after a default
   value). Unicode escapes may not encode surrogates, even as a valid pair, as
@@ -29,10 +35,9 @@ defmodule PB.TextFormat do
 
   ## Not yet supported
 
-  Extension fields (`[pkg.ext]`), expanded `google.protobuf.Any` values
-  (`[type.googleapis.com/pkg.Message] { ... }`), reserved field names, and the
-  type-name spelling of group fields are rejected for now. There is no text
-  format encoder yet.
+  Expanded `google.protobuf.Any` values
+  (`[type.googleapis.com/pkg.Message] { ... }`) are rejected for now. There is
+  no text format encoder yet.
 
   ## Errors
 
