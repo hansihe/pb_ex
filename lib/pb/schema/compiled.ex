@@ -133,6 +133,7 @@ defmodule PB.Schema.Compiled do
           required(:source) => map(),
           required(:features) => map(),
           optional(:reserved_names) => [binary()],
+          optional(:reserved_ranges) => [extension_range()],
           optional(:projection) => PB.Schema.Projection.t(),
           optional(:validate) => term()
         }

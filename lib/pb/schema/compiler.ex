@@ -122,6 +122,8 @@ defmodule PB.Schema.Compiler do
         edition: source.edition,
         source: source,
         reserved_names: Enum.map(msg[:reserved_name] || [], &to_string/1),
+        reserved_ranges:
+          Enum.map(msg[:reserved_range] || [], &%{start: &1[:start], end: &1[:end]}),
         features: features
       }
       |> maybe_put(:options, msg[:options])
