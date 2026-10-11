@@ -19,6 +19,8 @@ defmodule PB.JSON.Encoder do
   alias PB.Schema.Features
 
 
+  @storage_keys [:__unknown_fields__, :__extensions__, :__message_name__]
+
   @doc false
   def run(data, schema, name, opts) do
     Errors.guard(:json_encode, name, fn ->
@@ -78,12 +80,16 @@ defmodule PB.JSON.Encoder do
           oneof = find_oneof(msg.oneofs, key) ->
             encode_oneof_wrapper(acc, schema, msg, oneof, value, opts)
 
-          true ->
+          # Unknown wire fields and extensions have no ProtoJSON form here.
+          key in @storage_keys or opts.unknown_fields == :ignore ->
             acc
+
+          true ->
+            Errors.raise!(:unknown_field, key, path: [key])
         end
       end)
 
-    if opts[:emit_defaults], do: fill_defaults(encoded, schema, msg, opts), else: encoded
+    if opts.emit_defaults, do: fill_defaults(encoded, schema, msg, opts), else: encoded
   end
 
   defp encode_regular(_msg, data, _schema, _opts) do
@@ -117,7 +123,7 @@ defmodule PB.JSON.Encoder do
 
   defp should_emit?(_schema, _msg, field, value, opts) do
     cond do
-      opts[:emit_defaults] -> true
+      opts.emit_defaults -> true
       has_presence?(field) -> true
       Features.repeated?(field) and value in [[], %{}] -> false
       Features.repeated?(field) -> true
@@ -230,7 +236,7 @@ defmodule PB.JSON.Encoder do
   end
 
   defp json_key(field, opts) do
-    if opts[:use_proto_names] do
+    if opts.use_proto_names do
       Atom.to_string(field.name)
     else
       case Map.get(field, :json_name) do

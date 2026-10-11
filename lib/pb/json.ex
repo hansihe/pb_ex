@@ -59,16 +59,19 @@ defmodule PB.JSON do
       Parsers always accept both spellings. Defaults to `false`.
     * `:enums_as_ints` — when `true`, enums are encoded as their numeric value
       instead of the enum-value name. Defaults to `false`.
-    * `:ignore_unknown` — when `true`, unknown JSON keys are skipped during
-      decoding. Defaults to `false` (`decode/4` returns
-      `{:error, %PB.ValueError{kind: :unknown_field}}`).
+    * `:unknown_fields` — `:error` (the default) or `:ignore`. On decode it
+      governs JSON keys the message does not define, and enum strings the enum
+      does not declare (skipped with `:ignore`, as ProtoJSON's
+      `ignore_unknown_fields` does); on encode, map keys the message does not
+      define, as for `PB.encode/4`. An error is
+      `{:error, %PB.ValueError{kind: :unknown_field}}`.
 
   Encode (`encode/4`, `to_term/4`) accepts `:emit_defaults`, `:use_proto_names`,
-  and `:enums_as_ints`; decode (`decode/4`, `from_term/4`) accepts
-  `:ignore_unknown`. Like the core codec, the option set is validated per
-  direction: an unknown key (including a typo such as `emit_default:`), an
-  option meant for the other direction, or a non-boolean value returns
-  `{:error, %PB.OptionError{}}` rather than being silently ignored.
+  `:enums_as_ints` and `:unknown_fields`; decode (`decode/4`, `from_term/4`)
+  accepts `:unknown_fields`. Like the core codec, the option set is validated
+  per direction: an unknown key (including a typo such as `emit_default:`), an
+  option meant for the other direction, or a value the option does not take
+  returns `{:error, %PB.OptionError{}}` rather than being silently ignored.
   """
 
   alias PB
@@ -81,15 +84,20 @@ defmodule PB.JSON do
           emit_defaults: boolean,
           use_proto_names: boolean,
           enums_as_ints: boolean,
-          ignore_unknown: boolean
+          unknown_fields: :error | :ignore
         ]
 
   # Encode and decode accept disjoint option sets, mirroring the core codec
   # (where decode rejects encode-only options and vice versa). Validating per
   # direction turns silent typos like `emit_default:` into an explicit
   # `PB.OptionError` instead of a no-op.
-  @encode_opts [:emit_defaults, :use_proto_names, :enums_as_ints]
-  @decode_opts [:ignore_unknown]
+  @encode_opts [
+    emit_defaults: {:boolean, false},
+    use_proto_names: {:boolean, false},
+    enums_as_ints: {:boolean, false},
+    unknown_fields: {[:error, :ignore], :error}
+  ]
+  @decode_opts [unknown_fields: {[:error, :ignore], :error}]
 
   # ── String-shaped public API ─────────────────────────────────────────
 
@@ -296,11 +304,11 @@ defmodule PB.JSON do
 
   # Validate the option keyword against the direction's allowed set, producing
   # a `PB.OptionError` (via the shared runtime vocabulary) on a bad shape,
-  # unknown key, or non-boolean value. On success the keyword passes through
-  # unchanged — the encode/decode pipelines read it with bracket access.
+  # unknown key, or value the option does not take. On success the pipelines
+  # get a map of every option, defaults filled in.
   defp validate_opts(opts, allowed, operation, message_name) do
     opts
-    |> Options.validate_booleans(allowed)
+    |> Options.validate(allowed)
     |> RuntimeErrors.normalize_result(operation, message_name)
   end
 

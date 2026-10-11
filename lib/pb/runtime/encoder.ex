@@ -3,6 +3,7 @@ defmodule PB.Runtime.Encoder do
 
   alias PB.Runtime.Errors
   alias PB.Runtime.MessageView
+  alias PB.Runtime.Options
   alias PB.Runtime.RequiredFields
   alias PB.Runtime.Scalar
   alias PB.Runtime.Schema, as: RuntimeSchema
@@ -20,6 +21,8 @@ defmodule PB.Runtime.Encoder do
   @type normalized_opts :: %{
           required(:unknown_fields) => :error | :ignore
         }
+
+  @opts [unknown_fields: {[:error, :ignore], :error}]
 
   @typedoc "Current protobuf path used for encode errors."
   @type path :: [PB.Error.path_element()]
@@ -56,26 +59,7 @@ defmodule PB.Runtime.Encoder do
   end
 
   @spec normalize_opts(term()) :: {:ok, normalized_opts()} | {:error, term()}
-  defp normalize_opts(opts) when is_list(opts) do
-    if Keyword.keyword?(opts) do
-      unknown = Keyword.keys(opts) -- [:unknown_fields]
-
-      cond do
-        unknown != [] ->
-          {:error, {:unknown_options, unknown}}
-
-        (mode = Keyword.get(opts, :unknown_fields, :error)) in [:error, :ignore] ->
-          {:ok, %{unknown_fields: mode}}
-
-        true ->
-          {:error, {:invalid_option, :unknown_fields, Keyword.get(opts, :unknown_fields)}}
-      end
-    else
-      {:error, {:invalid_options, Errors.type_of(opts)}}
-    end
-  end
-
-  defp normalize_opts(opts), do: {:error, {:invalid_options, Errors.type_of(opts)}}
+  defp normalize_opts(opts), do: Options.validate(opts, @opts)
 
   defp oneof_member_field?(msg, field) do
     Map.has_key?(msg.oneof_field_names, field.name)

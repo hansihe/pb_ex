@@ -118,9 +118,14 @@ defmodule PB.JSONTest do
                JSON.encode(%{}, schema, :"j.Person", bogus: true)
     end
 
-    test "encode rejects decode-only options", %{schema: schema} do
-      assert {:error, %PB.OptionError{kind: :unknown_options, options: [:ignore_unknown]}} =
-               JSON.to_term(%{}, schema, :"j.Person", ignore_unknown: true)
+    test "encode reports unknown keys unless unknown_fields is :ignore", %{schema: schema} do
+      assert {:error, %PB.ValueError{kind: :unknown_field, operation: :json_encode}} =
+               JSON.to_term(%{bogus: 1}, schema, :"j.Person")
+
+      assert {:ok, %{}} = JSON.to_term(%{bogus: 1}, schema, :"j.Person", unknown_fields: :ignore)
+
+      assert {:error, %PB.OptionError{kind: :invalid_option, option: :unknown_fields}} =
+               JSON.to_term(%{}, schema, :"j.Person", unknown_fields: true)
     end
 
     test "encode rejects non-boolean option values", %{schema: schema} do
@@ -149,7 +154,8 @@ defmodule PB.JSONTest do
       assert {:ok, %{"userId" => 7}} =
                JSON.to_term(%{user_id: 7}, schema, :"j.Person", emit_defaults: false)
 
-      assert {:ok, _} = JSON.from_term(%{"bogus" => 1}, schema, :"j.Person", ignore_unknown: true)
+      assert {:ok, _} =
+               JSON.from_term(%{"bogus" => 1}, schema, :"j.Person", unknown_fields: :ignore)
     end
   end
 
@@ -528,7 +534,7 @@ defmodule PB.JSONTest do
     end
   end
 
-  describe "ignore_unknown enum string" do
+  describe "unknown_fields: :ignore enum string" do
     @ignore_enum_schema %{
       file: [
         %{
@@ -615,14 +621,14 @@ defmodule PB.JSONTest do
 
     test "singular unknown string is dropped", %{ies: ies} do
       {:ok, decoded} =
-        JSON.from_term(%{"color" => "MAUVE"}, ies, :"ie.M", ignore_unknown: true)
+        JSON.from_term(%{"color" => "MAUVE"}, ies, :"ie.M", unknown_fields: :ignore)
 
       assert decoded == %{}
     end
 
     test "singular known string still decodes", %{ies: ies} do
       {:ok, decoded} =
-        JSON.from_term(%{"color" => "RED"}, ies, :"ie.M", ignore_unknown: true)
+        JSON.from_term(%{"color" => "RED"}, ies, :"ie.M", unknown_fields: :ignore)
 
       assert decoded == %{color: :RED}
     end
@@ -633,7 +639,7 @@ defmodule PB.JSONTest do
           %{"colors" => ["RED", "MAUVE", "GREEN", "TAUPE"]},
           ies,
           :"ie.M",
-          ignore_unknown: true
+          unknown_fields: :ignore
         )
 
       assert decoded == %{colors: [:RED, :GREEN]}
@@ -641,7 +647,7 @@ defmodule PB.JSONTest do
 
     test "repeated with all unknown becomes empty list", %{ies: ies} do
       {:ok, decoded} =
-        JSON.from_term(%{"colors" => ["MAUVE", "TAUPE"]}, ies, :"ie.M", ignore_unknown: true)
+        JSON.from_term(%{"colors" => ["MAUVE", "TAUPE"]}, ies, :"ie.M", unknown_fields: :ignore)
 
       assert decoded == %{colors: []}
     end
@@ -652,21 +658,21 @@ defmodule PB.JSONTest do
           %{"byName" => %{"a" => "RED", "b" => "MAUVE", "c" => "GREEN"}},
           ies,
           :"ie.M",
-          ignore_unknown: true
+          unknown_fields: :ignore
         )
 
       assert decoded == %{by_name: %{"a" => :RED, "c" => :GREEN}}
     end
 
-    test "default (ignore_unknown false) still rejects unknown string", %{ies: ies} do
+    test "default (unknown_fields: :error) still rejects unknown string", %{ies: ies} do
       assert {:error, %PB.ValueError{operation: :json_decode, kind: :invalid_enum_value}} =
                JSON.from_term(%{"color" => "MAUVE"}, ies, :"ie.M")
     end
 
-    test "ignore_unknown does not affect integer enum values (open enum keeps int)",
+    test "unknown_fields: :ignore does not affect integer enum values (open enum keeps int)",
          %{ies: ies} do
       {:ok, decoded} =
-        JSON.from_term(%{"color" => 99}, ies, :"ie.M", ignore_unknown: true)
+        JSON.from_term(%{"color" => 99}, ies, :"ie.M", unknown_fields: :ignore)
 
       # proto3 enums are open: unknown integer is preserved.
       assert decoded == %{color: 99}
@@ -678,7 +684,7 @@ defmodule PB.JSONTest do
           %{"pickEnum" => "MAUVE", "pickName" => "fallback"},
           ies,
           :"ie.M",
-          ignore_unknown: true
+          unknown_fields: :ignore
         )
 
       # pickEnum is skipped → the other oneof member is free to claim the slot.
@@ -687,7 +693,7 @@ defmodule PB.JSONTest do
 
     test "oneof enum member with known string still claims the slot", %{ies: ies} do
       {:ok, decoded} =
-        JSON.from_term(%{"pickEnum" => "RED"}, ies, :"ie.M", ignore_unknown: true)
+        JSON.from_term(%{"pickEnum" => "RED"}, ies, :"ie.M", unknown_fields: :ignore)
 
       assert decoded == %{pick: {:pick_enum, :RED}}
     end
@@ -800,9 +806,9 @@ defmodule PB.JSONTest do
              JSON.from_term(%{"bogus" => 1}, schema, :"j.Person")
   end
 
-  test "ignore_unknown skips unknown fields", %{schema: schema} do
+  test "unknown_fields: :ignore skips unknown fields", %{schema: schema} do
     {:ok, decoded} =
-      JSON.from_term(%{"bogus" => 1, "name" => "x"}, schema, :"j.Person", ignore_unknown: true)
+      JSON.from_term(%{"bogus" => 1, "name" => "x"}, schema, :"j.Person", unknown_fields: :ignore)
 
     assert decoded == %{name: "x"}
   end
@@ -2130,7 +2136,7 @@ defmodule PB.JSONTest do
                JSON.from_term(json, schema, @any)
     end
 
-    test "wrapped-WKT Any allows sibling keys with ignore_unknown: true", %{schema: schema} do
+    test "wrapped-WKT Any allows sibling keys with unknown_fields: :ignore", %{schema: schema} do
       json = %{
         "@type" => "type.googleapis.com/google.protobuf.Duration",
         "value" => "5s",
@@ -2138,7 +2144,7 @@ defmodule PB.JSONTest do
       }
 
       expected = any_for(schema, :"google.protobuf.Duration", %{seconds: 5, nanos: 0})
-      assert {:ok, ^expected} = JSON.from_term(json, schema, @any, ignore_unknown: true)
+      assert {:ok, ^expected} = JSON.from_term(json, schema, @any, unknown_fields: :ignore)
     end
 
     test "WKT inner (BoolValue wrapper)", %{schema: schema} do

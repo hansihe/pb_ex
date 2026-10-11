@@ -69,7 +69,7 @@ defmodule PB.TextFormat.FuzzTest do
       text = mutate(Enum.random(@corpus))
 
       for message <- [@proto3, @proto2],
-          opts <- [[], [ignore_unknown: true], [allow_field_numbers: true]] do
+          opts <- [[], [unknown_fields: :ignore], [allow_field_numbers: true]] do
         result =
           try do
             PB.TextFormat.decode(text, TestSchema, message, opts)

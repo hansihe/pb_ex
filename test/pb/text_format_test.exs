@@ -405,14 +405,14 @@ defmodule PB.TextFormatTest do
                decode("[pkg.nope]: 1")
     end
 
-    test "are skipped with ignore_unknown" do
+    test "are skipped with unknown_fields: :ignore" do
       text = "a: 1 b: [1, 'x', {c: 2}] d { e: -inf } [pkg.ext] < f: 'g' > optional_int32: 7"
-      assert decode(text, @proto3, ignore_unknown: true) == {:ok, %{optional_int32: 7}}
+      assert decode(text, @proto3, unknown_fields: :ignore) == {:ok, %{optional_int32: 7}}
     end
 
     test "a skipped field without a colon must hold a message" do
       assert {:error, %DecodeError{kind: :malformed_text}} =
-               decode("a [1]", @proto3, ignore_unknown: true)
+               decode("a [1]", @proto3, unknown_fields: :ignore)
     end
   end
 
@@ -573,13 +573,13 @@ defmodule PB.TextFormatTest do
       assert {:error, %ValueError{kind: :unknown_field, path: ["150"]}} =
                decode("150: 1", @proto2, allow_field_numbers: true)
 
-      assert decode("12345: 1 150 {}", @proto2, allow_field_numbers: true, ignore_unknown: true) ==
-               {:ok, %{}}
+      opts = [allow_field_numbers: true, unknown_fields: :ignore]
+      assert decode("12345: 1 150 {}", @proto2, opts) == {:ok, %{}}
     end
 
     test "are unknown names without allow_field_numbers" do
       assert {:error, %ValueError{kind: :unknown_field, path: ["1"]}} = decode("1: 5")
-      assert decode("1: 5 2 { a: 1 }", @proto3, ignore_unknown: true) == {:ok, %{}}
+      assert decode("1: 5 2 { a: 1 }", @proto3, unknown_fields: :ignore) == {:ok, %{}}
     end
 
     test "must be decimal int32 values" do
@@ -872,7 +872,13 @@ defmodule PB.TextFormatTest do
                TextFormat.encode(%{}, TestSchema, :"no.Such")
 
       assert {:error, %OptionError{kind: :unknown_options}} =
-               TextFormat.encode(%{}, TestSchema, @proto3, ignore_unknown: true)
+               TextFormat.encode(%{}, TestSchema, @proto3, allow_field_numbers: true)
+
+      assert {:error, %ValueError{kind: :unknown_field, operation: :text_encode}} =
+               TextFormat.encode(%{bogus: 1}, TestSchema, @proto3)
+
+      assert {:ok, ""} =
+               TextFormat.encode(%{bogus: 1}, TestSchema, @proto3, unknown_fields: :ignore)
 
       assert_raise ValueError, fn -> encode!(%{optional_int32: "x"}) end
     end
@@ -914,7 +920,7 @@ defmodule PB.TextFormatTest do
                decode("", @proto3, emit_defaults: true)
 
       assert {:error, %OptionError{kind: :invalid_option}} =
-               decode("", @proto3, ignore_unknown: 1)
+               decode("", @proto3, unknown_fields: true)
 
       assert {:error, %OptionError{kind: :invalid_options}} = decode("", @proto3, :nope)
     end

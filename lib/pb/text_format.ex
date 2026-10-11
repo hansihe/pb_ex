@@ -100,9 +100,9 @@ defmodule PB.TextFormat do
 
   Decode (`decode/4`) accepts:
 
-    * `:ignore_unknown` — when `true`, fields the message does not define are
-      skipped instead of returning
-      `{:error, %PB.ValueError{kind: :unknown_field}}`. Defaults to `false`.
+    * `:unknown_fields` — `:error` (the default) returns
+      `{:error, %PB.ValueError{kind: :unknown_field}}` for a field the message
+      does not define; `:ignore` skips it.
     * `:allow_field_numbers` — when `true`, a field may be named by its number
       (`3: "x"`), as the C++ parser's `AllowFieldNumber` permits. A number
       naming an extension sets that extension, and a reserved number is
@@ -111,6 +111,8 @@ defmodule PB.TextFormat do
 
   Encode (`encode/4`, `encode_iodata/4`) accepts:
 
+    * `:unknown_fields` — how map keys the message does not define are
+      handled, as for `PB.encode/4`: `:error` (the default) or `:ignore`.
     * `:single_line` — when `true`, prints everything on one line with fields
       separated by a space: `a: 1 b { c: 2 }`. Defaults to `false`.
     * `:short_repeated` — when `true`, prints repeated numeric, boolean and
@@ -119,8 +121,8 @@ defmodule PB.TextFormat do
     * `:print_unknown_fields` — when `false`, leaves unknown fields out.
       Defaults to `true`.
 
-  An unknown option key, an option meant for the other direction, or a
-  non-boolean value returns `{:error, %PB.OptionError{}}`.
+  An unknown option key, an option meant for the other direction, or a value
+  the option does not take returns `{:error, %PB.OptionError{}}`.
   """
 
   alias PB.DecodeError
@@ -129,15 +131,23 @@ defmodule PB.TextFormat do
   alias PB.TextFormat.{Decoder, Encoder, Layout, Lexer, Parser}
 
   @type opts :: [
-          ignore_unknown: boolean,
+          unknown_fields: :error | :ignore,
           allow_field_numbers: boolean,
           single_line: boolean,
           short_repeated: boolean,
           print_unknown_fields: boolean
         ]
 
-  @decode_opts [:ignore_unknown, :allow_field_numbers]
-  @encode_opts [:single_line, :short_repeated, :print_unknown_fields]
+  @decode_opts [
+    unknown_fields: {[:error, :ignore], :error},
+    allow_field_numbers: {:boolean, false}
+  ]
+  @encode_opts [
+    unknown_fields: {[:error, :ignore], :error},
+    single_line: {:boolean, false},
+    short_repeated: {:boolean, false},
+    print_unknown_fields: {:boolean, true}
+  ]
   @operation :text_decode
   @encode_operation :text_encode
 
@@ -214,14 +224,17 @@ defmodule PB.TextFormat do
       # Encoding and decoding applies `PB.encode/4`'s validation and yields the
       # canonical value the wire would carry, which is what gets printed.
       with {:ok, msg} <- fetch_message(schema, message_name, @encode_operation),
-           {:ok, bytes} <- encode_operation(PB.encode(data, schema, message_name)),
+           {:ok, bytes} <-
+             encode_operation(
+               PB.encode(data, schema, message_name, unknown_fields: opts.unknown_fields)
+             ),
            {:ok, canonical} <- encode_operation(PB.decode(bytes, schema, message_name)),
            {:ok, fields} <-
              canonical
              |> Frontend.to_proto(message_name, msg, schema)
              |> RuntimeErrors.normalize_result(@encode_operation, message_name) do
         entries = Encoder.entries(message_name, fields, schema, opts)
-        {:ok, Layout.render(entries, Keyword.get(opts, :single_line, false))}
+        {:ok, Layout.render(entries, opts.single_line)}
       end
     end
   end
@@ -308,7 +321,7 @@ defmodule PB.TextFormat do
 
   defp validate_opts(opts, allowed, operation, message_name) do
     opts
-    |> Options.validate_booleans(allowed)
+    |> Options.validate(allowed)
     |> RuntimeErrors.normalize_result(operation, message_name)
   end
 end

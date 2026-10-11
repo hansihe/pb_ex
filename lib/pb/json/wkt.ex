@@ -599,7 +599,7 @@ defmodule PB.JSON.WKT do
           {:ok, raw} ->
             extras = Map.delete(rest, "value")
 
-            if map_size(extras) > 0 and not Keyword.get(opts, :ignore_unknown, false) do
+            if map_size(extras) > 0 and opts.unknown_fields != :ignore do
               [extra_key | _] = Map.keys(extras)
 
               Errors.raise!(:unknown_field, extra_key,

@@ -150,7 +150,7 @@ defmodule PB.JSON.Scalars do
   def encode_enum(schema, field, value, opts) do
     cond do
       field.type_name == @null_value -> encode_null_value_enum!(field, value)
-      opts[:enums_as_ints] -> enum_to_int(schema, field, value)
+      opts.enums_as_ints -> enum_to_int(schema, field, value)
       is_atom(value) -> Atom.to_string(value)
       is_integer(value) -> enum_int_to_name(schema, field, value)
       true -> Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})
@@ -206,7 +206,7 @@ defmodule PB.JSON.Scalars do
 
   # ── Enum decoding ────────────────────────────────────────────────────
   # Returns the decoded value, the atom `:skip` (only for unknown enum
-  # strings under `ignore_unknown: true`), or raises.
+  # strings under `unknown_fields: :ignore`), or raises.
   def decode_enum(schema, field, value, _opts) when is_integer(value) do
     enum = schema.enums[field.type_name]
 
@@ -259,11 +259,11 @@ defmodule PB.JSON.Scalars do
     )
   end
 
-  # ProtoJSON `ignore_unknown`: an unknown enum string value is dropped
+  # ProtoJSON `unknown_fields: :ignore`: an unknown enum string value is dropped
   # rather than erroring. Returns `:skip`; callers in the singular field
   # path leave the field absent, list/map paths filter the element out.
   defp unknown_enum_string(field, value, opts) do
-    if Keyword.get(opts, :ignore_unknown, false) do
+    if opts.unknown_fields == :ignore do
       :skip
     else
       Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})

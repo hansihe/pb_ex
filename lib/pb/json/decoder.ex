@@ -70,7 +70,7 @@ defmodule PB.JSON.Decoder do
 
         case Map.get(lookup, key) do
           nil ->
-            if opts[:ignore_unknown] do
+            if opts.unknown_fields == :ignore do
               {acc, oneof_seen, field_seen}
             else
               Errors.raise!(:unknown_field, key, path: [key])
@@ -126,7 +126,7 @@ defmodule PB.JSON.Decoder do
   defp decode_one(schema, field, value, acc, seen, opts, depth) do
     case decode_field(field, value, schema, opts, depth) do
       :skip ->
-        # Singular unknown enum with `ignore_unknown` -- leave the
+        # Singular unknown enum with `unknown_fields: :ignore` -- leave the
         # field absent and don't claim the oneof slot.
         {acc, seen}
 

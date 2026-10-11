@@ -57,10 +57,12 @@ Encode (`encode/4`, `to_term/4`) accepts:
   (default `false`; parsers always accept both).
 - `:enums_as_ints` — emit enum numeric values instead of names (default `false`).
 
-Decode (`decode/4`, `from_term/4`) accepts:
+Both directions accept:
 
-- `:ignore_unknown` — skip unknown JSON keys (default `false`, which returns a
-  `kind: :unknown_field` error).
+- `:unknown_fields` — `:error` (the default) returns a `kind: :unknown_field`
+  error for a key the message does not define; `:ignore` skips it. On decode,
+  `:ignore` also skips enum strings the enum does not declare.
 
 Options are validated per direction: a typo, a wrong-direction option, or a
-non-boolean value returns a `PB.OptionError` rather than being silently ignored.
+value the option does not take returns a `PB.OptionError` rather than being
+silently ignored.

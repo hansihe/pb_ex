@@ -23,7 +23,7 @@ defmodule PB.TextFormat.Decoder do
   #   * inside a google.protobuf.Any, `[prefix/pkg.Message] { ... }` sets
   #     `type_url` and packs the message into `value`; the prefix must be one
   #     C++ resolves (`type.googleapis.com/` or `type.googleprod.com/`)
-  #   * reserved field names are skipped, and with `ignore_unknown` so are
+  #   * reserved field names are skipped, and with `unknown_fields: :ignore` so are
   #     unknown fields, as C++ does with `allow_unknown_field`
   #   * with `allow_field_numbers`, a decimal number names the field, or the
   #     extension, with that number, and a reserved number is skipped, as C++
@@ -109,7 +109,7 @@ defmodule PB.TextFormat.Decoder do
   end
 
   defp resolve(name, msg, %{name: {:number, text}} = node, opts, path) do
-    number = if Keyword.get(opts, :allow_field_numbers, false), do: field_number(text)
+    number = if opts.allow_field_numbers, do: field_number(text)
 
     cond do
       is_nil(number) ->
@@ -171,7 +171,7 @@ defmodule PB.TextFormat.Decoder do
     do: Enum.any?(ranges, fn %{start: first, end: last} -> number >= first and number < last end)
 
   defp unknown!(message_name, node, field_name, opts, path) do
-    if Keyword.get(opts, :ignore_unknown, false),
+    if opts.unknown_fields == :ignore,
       do: skip!(node, path),
       else: throw({:text_error, {:unknown_field, message_name, path ++ [field_name]}})
   end

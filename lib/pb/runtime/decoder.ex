@@ -5,6 +5,7 @@ defmodule PB.Runtime.Decoder do
   alias PB.Runtime.Decoder.Finalize
   alias PB.Runtime.Decoder.Scan
   alias PB.Runtime.Errors
+  alias PB.Runtime.Options
   alias PB.Runtime.Schema, as: RuntimeSchema
 
   @typedoc "Public runtime decode options accepted by `PB.decode/4`."
@@ -12,6 +13,8 @@ defmodule PB.Runtime.Decoder do
 
   @typedoc "Normalized decode options shared by scan and finalization."
   @type normalized_opts :: Scan.opts()
+
+  @opts [defaults: {:boolean, false}, message_names: {[nil, :root], nil}]
 
   @typedoc "Decoded public message term."
   @type decoded :: term()
@@ -50,35 +53,7 @@ defmodule PB.Runtime.Decoder do
   end
 
   @spec normalize_opts(term()) :: {:ok, normalized_opts()} | {:error, term()}
-  defp normalize_opts(opts) when is_list(opts) do
-    if Keyword.keyword?(opts) do
-      unknown = Keyword.keys(opts) -- [:defaults, :message_names]
-      defaults = Keyword.get(opts, :defaults, false)
-      message_names = Keyword.get(opts, :message_names, nil)
-
-      cond do
-        unknown != [] ->
-          {:error, {:unknown_options, unknown}}
-
-        not is_boolean(defaults) ->
-          {:error, {:invalid_option, :defaults, defaults}}
-
-        message_names not in [nil, :root] ->
-          {:error, {:invalid_option, :message_names, message_names}}
-
-        true ->
-          {:ok,
-           %{
-             defaults: defaults,
-             message_names: message_names
-           }}
-      end
-    else
-      {:error, {:invalid_options, Errors.type_of(opts)}}
-    end
-  end
-
-  defp normalize_opts(opts), do: {:error, {:invalid_options, Errors.type_of(opts)}}
+  defp normalize_opts(opts), do: Options.validate(opts, @opts)
 
   @spec ensure_binary(term()) :: :ok | {:error, term()}
   defp ensure_binary(binary) when is_binary(binary), do: :ok

@@ -79,7 +79,7 @@ defmodule PB.TextFormat.Encoder do
       |> Enum.sort_by(fn {field, _value} -> field.number end)
       |> Enum.flat_map(fn {field, value} -> field_entries(name, field, value, schema, opts) end)
 
-    if Keyword.get(opts, :print_unknown_fields, true),
+    if opts.print_unknown_fields,
       do: known ++ unknown_entries(Map.get(fields, @unknown_key, []), @unknown_message_depth),
       else: known
   end
@@ -139,7 +139,7 @@ defmodule PB.TextFormat.Encoder do
         end)
 
       field.cardinality == :repeated ->
-        if Keyword.get(opts, :short_repeated, false) and field.type in @short_repeated_types and
+        if opts.short_repeated and field.type in @short_repeated_types and
              value != [] do
           [{:list, name, Enum.map(value, &Scalars.format(field, &1))}]
         else

@@ -122,7 +122,7 @@ defmodule PB.TestSupport.ProtobufConformance.Testee do
 
   defp json_decode_opts(request) do
     case Map.get(request, :test_category) do
-      :JSON_IGNORE_UNKNOWN_PARSING_TEST -> [ignore_unknown: true]
+      :JSON_IGNORE_UNKNOWN_PARSING_TEST -> [unknown_fields: :ignore]
       _ -> []
     end
   end

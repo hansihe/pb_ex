@@ -4,6 +4,11 @@ A consolidated list of the options each public entry point accepts. Unknown
 options are rejected (they raise or return a `PB.OptionError`) rather than being
 silently ignored.
 
+`:unknown_fields` means the same everywhere: on encode, how map keys the
+message does not define are handled; on JSON and text format decode, how fields
+in the input the message does not define are handled. Binary decode always
+keeps unknown fields, as protobuf requires.
+
 ## `PB.compile/2`
 
 | Option | Values | Default | Notes |
@@ -45,24 +50,28 @@ See [Decoding into structs](../how-to/structs-and-representation.md) and
 | `:emit_defaults` | `boolean` | `false` |
 | `:use_proto_names` | `boolean` | `false` |
 | `:enums_as_ints` | `boolean` | `false` |
+| `:unknown_fields` | `:error \| :ignore` | `:error` |
 
 ## `PB.JSON` decode (`decode/4`, `from_term/4`)
 
 | Option | Values | Default |
 |--------|--------|---------|
-| `:ignore_unknown` | `boolean` | `false` |
+| `:unknown_fields` | `:error \| :ignore` | `:error` |
+
+`:ignore` also skips enum strings the enum does not declare.
 
 ## `PB.TextFormat` decode (`decode/4`)
 
 | Option | Values | Default |
 |--------|--------|---------|
-| `:ignore_unknown` | `boolean` | `false` |
+| `:unknown_fields` | `:error \| :ignore` | `:error` |
 | `:allow_field_numbers` | `boolean` | `false` |
 
 ## `PB.TextFormat` encode (`encode/4`, `encode_iodata/4`)
 
 | Option | Values | Default |
 |--------|--------|---------|
+| `:unknown_fields` | `:error \| :ignore` | `:error` |
 | `:single_line` | `boolean` | `false` |
 | `:short_repeated` | `boolean` | `false` |
 | `:print_unknown_fields` | `boolean` | `true` |
