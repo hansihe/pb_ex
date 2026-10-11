@@ -251,7 +251,7 @@ defmodule PB.TermRepresentationTest do
     end
 
     test "struct representation rejects known extensions unless they have storage" do
-      assert_raise ArgumentError, ~r/cannot drop known extensions/, fn ->
+      assert_raise PB.SchemaError, ~r/needs extensions: \{:field, name\}/, fn ->
         PB.compile(extension_descriptor(),
           projections: [{:"extrep.Msg", struct: ExtBaseTerm}]
         )
@@ -273,7 +273,7 @@ defmodule PB.TermRepresentationTest do
     end
 
     test "compile-time representation overrides conflict with proto options" do
-      assert_raise ArgumentError, ~r/conflicting PB projection/, fn ->
+      assert_raise PB.SchemaError, ~r/conflicting projections/, fn ->
         PB.compile(representation_option_descriptor(),
           projections: [{:"option_rep.Person", struct: PersonTerm}]
         )
@@ -281,7 +281,7 @@ defmodule PB.TermRepresentationTest do
     end
 
     test "proto-source representation option without :struct or :unwrap is rejected" do
-      assert_raise ArgumentError, ~r/must set :struct or :unwrap/, fn ->
+      assert_raise PB.SchemaError, ~r/for :"aux_only.Msg": must set :struct or :unwrap/, fn ->
         PB.compile(aux_only_representation_option_descriptor())
       end
     end

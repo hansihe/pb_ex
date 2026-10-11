@@ -71,24 +71,24 @@ defmodule PB.AdapterTest do
     legacy_inputs = [
       {[projections: [{@message, adapter: bare_keyword}]], ~r/must be a %PB.Adapter\{\}/},
       {[projections: [{@message, adapter: bare_map}]], ~r/must be a %PB.Adapter\{\}/},
-      {[projections: [{@message, [bare_map]}]], ~r/to be a keyword list/}
+      {[projections: [{@message, [bare_map]}]], ~r/expected a keyword list/}
     ]
 
     for {opts, pattern} <- legacy_inputs do
-      assert_raise ArgumentError, pattern, fn ->
+      assert_raise PB.OptionError, pattern, fn ->
         PB.compile(@descriptor_set, opts)
       end
     end
   end
 
   test "compile rejects projection entries without a kind" do
-    assert_raise ArgumentError, ~r/must set :adapter, :struct, :unwrap, or :oneofs/, fn ->
+    assert_raise PB.OptionError, ~r/must set :adapter, :struct, :unwrap or :oneofs/, fn ->
       PB.compile(@descriptor_set, projections: [{@message, []}])
     end
   end
 
   test "compile rejects unknown projection options" do
-    assert_raise ArgumentError, ~r/unknown PB projection option/, fn ->
+    assert_raise PB.OptionError, ~r/unknown option\(s\) \[:bogus\]/, fn ->
       PB.compile(@descriptor_set,
         projections: [{@message, [adapter: @adapter, bogus: true]}]
       )
@@ -96,7 +96,7 @@ defmodule PB.AdapterTest do
   end
 
   test "compile rejects combining :adapter with structural options" do
-    assert_raise ArgumentError, ~r/cannot combine :adapter with/, fn ->
+    assert_raise PB.OptionError, ~r/cannot combine :adapter with/, fn ->
       PB.compile(@descriptor_set,
         projections: [{@message, [adapter: @adapter, struct: __MODULE__]}]
       )

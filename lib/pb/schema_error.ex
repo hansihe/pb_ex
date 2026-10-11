@@ -55,6 +55,10 @@ defmodule PB.SchemaError do
   defp format(%__MODULE__{kind: :unsupported_edition, type_name: edition}),
     do: "unsupported protobuf edition #{inspect(edition)}"
 
+  defp format(%__MODULE__{kind: :invalid_schema, type_name: type_name, reason: reason})
+       when is_binary(reason),
+       do: "invalid schema for #{inspect(type_name)}: #{reason}"
+
   defp format(%__MODULE__{kind: :invalid_schema, type_name: type_name, reason: reason}),
     do: "invalid schema for #{inspect(type_name)}: #{inspect(reason)}"
 end

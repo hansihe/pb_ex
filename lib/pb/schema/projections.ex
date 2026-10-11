@@ -47,7 +47,8 @@ defmodule PB.Schema.Projections do
 
         option ->
           [
-            {fqn, normalize_message_spec(fqn, message_option_to_spec!(fqn, option)),
+            {fqn,
+             normalize_message_spec(:proto_source, fqn, message_option_to_spec!(fqn, option)),
              :proto_source}
           ]
       end
@@ -65,8 +66,13 @@ defmodule PB.Schema.Projections do
             key = {fqn, oneof.name}
 
             [
-              {key, normalize_oneof_spec(fqn, oneof.name, oneof_option_to_spec!(key, option)),
-               :proto_source}
+              {key,
+               normalize_oneof_spec(
+                 :proto_source,
+                 fqn,
+                 oneof.name,
+                 oneof_option_to_spec!(fqn, oneof.name, option)
+               ), :proto_source}
             ]
         end
       end)
@@ -91,12 +97,10 @@ defmodule PB.Schema.Projections do
     |> Keyword.merge(aux_policy_option!(fqn, :extensions, Map.get(option, :extensions)))
   end
 
-  defp message_option_to_spec!(fqn, option) do
-    raise ArgumentError,
-          "invalid PB message representation option for #{inspect(fqn)}: #{inspect(option)}"
-  end
+  defp message_option_to_spec!(fqn, option),
+    do: invalid_schema!(fqn, "invalid message representation option #{inspect(option)}")
 
-  defp oneof_option_to_spec!(key, option) when is_map(option) do
+  defp oneof_option_to_spec!(fqn, oneof_name, option) when is_map(option) do
     case Map.get(option, :representation) do
       :IDENTITY ->
         [representation: :identity]
@@ -105,35 +109,34 @@ defmodule PB.Schema.Projections do
         [representation: :identity]
 
       nil ->
-        raise ArgumentError,
-              "PB oneof representation option for #{inspect(key)} must set representation"
+        invalid_schema!(fqn, "oneof #{inspect(oneof_name)} option must set representation")
 
       other ->
-        raise ArgumentError,
-              "invalid PB oneof representation option for #{inspect(key)}: #{inspect(other)}"
+        invalid_schema!(
+          fqn,
+          "invalid oneof #{inspect(oneof_name)} representation #{inspect(other)}"
+        )
     end
   end
 
-  defp oneof_option_to_spec!(key, option) do
-    raise ArgumentError,
-          "invalid PB oneof representation option for #{inspect(key)}: #{inspect(option)}"
+  defp oneof_option_to_spec!(fqn, oneof_name, option) do
+    invalid_schema!(
+      fqn,
+      "invalid oneof #{inspect(oneof_name)} representation option #{inspect(option)}"
+    )
   end
 
   defp unwrap_option!(_fqn, nil), do: []
 
   defp unwrap_option!(_fqn, %{target: {:only_field, true}}), do: [unwrap: true]
 
-  defp unwrap_option!(fqn, %{target: {:only_field, false}}) do
-    raise ArgumentError,
-          "invalid PB unwrap representation option for #{inspect(fqn)}: only_field must be true"
-  end
+  defp unwrap_option!(fqn, %{target: {:only_field, false}}),
+    do: invalid_schema!(fqn, "unwrap representation option only_field must be true")
 
-  defp unwrap_option!(_fqn, %{target: {:field, field}}), do: [unwrap: option_field!(field)]
+  defp unwrap_option!(fqn, %{target: {:field, field}}), do: [unwrap: option_field!(fqn, field)]
 
-  defp unwrap_option!(fqn, option) do
-    raise ArgumentError,
-          "invalid PB unwrap representation option for #{inspect(fqn)}: #{inspect(option)}"
-  end
+  defp unwrap_option!(fqn, option),
+    do: invalid_schema!(fqn, "invalid unwrap representation option #{inspect(option)}")
 
   defp aux_policy_option!(_fqn, _name, nil), do: []
 
@@ -141,35 +144,29 @@ defmodule PB.Schema.Projections do
     [{name, aux_policy_value!(fqn, name, policy, value)}]
   end
 
-  defp aux_policy_option!(fqn, name, option) do
-    raise ArgumentError,
-          "invalid PB #{name} representation option for #{inspect(fqn)}: #{inspect(option)}"
-  end
+  defp aux_policy_option!(fqn, name, option),
+    do: invalid_schema!(fqn, "invalid #{name} representation option #{inspect(option)}")
 
   defp aux_policy_value!(_fqn, :preserved_unknown_fields, :drop, true), do: :drop
   defp aux_policy_value!(_fqn, :preserved_unknown_fields, :reject, true), do: :reject
 
-  defp aux_policy_value!(_fqn, :preserved_unknown_fields, :field, field),
-    do: {:field, option_field!(field)}
+  defp aux_policy_value!(fqn, :preserved_unknown_fields, :field, field),
+    do: {:field, option_field!(fqn, field)}
 
   defp aux_policy_value!(_fqn, :extensions, :reject, true), do: :reject
-  defp aux_policy_value!(_fqn, :extensions, :field, field), do: {:field, option_field!(field)}
+  defp aux_policy_value!(fqn, :extensions, :field, field), do: {:field, option_field!(fqn, field)}
 
-  defp aux_policy_value!(fqn, name, policy, value) do
-    raise ArgumentError,
-          "invalid PB #{name} representation option for #{inspect(fqn)}: " <>
-            inspect({policy, value})
-  end
+  defp aux_policy_value!(fqn, name, policy, value),
+    do: invalid_schema!(fqn, "invalid #{name} representation option #{inspect({policy, value})}")
 
   defp maybe_put_option(opts, _name, nil), do: opts
   defp maybe_put_option(opts, name, value), do: Keyword.put(opts, name, value)
 
-  defp option_field!(field) when is_atom(field), do: field
-  defp option_field!(field) when is_binary(field) and field != "", do: String.to_atom(field)
+  defp option_field!(_fqn, field) when is_atom(field), do: field
+  defp option_field!(_fqn, field) when is_binary(field) and field != "", do: String.to_atom(field)
 
-  defp option_field!(field) do
-    raise ArgumentError, "invalid PB representation field option: #{inspect(field)}"
-  end
+  defp option_field!(fqn, field),
+    do: invalid_schema!(fqn, "invalid representation field option #{inspect(field)}")
 
   defp projections_opt_entries(nil), do: []
   defp projections_opt_entries([]), do: []
@@ -178,11 +175,8 @@ defmodule PB.Schema.Projections do
     Enum.flat_map(projections, &projection_entry_to_internal!/1)
   end
 
-  defp projections_opt_entries(projections) do
-    raise ArgumentError,
-          "expected PB :projections to be a list of {fqn, options} entries, got: " <>
-            inspect(projections)
-  end
+  defp projections_opt_entries(projections),
+    do: invalid!(:projections_opt, nil, "expected a list, got: #{inspect(projections)}")
 
   @projection_entry_keys [
     :adapter,
@@ -195,15 +189,13 @@ defmodule PB.Schema.Projections do
 
   defp projection_entry_to_internal!({fqn, opts}) when is_atom(fqn) and is_list(opts) do
     unless Keyword.keyword?(opts) do
-      raise ArgumentError,
-            "expected PB projection options for #{inspect(fqn)} to be a keyword list"
+      invalid!(:projections_opt, fqn, "expected a keyword list, got: #{inspect(opts)}")
     end
 
     unknown = Keyword.keys(opts) -- @projection_entry_keys
 
     if unknown != [] do
-      raise ArgumentError,
-            "unknown PB projection option(s) for #{inspect(fqn)}: #{inspect(unknown)}"
+      invalid!(:projections_opt, fqn, "unknown option(s) #{inspect(unknown)}")
     end
 
     case Keyword.fetch(opts, :adapter) do
@@ -211,9 +203,7 @@ defmodule PB.Schema.Projections do
         other = Keyword.delete(opts, :adapter) |> Keyword.keys()
 
         if other != [] do
-          raise ArgumentError,
-                "PB projection for #{inspect(fqn)} cannot combine :adapter with " <>
-                  inspect(other)
+          invalid!(:projections_opt, fqn, "cannot combine :adapter with #{inspect(other)}")
         end
 
         [{fqn, normalize_adapter!(fqn, adapter), :projections_opt}]
@@ -223,10 +213,8 @@ defmodule PB.Schema.Projections do
     end
   end
 
-  defp projection_entry_to_internal!(entry) do
-    raise ArgumentError,
-          "expected PB projection entry of shape {fqn, options}, got: " <> inspect(entry)
-  end
+  defp projection_entry_to_internal!(entry),
+    do: invalid!(:projections_opt, nil, "expected {fqn, options}, got: #{inspect(entry)}")
 
   defp message_entry(fqn, opts) do
     has_struct = Keyword.has_key?(opts, :struct)
@@ -238,59 +226,47 @@ defmodule PB.Schema.Projections do
 
     cond do
       has_struct or has_unwrap ->
-        spec = normalize_message_spec(fqn, Keyword.drop(opts, [:oneofs]))
+        spec = normalize_message_spec(:projections_opt, fqn, Keyword.drop(opts, [:oneofs]))
         [{fqn, spec, :projections_opt}]
 
       has_aux ->
-        raise ArgumentError,
-              "PB projection for #{inspect(fqn)} requires :struct or :unwrap when " <>
-                ":preserved_unknown_fields or :extensions is set"
+        invalid!(
+          :projections_opt,
+          fqn,
+          ":preserved_unknown_fields and :extensions require :struct or :unwrap"
+        )
 
       has_oneofs ->
         []
 
       true ->
-        raise ArgumentError,
-              "PB projection for #{inspect(fqn)} must set :adapter, :struct, :unwrap, " <>
-                "or :oneofs"
+        invalid!(:projections_opt, fqn, "must set :adapter, :struct, :unwrap or :oneofs")
     end
   end
 
   defp oneof_entries(_fqn, nil), do: []
 
-  defp oneof_entries(fqn, oneofs) when is_list(oneofs) do
-    unless Keyword.keyword?(oneofs) do
-      raise ArgumentError,
-            "expected PB :oneofs for #{inspect(fqn)} to be a keyword list of " <>
-              "{oneof_name, options}"
+  defp oneof_entries(fqn, oneofs) do
+    unless is_list(oneofs) and Keyword.keyword?(oneofs) do
+      invalid!(
+        :projections_opt,
+        fqn,
+        ":oneofs must be a keyword list of {oneof_name, options}, got: #{inspect(oneofs)}"
+      )
     end
 
     Enum.map(oneofs, fn {oneof_name, oneof_opts} ->
       key = {fqn, oneof_name}
-      {key, normalize_oneof_spec(fqn, oneof_name, oneof_opts), :projections_opt}
+      {key, normalize_oneof_spec(:projections_opt, fqn, oneof_name, oneof_opts), :projections_opt}
     end)
-  end
-
-  defp oneof_entries(fqn, other) do
-    raise ArgumentError,
-          "expected PB :oneofs for #{inspect(fqn)} to be a keyword list, got: " <>
-            inspect(other)
   end
 
   defp normalize_adapter!(_fqn, %PB.Adapter{} = adapter), do: adapter
 
-  defp normalize_adapter!(fqn, other) do
-    raise ArgumentError,
-          "PB projection :adapter for #{inspect(fqn)} must be a %PB.Adapter{}, got: " <>
-            inspect(other)
-  end
+  defp normalize_adapter!(fqn, other),
+    do: invalid!(:projections_opt, fqn, ":adapter must be a %PB.Adapter{}, got #{inspect(other)}")
 
-  defp normalize_message_spec(fqn, spec) when is_list(spec) do
-    unless Keyword.keyword?(spec) do
-      raise ArgumentError,
-            "expected PB projection for #{inspect(fqn)} to be a keyword list"
-    end
-
+  defp normalize_message_spec(source, fqn, spec) do
     preserved_unknown_fields = Keyword.get(spec, :preserved_unknown_fields, :drop)
     extensions = Keyword.get(spec, :extensions, :reject)
 
@@ -298,99 +274,86 @@ defmodule PB.Schema.Projections do
       {{:ok, module}, :error} ->
         %{
           kind: :struct,
-          module: normalize_struct_module!(fqn, module),
+          module: normalize_struct_module!(source, fqn, module),
           preserved_unknown_fields:
-            normalize_preserved_unknown_fields!(fqn, preserved_unknown_fields, :struct),
-          extensions: normalize_extensions!(fqn, extensions, :struct)
+            normalize_preserved_unknown_fields!(source, fqn, preserved_unknown_fields, :struct),
+          extensions: normalize_extensions!(source, fqn, extensions, :struct)
         }
 
       {:error, {:ok, field}} ->
         %{
           kind: :unwrap,
-          field: normalize_unwrap_field!(fqn, field),
+          field: normalize_unwrap_field!(source, fqn, field),
           preserved_unknown_fields:
-            normalize_preserved_unknown_fields!(fqn, preserved_unknown_fields, :unwrap),
-          extensions: normalize_extensions!(fqn, extensions, :unwrap)
+            normalize_preserved_unknown_fields!(source, fqn, preserved_unknown_fields, :unwrap),
+          extensions: normalize_extensions!(source, fqn, extensions, :unwrap)
         }
 
       {{:ok, _module}, {:ok, _field}} ->
-        raise ArgumentError,
-              "PB projection for #{inspect(fqn)} cannot set both :struct and :unwrap"
+        invalid!(source, fqn, "cannot set both :struct and :unwrap")
 
       {:error, :error} ->
-        raise ArgumentError,
-              "PB projection for #{inspect(fqn)} must set :struct or :unwrap"
+        invalid!(source, fqn, "must set :struct or :unwrap")
     end
   end
 
-  defp normalize_struct_module!(_fqn, module) when is_atom(module), do: module
+  defp normalize_struct_module!(_source, _fqn, module) when is_atom(module), do: module
 
-  defp normalize_struct_module!(fqn, module) when is_binary(module) do
-    parts = String.split(module, ".", trim: true)
-
-    if parts == [] do
-      raise ArgumentError,
-            "invalid PB struct representation for #{inspect(fqn)}: #{inspect(module)}"
+  defp normalize_struct_module!(source, fqn, module) when is_binary(module) do
+    case String.split(module, ".", trim: true) do
+      [] -> normalize_struct_module!(source, fqn, nil)
+      parts -> Module.concat(parts)
     end
-
-    Module.concat(parts)
   end
 
-  defp normalize_struct_module!(fqn, module) do
-    raise ArgumentError,
-          "invalid PB struct representation for #{inspect(fqn)}: #{inspect(module)}"
-  end
+  defp normalize_struct_module!(source, fqn, module),
+    do: invalid!(source, fqn, "invalid :struct module #{inspect(module)}")
 
-  defp normalize_unwrap_field!(_fqn, true), do: true
-  defp normalize_unwrap_field!(_fqn, field) when is_atom(field), do: field
+  defp normalize_unwrap_field!(_source, _fqn, true), do: true
+  defp normalize_unwrap_field!(_source, _fqn, field) when is_atom(field), do: field
 
-  defp normalize_unwrap_field!(fqn, field) do
-    raise ArgumentError,
-          "invalid PB unwrap representation for #{inspect(fqn)}: #{inspect(field)}"
-  end
+  defp normalize_unwrap_field!(source, fqn, field),
+    do: invalid!(source, fqn, "invalid :unwrap field #{inspect(field)}")
 
-  defp normalize_preserved_unknown_fields!(_fqn, policy, :struct)
+  defp normalize_preserved_unknown_fields!(_source, _fqn, policy, :struct)
        when policy in [:drop, :reject],
        do: policy
 
-  defp normalize_preserved_unknown_fields!(_fqn, {:field, field}, :struct) when is_atom(field),
-    do: {:field, field}
+  defp normalize_preserved_unknown_fields!(_source, _fqn, {:field, field}, :struct)
+       when is_atom(field),
+       do: {:field, field}
 
-  defp normalize_preserved_unknown_fields!(_fqn, policy, :unwrap) when policy in [:drop, :reject],
-    do: policy
+  defp normalize_preserved_unknown_fields!(_source, _fqn, policy, :unwrap)
+       when policy in [:drop, :reject],
+       do: policy
 
-  defp normalize_preserved_unknown_fields!(fqn, policy, kind) do
-    raise ArgumentError,
-          "invalid PB preserved-unknown-fields representation policy for #{inspect(fqn)} " <>
-            "(#{kind}): #{inspect(policy)}"
+  defp normalize_preserved_unknown_fields!(source, fqn, policy, kind) do
+    invalid!(
+      source,
+      fqn,
+      "invalid :preserved_unknown_fields policy for #{kind} #{inspect(policy)}"
+    )
   end
 
-  defp normalize_extensions!(_fqn, policy, :struct) when policy == :reject, do: policy
+  defp normalize_extensions!(_source, _fqn, :reject, _kind), do: :reject
 
-  defp normalize_extensions!(_fqn, {:field, field}, :struct) when is_atom(field),
+  defp normalize_extensions!(_source, _fqn, {:field, field}, :struct) when is_atom(field),
     do: {:field, field}
 
-  defp normalize_extensions!(_fqn, policy, :unwrap) when policy == :reject, do: policy
+  defp normalize_extensions!(source, fqn, policy, kind),
+    do: invalid!(source, fqn, "invalid :extensions policy for #{kind} #{inspect(policy)}")
 
-  defp normalize_extensions!(fqn, policy, kind) do
-    raise ArgumentError,
-          "invalid PB extension representation policy for #{inspect(fqn)} " <>
-            "(#{kind}): #{inspect(policy)}"
-  end
+  defp normalize_oneof_spec(source, fqn, oneof_name, spec) do
+    oneof = "oneof #{inspect(oneof_name)}"
 
-  defp normalize_oneof_spec(fqn, oneof_name, spec) when is_list(spec) do
-    unless Keyword.keyword?(spec) do
-      raise ArgumentError,
-            "expected PB representation for oneof #{inspect({fqn, oneof_name})} " <>
-              "to be a keyword list"
+    unless is_list(spec) and Keyword.keyword?(spec) do
+      invalid!(source, fqn, "#{oneof} options must be a keyword list, got: #{inspect(spec)}")
     end
 
     unknown = Keyword.keys(spec) -- [:representation]
 
     if unknown != [] do
-      raise ArgumentError,
-            "unknown PB oneof representation option(s) for " <>
-              "#{inspect({fqn, oneof_name})}: #{inspect(unknown)}"
+      invalid!(source, fqn, "unknown #{oneof} option(s) #{inspect(unknown)}")
     end
 
     case Keyword.fetch(spec, :representation) do
@@ -398,21 +361,11 @@ defmodule PB.Schema.Projections do
         %{kind: :identity}
 
       {:ok, representation} ->
-        raise ArgumentError,
-              "invalid PB oneof representation for #{inspect({fqn, oneof_name})}: " <>
-                inspect(representation)
+        invalid!(source, fqn, "invalid #{oneof} representation #{inspect(representation)}")
 
       :error ->
-        raise ArgumentError,
-              "PB oneof representation for #{inspect({fqn, oneof_name})} " <>
-                "must set :representation"
+        invalid!(source, fqn, "#{oneof} must set :representation")
     end
-  end
-
-  defp normalize_oneof_spec(fqn, oneof_name, spec) do
-    raise ArgumentError,
-          "expected PB representation for oneof #{inspect({fqn, oneof_name})} " <>
-            "to be a keyword list, got: #{inspect(spec)}"
   end
 
   defp merge_entries(entries) do
@@ -492,7 +445,7 @@ defmodule PB.Schema.Projections do
   defp apply_message_specs(schema, specs) do
     messages =
       Enum.reduce(specs, schema.messages, fn {fqn, spec}, messages ->
-        msg = fetch_message!(messages, fqn, fqn)
+        msg = fetch_message!(messages, fqn)
         validate_message_target!(fqn, msg)
         validate_existing_message_projection!(fqn, msg, spec)
 
@@ -531,9 +484,8 @@ defmodule PB.Schema.Projections do
     Map.put(schema, :messages, messages)
   end
 
-  defp validate_message_target!(fqn, %{map_entry: true}) do
-    raise ArgumentError, "cannot project map-entry message #{inspect(fqn)}"
-  end
+  defp validate_message_target!(fqn, %{map_entry: true}),
+    do: invalid_schema!(fqn, "a map-entry message cannot be projected")
 
   defp validate_message_target!(_fqn, %{kind: :message}), do: :ok
 
@@ -606,8 +558,10 @@ defmodule PB.Schema.Projections do
     struct_fields = struct_fields!(fqn, spec.module)
 
     if spec.extensions == :reject and map_size(msg.extensions_by_name) > 0 do
-      raise ArgumentError,
-            "PB struct representation for #{inspect(fqn)} cannot drop known extensions"
+      invalid_schema!(
+        fqn,
+        "the message has extensions, so a struct projection needs extensions: {:field, name}"
+      )
     end
 
     required =
@@ -618,17 +572,13 @@ defmodule PB.Schema.Projections do
     missing = required |> MapSet.difference(struct_fields) |> MapSet.to_list() |> Enum.sort()
 
     if missing != [] do
-      raise ArgumentError,
-            "PB struct #{inspect(spec.module)} for #{inspect(fqn)} is missing field(s): " <>
-              inspect(missing)
+      invalid_schema!(fqn, "#{inspect(spec.module)} is missing field(s) #{inspect(missing)}")
     end
   end
 
   defp struct_fields!(fqn, module) do
     unless Code.ensure_loaded?(module) and function_exported?(module, :__struct__, 0) do
-      raise ArgumentError,
-            "PB struct representation for #{inspect(fqn)} references non-struct module " <>
-              inspect(module)
+      invalid_schema!(fqn, "#{inspect(module)} is not a struct module")
     end
 
     module.__struct__()
@@ -666,8 +616,7 @@ defmodule PB.Schema.Projections do
 
   defp validate_unwrap_spec!(fqn, msg, spec) do
     if spec.extensions == :reject and map_size(msg.extensions_by_name) > 0 do
-      raise ArgumentError,
-            "PB unwrap representation for #{inspect(fqn)} cannot drop known extensions"
+      invalid_schema!(fqn, "an unwrap projection cannot represent the message's extensions")
     end
 
     regular_fields =
@@ -680,25 +629,23 @@ defmodule PB.Schema.Projections do
         field
 
       {true, fields} ->
-        raise ArgumentError,
-              "PB unwrap representation for #{inspect(fqn)} requires exactly one " <>
-                "ordinary field, got: #{inspect(Enum.map(fields, & &1.name))}"
+        invalid_schema!(
+          fqn,
+          "unwrap needs exactly one field outside oneofs, got " <>
+            inspect(Enum.map(fields, & &1.name))
+        )
 
       {name, _fields} when is_atom(name) ->
         case Map.fetch(msg.fields_by_name, name) do
           {:ok, field} ->
             if oneof_field?(field) do
-              raise ArgumentError,
-                    "PB unwrap representation for #{inspect(fqn)} cannot target " <>
-                      "oneof field #{inspect(name)}"
+              invalid_schema!(fqn, "unwrap cannot target oneof field #{inspect(name)}")
             end
 
             field
 
           :error ->
-            raise ArgumentError,
-                  "PB unwrap representation for #{inspect(fqn)} targets unknown " <>
-                    "field #{inspect(name)}"
+            invalid_schema!(fqn, "unwrap targets unknown field #{inspect(name)}")
         end
     end
   end
@@ -706,7 +653,7 @@ defmodule PB.Schema.Projections do
   defp apply_oneof_specs(schema, specs) do
     messages =
       Enum.reduce(specs, schema.messages, fn {{fqn, oneof_name} = key, spec}, messages ->
-        msg = fetch_message!(messages, fqn, key)
+        msg = fetch_message!(messages, fqn)
         validate_message_target!(fqn, msg)
 
         case spec.kind do
@@ -733,20 +680,20 @@ defmodule PB.Schema.Projections do
     Map.put(schema, :messages, messages)
   end
 
-  defp fetch_message!(messages, fqn, key) do
+  defp fetch_message!(messages, fqn) do
     case Map.fetch(messages, fqn) do
       {:ok, msg} ->
         msg
 
       :error ->
-        raise ArgumentError, "unknown PB projection target #{inspect(key)}"
+        raise PB.SchemaError, kind: :unknown_message, operation: :compile, name: fqn
     end
   end
 
-  defp fetch_oneof!(msg, {_fqn, oneof_name} = key) do
+  defp fetch_oneof!(msg, {fqn, oneof_name}) do
     case Enum.find(msg.oneofs, fn {_index, oneof} -> oneof.name == oneof_name end) do
       nil ->
-        raise ArgumentError, "unknown PB projection target #{inspect(key)}"
+        invalid_schema!(fqn, "projection targets unknown oneof #{inspect(oneof_name)}")
 
       oneof ->
         oneof
@@ -759,18 +706,21 @@ defmodule PB.Schema.Projections do
       field = Map.fetch!(messages[fqn].fields_by_name, field_name)
 
       unless field.type == :TYPE_MESSAGE do
-        raise ArgumentError,
-              "PB identity oneof #{inspect({fqn, oneof.name})} requires message " <>
-                "members, got scalar field #{inspect(field.name)}"
+        invalid_schema!(
+          fqn,
+          "identity oneof #{inspect(oneof.name)} needs message members, " <>
+            "#{inspect(field.name)} is not one"
+        )
       end
 
-      target = fetch_message!(messages, field.type_name, field.type_name)
+      target = fetch_message!(messages, field.type_name)
 
       unless struct_represented?(target) do
-        raise ArgumentError,
-              "PB identity oneof #{inspect({fqn, oneof.name})} requires struct " <>
-                "representation for member #{inspect(field.name)} target " <>
-                inspect(field.type_name)
+        invalid_schema!(
+          fqn,
+          "identity oneof #{inspect(oneof.name)} needs member #{inspect(field.name)}'s " <>
+            "message #{inspect(field.type_name)} projected to a struct"
+        )
       end
 
       {struct_module(target), field.name}
@@ -783,9 +733,7 @@ defmodule PB.Schema.Projections do
 
   defp reject_duplicate_structs!(by_struct, fqn, oneof) do
     if map_size(by_struct) != length(oneof.fields) do
-      raise ArgumentError,
-            "PB identity oneof #{inspect({fqn, oneof.name})} has duplicate " <>
-              "member struct modules"
+      invalid_schema!(fqn, "identity oneof #{inspect(oneof.name)} members share a struct")
     end
 
     by_struct
@@ -815,18 +763,52 @@ defmodule PB.Schema.Projections do
     Map.put(msg, :projection, projection)
   end
 
-  defp raise_duplicate_projection!(key) do
-    raise ArgumentError, "duplicate PB projection for #{inspect(key)}"
-  end
+  @spec raise_duplicate_projection!(term) :: no_return
+  defp raise_duplicate_projection!(key),
+    do: invalid!(:projections_opt, fqn(key), "#{describe(key)} is projected more than once")
 
+  @spec raise_conflict!(term, atom, term, atom, term) :: no_return
   defp raise_conflict!(key, source_a, spec_a, source_b, spec_b) do
-    raise ArgumentError,
-          "conflicting PB projection for #{inspect(key)}: " <>
-            "#{source_label(source_a)} declares #{inspect(spec_a)}, " <>
-            "#{source_label(source_b)} declares #{inspect(spec_b)}"
+    invalid_schema!(
+      fqn(key),
+      "conflicting projections for #{describe(key)}: " <>
+        "#{source_label(source_a)} declares #{inspect(spec_a)}, " <>
+        "#{source_label(source_b)} declares #{inspect(spec_b)}"
+    )
   end
 
-  defp source_label(:proto_source), do: "proto-source"
-  defp source_label(:projections_opt), do: "compile-time :projections"
-  defp source_label(:existing_schema), do: "existing schema"
+  defp fqn({fqn, _oneof_name}), do: fqn
+  defp fqn(fqn), do: fqn
+
+  defp describe({_fqn, oneof_name}), do: "oneof #{inspect(oneof_name)}"
+  defp describe(_fqn), do: "the message"
+
+  defp source_label(:proto_source), do: "the .proto source"
+  defp source_label(:projections_opt), do: "the :projections option"
+  defp source_label(:existing_schema), do: "the schema"
+
+  # A projection's own options are the caller's mistake (PB.OptionError) when
+  # they came from the :projections option, and the schema's when they came
+  # from a representation option in the .proto source. Mismatches between a
+  # projection and the message it targets are always the schema's.
+  @spec invalid!(:projections_opt | :proto_source, atom | nil, String.t()) :: no_return
+  defp invalid!(:projections_opt, fqn, reason) do
+    raise PB.OptionError,
+      kind: :invalid_option,
+      operation: :compile,
+      message_name: fqn,
+      option: :projections,
+      reason: reason
+  end
+
+  defp invalid!(:proto_source, fqn, reason), do: invalid_schema!(fqn, reason)
+
+  @spec invalid_schema!(atom, String.t()) :: no_return
+  defp invalid_schema!(fqn, reason) do
+    raise PB.SchemaError,
+      kind: :invalid_schema,
+      operation: :compile,
+      type_name: fqn,
+      reason: reason
+  end
 end

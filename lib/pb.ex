@@ -235,6 +235,14 @@ defmodule PB do
       cannot be expressed in proto source) and for overriding schemas you do
       not own. Compile-time `:projections` entries conflict if they disagree
       with proto-source options for the same target.
+
+  ## Errors
+
+  Raises `PB.OptionError` for options or `:projections` entries that are not
+  well-formed, and `PB.SchemaError` when the schema is invalid: a projection
+  that does not fit the message it targets (a struct missing fields, `unwrap`
+  on a message without exactly one field, an unknown message), conflicting
+  projections, or an invalid `elixir.pb.v1` option in the proto source.
   """
   @spec compile(descriptor_set) :: schema
   @spec compile(descriptor_set, keyword) :: schema

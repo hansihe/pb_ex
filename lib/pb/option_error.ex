@@ -33,6 +33,10 @@ defmodule PB.OptionError do
   defp format(%__MODULE__{kind: :unknown_options, options: options}),
     do: "unknown option(s): #{inspect(options)}"
 
+  defp format(%__MODULE__{kind: :invalid_option, option: option, reason: reason})
+       when is_binary(reason),
+       do: "invalid value for #{inspect(option)}: #{reason}"
+
   defp format(%__MODULE__{kind: :invalid_option, option: option, value: value}),
     do: "invalid value for #{inspect(option)}: #{inspect(value)}"
 

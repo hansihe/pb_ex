@@ -34,13 +34,13 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects entries that are not {fqn, opts} tuples" do
-      assert_raise ArgumentError, ~r/expected PB projection entry/, fn ->
+      assert_raise PB.OptionError, ~r/value for :projections: expected \{fqn, options\}/, fn ->
         PB.compile(single_message_descriptor(), projections: [:bad_entry])
       end
     end
 
     test "rejects non-atom fqn keys" do
-      assert_raise ArgumentError, ~r/expected PB projection entry/, fn ->
+      assert_raise PB.OptionError, ~r/expected \{fqn, options\}/, fn ->
         PB.compile(single_message_descriptor(),
           projections: [{"proj.Msg", struct: __MODULE__}]
         )
@@ -48,7 +48,7 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects entries with non-keyword opts" do
-      assert_raise ArgumentError, ~r/to be a keyword list/, fn ->
+      assert_raise PB.OptionError, ~r/expected a keyword list/, fn ->
         PB.compile(single_message_descriptor(),
           projections: [{@message, [%{not: :keyword}]}]
         )
@@ -56,7 +56,9 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects :struct combined with :unwrap" do
-      assert_raise ArgumentError, ~r/cannot set both :struct and :unwrap/, fn ->
+      assert_raise PB.OptionError,
+                   ~r/compile :"proj.Msg": .*:projections: cannot set both :struct and :unwrap/,
+                   fn ->
         PB.compile(single_message_descriptor(),
           projections: [{@message, struct: EventA, unwrap: :value}]
         )
@@ -64,8 +66,8 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects aux-only entries with :preserved_unknown_fields and no kind" do
-      assert_raise ArgumentError,
-                   ~r/requires :struct or :unwrap when :preserved_unknown_fields or :extensions is set/,
+      assert_raise PB.OptionError,
+                   ~r/:preserved_unknown_fields and :extensions require :struct or :unwrap/,
                    fn ->
                      PB.compile(single_message_descriptor(),
                        projections: [{@message, preserved_unknown_fields: :reject}]
@@ -74,8 +76,8 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects aux-only entries with :extensions and no kind" do
-      assert_raise ArgumentError,
-                   ~r/requires :struct or :unwrap when :preserved_unknown_fields or :extensions is set/,
+      assert_raise PB.OptionError,
+                   ~r/:preserved_unknown_fields and :extensions require :struct or :unwrap/,
                    fn ->
                      PB.compile(single_message_descriptor(),
                        projections: [{@message, extensions: :reject}]
@@ -84,7 +86,7 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects malformed :oneofs (not a keyword list)" do
-      assert_raise ArgumentError, ~r/expected PB :oneofs for .* to be a keyword list/, fn ->
+      assert_raise PB.OptionError, ~r/:oneofs must be a keyword list/, fn ->
         PB.compile(oneof_event_descriptor(),
           projections: [
             {:"proj.A", struct: EventA},
@@ -96,7 +98,7 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects :oneofs entries missing :representation" do
-      assert_raise ArgumentError, ~r/must set :representation/, fn ->
+      assert_raise PB.OptionError, ~r/oneof :data must set :representation/, fn ->
         PB.compile(oneof_event_descriptor(),
           projections: [
             {:"proj.A", struct: EventA},
@@ -108,7 +110,7 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects :oneofs entries with unknown option keys" do
-      assert_raise ArgumentError, ~r/unknown PB oneof representation option/, fn ->
+      assert_raise PB.OptionError, ~r/unknown oneof :data option/, fn ->
         PB.compile(oneof_event_descriptor(),
           projections: [
             {:"proj.A", struct: EventA},
@@ -120,7 +122,7 @@ defmodule PB.ProjectionsTest do
     end
 
     test "rejects :oneofs entries with unsupported representation value" do
-      assert_raise ArgumentError, ~r/invalid PB oneof representation/, fn ->
+      assert_raise PB.OptionError, ~r/invalid oneof :data representation/, fn ->
         PB.compile(oneof_event_descriptor(),
           projections: [
             {:"proj.A", struct: EventA},
@@ -134,7 +136,7 @@ defmodule PB.ProjectionsTest do
 
   describe "merge conflicts" do
     test "duplicate :projections entries for the same fqn raise" do
-      assert_raise ArgumentError, ~r/duplicate PB projection for :"proj.Msg"/, fn ->
+      assert_raise PB.OptionError, ~r/compile :"proj.Msg": .*projected more than once/, fn ->
         PB.compile(single_message_descriptor(),
           projections: [
             {@message, struct: EventA},
@@ -145,8 +147,8 @@ defmodule PB.ProjectionsTest do
     end
 
     test "duplicate :projections oneof entries for the same key raise" do
-      assert_raise ArgumentError,
-                   ~r/duplicate PB projection for {:"proj.Event", :data}/,
+      assert_raise PB.OptionError,
+                   ~r/compile :"proj.Event": .*oneof :data is projected more than once/,
                    fn ->
                      PB.compile(oneof_event_descriptor(),
                        projections: [
@@ -163,8 +165,8 @@ defmodule PB.ProjectionsTest do
     end
 
     test "adapter vs proto-source representation conflict surfaces both sources" do
-      assert_raise ArgumentError,
-                   ~r/conflicting PB projection for :"option_rep.Msg":.*proto-source.*compile-time :projections/s,
+      assert_raise PB.SchemaError,
+                   ~r/:"option_rep.Msg": conflicting .* the .proto source.*the :projections/s,
                    fn ->
                      PB.compile(option_rep_descriptor(),
                        projections: [{:"option_rep.Msg", adapter: @adapter}]
@@ -201,7 +203,7 @@ defmodule PB.ProjectionsTest do
 
   describe "target validation" do
     test "unknown message target raises" do
-      assert_raise ArgumentError, ~r/unknown PB projection target/, fn ->
+      assert_raise PB.SchemaError, ~r/unknown message :"proj.Missing"/, fn ->
         PB.compile(single_message_descriptor(),
           projections: [{:"proj.Missing", struct: EventA}]
         )
@@ -209,7 +211,7 @@ defmodule PB.ProjectionsTest do
     end
 
     test "unknown oneof target raises" do
-      assert_raise ArgumentError, ~r/unknown PB projection target/, fn ->
+      assert_raise PB.SchemaError, ~r/projection targets unknown oneof/, fn ->
         PB.compile(oneof_event_descriptor(),
           projections: [
             {:"proj.A", struct: EventA},
@@ -221,7 +223,7 @@ defmodule PB.ProjectionsTest do
     end
 
     test "map-entry message target raises" do
-      assert_raise ArgumentError, ~r/cannot project map-entry message/, fn ->
+      assert_raise PB.SchemaError, ~r/a map-entry message cannot be projected/, fn ->
         PB.compile(map_field_descriptor(),
           projections: [{:"proj_map.Bag.ItemsEntry", struct: EventA}]
         )
@@ -255,8 +257,8 @@ defmodule PB.ProjectionsTest do
           projections: [{@message, struct: EventA}]
         )
 
-      assert_raise ArgumentError,
-                   ~r/conflicting PB projection for :"proj.Msg":.*existing schema.*compile-time :projections/s,
+      assert_raise PB.SchemaError,
+                   ~r/conflicting projections for the message: the schema.*the :projections/s,
                    fn ->
                      PB.Schema.Transform.projections(
                        schema,
@@ -272,7 +274,7 @@ defmodule PB.ProjectionsTest do
         )
 
       for adapter <- [@adapter, @other_adapter] do
-        assert_raise ArgumentError, ~r/duplicate PB projection for :"proj.Msg"/, fn ->
+        assert_raise PB.OptionError, ~r/the message is projected more than once/, fn ->
           PB.Schema.Transform.projections(schema, [{@message, adapter: adapter}])
         end
       end
@@ -284,8 +286,8 @@ defmodule PB.ProjectionsTest do
           projections: [{@message, adapter: @adapter}]
         )
 
-      assert_raise ArgumentError,
-                   ~r/conflicting PB projection for :"proj.Msg":.*existing schema.*compile-time :projections/s,
+      assert_raise PB.SchemaError,
+                   ~r/conflicting projections for the message: the schema.*the :projections/s,
                    fn ->
                      PB.Schema.Transform.projections(
                        schema,
