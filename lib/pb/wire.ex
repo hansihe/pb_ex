@@ -5,10 +5,15 @@ defmodule PB.Wire do
 
   @max_field_number 0x1FFFFFFF
 
-  # Mirrors the embedded-message cap in PB.Runtime.Decoder.Scan (@max_decode_depth):
-  # nested groups recurse here at the wire layer before the decoder's depth check
+  # Nesting limit shared by every PB decoder: embedded messages in
+  # PB.Runtime.Decoder.Scan, groups below, ProtoJSON and text format.
+  @max_decode_depth 100
+
+  # Nested groups recurse here at the wire layer before the decoder's depth check
   # ever runs, so adversarially nested start-group tags need their own guard.
-  @max_group_depth 100
+  @max_group_depth @max_decode_depth
+
+  def max_decode_depth, do: @max_decode_depth
 
   def wire_type(:TYPE_DOUBLE), do: 1
   def wire_type(:TYPE_FLOAT), do: 5

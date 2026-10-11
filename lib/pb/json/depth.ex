@@ -3,7 +3,7 @@ defmodule PB.JSON.Depth do
 
   alias PB.JSON.Errors
 
-  @max_decode_depth 100
+  @max_decode_depth PB.Wire.max_decode_depth()
 
   @doc false
   def max_decode_depth, do: @max_decode_depth

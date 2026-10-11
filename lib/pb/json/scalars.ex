@@ -6,14 +6,8 @@ defmodule PB.JSON.Scalars do
   # scalar values.
 
   alias PB.JSON.Errors
+  alias PB.Runtime.Scalar
   alias PB.Schema.Features
-
-  @int32_min -0x80000000
-  @int32_max 0x7FFFFFFF
-  @uint32_max 0xFFFFFFFF
-  @int64_min -0x8000000000000000
-  @int64_max 0x7FFFFFFFFFFFFFFF
-  @uint64_max 0xFFFFFFFFFFFFFFFF
 
   # IEEE 754 doubles represent every integer only up to 2^53. A JSON *number*
   # in float syntax beyond this magnitude has already lost precision by the time
@@ -27,14 +21,6 @@ defmodule PB.JSON.Scalars do
   @float32_max 3.4028234663852886e38
 
   @null_value :"google.protobuf.NullValue"
-
-  # ── int range constants ───────────────────────────────────────────────
-  def int32_min, do: @int32_min
-  def int32_max, do: @int32_max
-  def uint32_max, do: @uint32_max
-  def int64_min, do: @int64_min
-  def int64_max, do: @int64_max
-  def uint64_max, do: @uint64_max
 
   # ── Float encoding ───────────────────────────────────────────────────
   def encode_float(:nan), do: "NaN"
@@ -327,17 +313,9 @@ defmodule PB.JSON.Scalars do
           _ -> Errors.raise!(:invalid_value, "invalid bool map key", details: %{got: key})
         end
 
-      t when t in [:TYPE_INT32, :TYPE_SINT32, :TYPE_SFIXED32] ->
-        parse_int!(key, @int32_min, @int32_max)
-
-      t when t in [:TYPE_UINT32, :TYPE_FIXED32] ->
-        parse_int!(key, 0, @uint32_max)
-
-      t when t in [:TYPE_INT64, :TYPE_SINT64, :TYPE_SFIXED64] ->
-        parse_int!(key, @int64_min, @int64_max)
-
-      t when t in [:TYPE_UINT64, :TYPE_FIXED64] ->
-        parse_int!(key, 0, @uint64_max)
+      integer_type ->
+        {min, max} = Scalar.integer_range(integer_type)
+        parse_int!(key, min, max)
     end
   end
 

@@ -29,7 +29,7 @@ defmodule PB.Runtime.Decoder.Scan do
   alias PB.UnknownField
   alias PB.Wire
 
-  @max_decode_depth 100
+  @max_decode_depth Wire.max_decode_depth()
   @extension_key :__extensions__
   @unknown_key :__unknown_fields__
 

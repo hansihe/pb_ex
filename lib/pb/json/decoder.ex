@@ -18,7 +18,7 @@ defmodule PB.JSON.Decoder do
   #   3. map-entry filter: drop the entry
 
   alias PB.JSON.{Depth, Errors, Scalars, WKT}
-  alias PB.Runtime.RequiredFields
+  alias PB.Runtime.{Oneofs, RequiredFields, Scalar}
   alias PB.Schema.Features
 
   @doc false
@@ -89,7 +89,7 @@ defmodule PB.JSON.Decoder do
       end)
 
     check_required!(msg, fields)
-    wrap_oneofs(fields, msg)
+    Oneofs.wrap(fields, msg)
   end
 
   defp decode_regular(_msg, json, _schema, _opts, _depth) do
@@ -239,17 +239,9 @@ defmodule PB.JSON.Decoder do
       t when t in [:TYPE_DOUBLE, :TYPE_FLOAT] ->
         Scalars.decode_float!(value, t)
 
-      t when t in [:TYPE_INT32, :TYPE_SINT32, :TYPE_SFIXED32] ->
-        Scalars.decode_int!(value, Scalars.int32_min(), Scalars.int32_max())
-
-      t when t in [:TYPE_UINT32, :TYPE_FIXED32] ->
-        Scalars.decode_int!(value, 0, Scalars.uint32_max())
-
-      t when t in [:TYPE_INT64, :TYPE_SINT64, :TYPE_SFIXED64] ->
-        Scalars.decode_int!(value, Scalars.int64_min(), Scalars.int64_max())
-
-      t when t in [:TYPE_UINT64, :TYPE_FIXED64] ->
-        Scalars.decode_int!(value, 0, Scalars.uint64_max())
+      integer_type ->
+        {min, max} = Scalar.integer_range(integer_type)
+        Scalars.decode_int!(value, min, max)
     end
   end
 
@@ -260,20 +252,6 @@ defmodule PB.JSON.Decoder do
   end
 
   defp in_oneof?(field), do: Features.oneof?(field)
-
-  defp wrap_oneofs(fields, msg) do
-    Enum.reduce(msg.oneofs, fields, fn {_idx, oneof}, acc ->
-      case Enum.find(oneof.fields, &Map.has_key?(acc, &1)) do
-        nil ->
-          acc
-
-        fname ->
-          acc
-          |> Map.delete(fname)
-          |> Map.put(oneof.name, {fname, acc[fname]})
-      end
-    end)
-  end
 
   defp check_oneof_dup!(field, seen) do
     if in_oneof?(field) do

@@ -23,6 +23,7 @@ defmodule PB.JSON.WKT do
   #     NullValue.
 
   alias PB.JSON.{Errors, Scalars}
+  alias PB.Runtime.Scalar
   alias PB.WellKnownTypes.Spec
 
   @field_mask :"google.protobuf.FieldMask"
@@ -196,17 +197,10 @@ defmodule PB.JSON.WKT do
   defp decode_wrapper(t, value) when t in [:TYPE_DOUBLE, :TYPE_FLOAT],
     do: %{value: Scalars.decode_float!(value, t)}
 
-  defp decode_wrapper(t, value) when t in [:TYPE_INT32, :TYPE_SINT32, :TYPE_SFIXED32],
-    do: %{value: Scalars.decode_int!(value, Scalars.int32_min(), Scalars.int32_max())}
-
-  defp decode_wrapper(t, value) when t in [:TYPE_UINT32, :TYPE_FIXED32],
-    do: %{value: Scalars.decode_int!(value, 0, Scalars.uint32_max())}
-
-  defp decode_wrapper(t, value) when t in [:TYPE_INT64, :TYPE_SINT64, :TYPE_SFIXED64],
-    do: %{value: Scalars.decode_int!(value, Scalars.int64_min(), Scalars.int64_max())}
-
-  defp decode_wrapper(t, value) when t in [:TYPE_UINT64, :TYPE_FIXED64],
-    do: %{value: Scalars.decode_int!(value, 0, Scalars.uint64_max())}
+  defp decode_wrapper(integer_type, value) do
+    {min, max} = Scalar.integer_range(integer_type)
+    %{value: Scalars.decode_int!(value, min, max)}
+  end
 
   # ── FieldMask ────────────────────────────────────────────────────────
 

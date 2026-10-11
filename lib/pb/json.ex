@@ -74,7 +74,7 @@ defmodule PB.JSON do
   alias PB.{DecodeError, ValueError}
   alias PB.JSON.{Decoder, Depth, Encoder, Errors}
   alias PB.Runtime.Errors, as: RuntimeErrors
-  alias PB.Runtime.Frontend
+  alias PB.Runtime.{Frontend, Options}
 
   @type opts :: [
           emit_defaults: boolean,
@@ -299,31 +299,8 @@ defmodule PB.JSON do
   # unchanged — the encode/decode pipelines read it with bracket access.
   defp validate_opts(opts, allowed, operation, message_name) do
     opts
-    |> normalize_opts(allowed)
+    |> Options.validate_booleans(allowed)
     |> RuntimeErrors.normalize_result(operation, message_name)
-  end
-
-  defp normalize_opts(opts, allowed) when is_list(opts) do
-    if Keyword.keyword?(opts) do
-      unknown = Keyword.keys(opts) -- allowed
-
-      cond do
-        unknown != [] ->
-          {:error, {:unknown_options, unknown}}
-
-        invalid = Enum.find(opts, fn {_key, value} -> not is_boolean(value) end) ->
-          {:error, {:invalid_option, elem(invalid, 0), elem(invalid, 1)}}
-
-        true ->
-          {:ok, opts}
-      end
-    else
-      {:error, {:invalid_options, RuntimeErrors.type_of(opts)}}
-    end
-  end
-
-  defp normalize_opts(opts, _allowed) do
-    {:error, {:invalid_options, RuntimeErrors.type_of(opts)}}
   end
 
   # OTP's default value encoder serialises `nil` as the string `"nil"`.

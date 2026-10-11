@@ -15,6 +15,20 @@ defmodule PB.Runtime.Scalar do
   @int64_max 0x7FFFFFFFFFFFFFFF
   @uint64_max 0xFFFFFFFFFFFFFFFF
 
+  @doc """
+  The `{min, max}` range of values a protobuf integer field type holds.
+  """
+  @spec integer_range(atom) :: {integer, integer}
+  def integer_range(type) when type in [:TYPE_INT32, :TYPE_SINT32, :TYPE_SFIXED32],
+    do: {@int32_min, @int32_max}
+
+  def integer_range(type) when type in [:TYPE_UINT32, :TYPE_FIXED32], do: {0, @uint32_max}
+
+  def integer_range(type) when type in [:TYPE_INT64, :TYPE_SINT64, :TYPE_SFIXED64],
+    do: {@int64_min, @int64_max}
+
+  def integer_range(type) when type in [:TYPE_UINT64, :TYPE_FIXED64], do: {0, @uint64_max}
+
   def has_presence?(field), do: Features.has_presence?(field)
   def has_presence?(field, _syntax), do: has_presence?(field)
 
@@ -103,38 +117,12 @@ defmodule PB.Runtime.Scalar do
       :TYPE_FLOAT ->
         validate_float(value, path)
 
-      :TYPE_INT32 ->
-        validate_integer(value, path, @int32_min, @int32_max)
-
-      :TYPE_INT64 ->
-        validate_integer(value, path, @int64_min, @int64_max)
-
-      :TYPE_UINT32 ->
-        validate_integer(value, path, 0, @uint32_max)
-
-      :TYPE_UINT64 ->
-        validate_integer(value, path, 0, @uint64_max)
-
-      :TYPE_FIXED32 ->
-        validate_integer(value, path, 0, @uint32_max)
-
-      :TYPE_FIXED64 ->
-        validate_integer(value, path, 0, @uint64_max)
-
-      :TYPE_SFIXED32 ->
-        validate_integer(value, path, @int32_min, @int32_max)
-
-      :TYPE_SFIXED64 ->
-        validate_integer(value, path, @int64_min, @int64_max)
-
-      :TYPE_SINT32 ->
-        validate_integer(value, path, @int32_min, @int32_max)
-
-      :TYPE_SINT64 ->
-        validate_integer(value, path, @int64_min, @int64_max)
-
       :TYPE_ENUM ->
         validate_enum(field, value, path)
+
+      integer_type ->
+        {min, max} = integer_range(integer_type)
+        validate_integer(value, path, min, max)
     end
   end
 
