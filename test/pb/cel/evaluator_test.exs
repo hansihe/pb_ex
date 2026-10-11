@@ -496,10 +496,13 @@ defmodule PB.CEL.EvaluatorTest do
     assert {:error,
             %Error{
               phase: :eval,
-              message: %PB.ValueError{
-                operation: :normalize,
-                kind: :value_out_of_range,
-                path: [:single_int32_wrapper, :value]
+              message: "PB failed to normalize" <> _,
+              details: %{
+                reason: %PB.ValueError{
+                  operation: :normalize,
+                  kind: :value_out_of_range,
+                  path: [:single_int32_wrapper, :value]
+                }
               }
             }} = CEL.eval("TestAllTypes{single_int32_wrapper: 12345678900}", %{}, proto2_opts)
 
@@ -703,6 +706,14 @@ defmodule PB.CEL.EvaluatorTest do
 
     assert {:error, %Error{message: "invalid regex" <> _}} =
              CEL.eval_program(program, %{"value" => "a"})
+  end
+
+  test "error messages are strings, with the runtime reason in details" do
+    assert {:error,
+            %Error{
+              message: "no message runtime",
+              details: %{reason: :no_message_runtime}
+            }} = CEL.eval("google.protobuf.Int32Value{value: 1}", %{})
   end
 
   test "evaluates string format extension" do

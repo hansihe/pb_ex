@@ -1416,5 +1416,5 @@ defmodule PB.CEL.Checker do
   end
 
   defp error(%{id: id}, message),
-    do: {:error, %Error{phase: :check, message: message, expr_id: id}}
+    do: {:error, Error.exception(phase: :check, message: message, expr_id: id)}
 end

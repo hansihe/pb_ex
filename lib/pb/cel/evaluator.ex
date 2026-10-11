@@ -818,5 +818,5 @@ defmodule PB.CEL.Evaluator do
   defp expr_ref(id), do: %{id: id}
 
   defp error(%{id: id}, message),
-    do: {:error, %Error{phase: :eval, message: message, expr_id: id}}
+    do: {:error, Error.exception(phase: :eval, message: message, expr_id: id)}
 end
