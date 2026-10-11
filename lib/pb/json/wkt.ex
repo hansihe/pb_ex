@@ -23,7 +23,6 @@ defmodule PB.JSON.WKT do
   #     NullValue.
 
   alias PB.JSON.{Errors, Scalars}
-  alias PB.Runtime.Scalar
   alias PB.WellKnownTypes.{Any, Spec}
 
   @field_mask :"google.protobuf.FieldMask"
@@ -48,29 +47,22 @@ defmodule PB.JSON.WKT do
   @unix_epoch_gregorian Spec.unix_epoch_gregorian()
   @nanos_max Spec.nanos_max()
 
-  # ProtoJSON wrapper messages: each carries a single `value` field of
-  # the given scalar type and is serialised as the bare scalar.
-  @wrapper_types %{
-    :"google.protobuf.DoubleValue" => :TYPE_DOUBLE,
-    :"google.protobuf.FloatValue" => :TYPE_FLOAT,
-    :"google.protobuf.Int64Value" => :TYPE_INT64,
-    :"google.protobuf.UInt64Value" => :TYPE_UINT64,
-    :"google.protobuf.Int32Value" => :TYPE_INT32,
-    :"google.protobuf.UInt32Value" => :TYPE_UINT32,
-    :"google.protobuf.BoolValue" => :TYPE_BOOL,
-    :"google.protobuf.StringValue" => :TYPE_STRING,
-    :"google.protobuf.BytesValue" => :TYPE_BYTES
-  }
+  # ProtoJSON wrapper messages: each carries a single `value` field and is
+  # serialised as that field's bare scalar. The encoder and decoder handle
+  # them (`enc: :wrapper`) with the same scalar code as any other field.
+  @wrapper_types [
+    :"google.protobuf.DoubleValue",
+    :"google.protobuf.FloatValue",
+    :"google.protobuf.Int64Value",
+    :"google.protobuf.UInt64Value",
+    :"google.protobuf.Int32Value",
+    :"google.protobuf.UInt32Value",
+    :"google.protobuf.BoolValue",
+    :"google.protobuf.StringValue",
+    :"google.protobuf.BytesValue"
+  ]
 
-  wrapper_table =
-    Map.new(@wrapper_types, fn {name, type} ->
-      {name,
-       %{
-         enc: {:wrapper_encode, type},
-         dec: {:wrapper_decode, type},
-         any: :wrapped
-       }}
-    end)
+  wrapper_table = Map.new(@wrapper_types, &{&1, %{enc: :wrapper, dec: :wrapper, any: :wrapped}})
 
   @wkts %{
           @field_mask => %{enc: :field_mask, dec: :field_mask, any: :wrapped},
@@ -104,7 +96,6 @@ defmodule PB.JSON.WKT do
   """
   def encode(entry, data, schema, opts, callbacks) do
     case entry.enc do
-      {:wrapper_encode, type} -> encode_wrapper(type, data)
       :field_mask -> encode_field_mask(data)
       :timestamp -> encode_timestamp(data)
       :duration -> encode_duration(data)
@@ -117,7 +108,6 @@ defmodule PB.JSON.WKT do
 
   def decode(entry, json, schema, opts, callbacks, depth) do
     case entry.dec do
-      {:wrapper_decode, type} -> decode_wrapper(type, json)
       :field_mask -> decode_field_mask(json)
       :timestamp -> decode_timestamp(json)
       :duration -> decode_duration(json)
@@ -126,80 +116,6 @@ defmodule PB.JSON.WKT do
       :list_value -> decode_list_value(json, depth, callbacks)
       :any -> decode_any(json, schema, opts, callbacks)
     end
-  end
-
-  # ── Wrappers ─────────────────────────────────────────────────────────
-
-  # The encoder always sees the canonical wrapper proto-map (`%{value: scalar}`
-  # or `%{}` for the absent default). The wrappers projection's bare-scalar
-  # native form is converted to the proto-map by the frontend
-  # (`PB.Runtime.Frontend`) before encoding, so this backend no longer needs to
-  # special-case it.
-  defp encode_wrapper(_inner_type, nil) do
-    Errors.raise!(:invalid_value, "expected wrapper value", details: %{got: nil})
-  end
-
-  defp encode_wrapper(inner_type, %{value: v}) when not is_nil(v),
-    do: encode_wrapper_scalar(inner_type, v)
-
-  defp encode_wrapper(inner_type, data) when is_map(data),
-    do: encode_wrapper_scalar(inner_type, wrapper_default(inner_type))
-
-  defp encode_wrapper_scalar(:TYPE_BOOL, v), do: v == true
-  defp encode_wrapper_scalar(:TYPE_STRING, v) when is_binary(v), do: v
-  defp encode_wrapper_scalar(:TYPE_BYTES, v) when is_binary(v), do: Base.encode64(v)
-
-  defp encode_wrapper_scalar(t, v) when t in [:TYPE_DOUBLE, :TYPE_FLOAT],
-    do: Scalars.encode_float(v)
-
-  defp encode_wrapper_scalar(t, v)
-       when t in [:TYPE_INT64, :TYPE_UINT64, :TYPE_SINT64, :TYPE_FIXED64, :TYPE_SFIXED64],
-       do: Integer.to_string(v)
-
-  defp encode_wrapper_scalar(_t, v), do: v
-
-  defp wrapper_default(:TYPE_BOOL), do: false
-  defp wrapper_default(:TYPE_STRING), do: ""
-  defp wrapper_default(:TYPE_BYTES), do: ""
-  defp wrapper_default(t) when t in [:TYPE_DOUBLE, :TYPE_FLOAT], do: 0.0
-  defp wrapper_default(_), do: 0
-
-  defp decode_wrapper(:TYPE_BOOL, value) do
-    case value do
-      true ->
-        %{value: true}
-
-      false ->
-        %{value: false}
-
-      _ ->
-        Errors.raise!(:invalid_value, "expected boolean",
-          details: %{expected: :boolean, got: value}
-        )
-    end
-  end
-
-  defp decode_wrapper(:TYPE_STRING, value) when is_binary(value), do: %{value: value}
-
-  defp decode_wrapper(:TYPE_STRING, value) do
-    Errors.raise!(:invalid_value, "expected string", details: %{expected: :string, got: value})
-  end
-
-  defp decode_wrapper(:TYPE_BYTES, value) when is_binary(value),
-    do: %{value: Scalars.decode_base64!(value)}
-
-  defp decode_wrapper(:TYPE_BYTES, value) do
-    Errors.raise!(:invalid_value, "expected base64 string",
-      details: %{expected: :base64_string, got: value}
-    )
-  end
-
-  defp decode_wrapper(t, value) when t in [:TYPE_DOUBLE, :TYPE_FLOAT],
-    do: %{value: Scalars.decode_float!(value, t)}
-
-  defp decode_wrapper(integer_type, value) do
-    {min, max} = Scalar.integer_range(integer_type)
-    %{value: Scalars.decode_int!(value, min, max)}
   end
 
   # ── FieldMask ────────────────────────────────────────────────────────

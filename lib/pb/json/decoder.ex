@@ -43,6 +43,11 @@ defmodule PB.JSON.Decoder do
 
   defp decode_message(name, json, schema, opts, depth) do
     case WKT.lookup(name) do
+      %{dec: :wrapper} ->
+        # A wrapper reads as its `value` field.
+        field = schema.messages[name].fields_by_name.value
+        %{value: decode_scalar(field, json, schema, opts, depth)}
+
       %{dec: _} = entry ->
         WKT.decode(entry, json, schema, opts, callbacks(depth), depth)
 

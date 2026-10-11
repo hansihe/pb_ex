@@ -1,6 +1,8 @@
 defmodule PB.JSONTest do
   use ExUnit.Case
 
+  import Bitwise
+
   defmodule Nested do
     defstruct [:a, :corecursive]
   end
@@ -257,6 +259,23 @@ defmodule PB.JSONTest do
       %{ss: PB.compile(@scalar_schema)}
     end
 
+    test "encode checks values by the same rules as PB.encode", %{ss: ss} do
+      for {field, value, kind} <- [
+            {:f_int64, "abc", :invalid_value},
+            {:f_bool, "yes", :invalid_value},
+            {:f_int32, 1 <<< 31, :value_out_of_range},
+            {:f_uint64, -1, :value_out_of_range},
+            {:f_string, <<0xFF>>, :invalid_value},
+            {:f_double, "1.5", :invalid_value}
+          ] do
+        assert {:error, %PB.ValueError{kind: ^kind, operation: :json_encode}} =
+                 JSON.to_term(%{field => value}, ss, :"s.Scalars"),
+               inspect({field, value})
+
+        assert {:error, %PB.ValueError{kind: ^kind}} = PB.encode(%{field => value}, ss, :"s.Scalars")
+      end
+    end
+
     test "int64/uint64/fixed64/sfixed64/sint64 emit as strings", %{ss: ss} do
       {:ok, json} =
         JSON.to_term(
@@ -467,6 +486,11 @@ defmodule PB.JSONTest do
     test "encode as string by default", %{schema: schema} do
       {:ok, json} = JSON.to_term(%{role: :ADMIN}, schema, :"j.Person")
       assert json == %{"role" => "ADMIN"}
+    end
+
+    test "encode rejects names the enum does not declare", %{schema: schema} do
+      assert {:error, %PB.ValueError{kind: :unknown_enum_value}} =
+               JSON.to_term(%{role: :BOGUS}, schema, :"j.Person")
     end
 
     test "encode as int with enums_as_ints", %{schema: schema} do
@@ -1061,6 +1085,14 @@ defmodule PB.JSONTest do
     test "Int32Value top-level encodes as bare number", %{schema: schema} do
       assert {:ok, 42} = JSON.to_term(%{value: 42}, schema, :"google.protobuf.Int32Value")
       assert {:ok, 0} = JSON.to_term(%{}, schema, :"google.protobuf.Int32Value")
+    end
+
+    test "wrapper values are checked like any other field", %{schema: schema} do
+      assert {:error, %PB.ValueError{kind: :value_out_of_range}} =
+               JSON.to_term(%{value: 1 <<< 40}, schema, :"google.protobuf.Int32Value")
+
+      assert {:error, %PB.ValueError{kind: :invalid_value}} =
+               JSON.to_term(%{value: "yes"}, schema, :"google.protobuf.BoolValue")
     end
 
     test "Int32Value top-level decodes scalar to %{value: n}", %{schema: schema} do

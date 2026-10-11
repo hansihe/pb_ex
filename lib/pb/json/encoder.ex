@@ -13,11 +13,11 @@ defmodule PB.JSON.Encoder do
   # the WKT table.
 
   alias PB.JSON.{Errors, Scalars, WKT}
+  alias PB.Runtime.Errors, as: RuntimeErrors
   alias PB.Runtime.RequiredFields
   alias PB.Runtime.Scalar
   alias PB.Schema.Features
 
-  @null_value :"google.protobuf.NullValue"
 
   @doc false
   def run(data, schema, name, opts) do
@@ -32,6 +32,9 @@ defmodule PB.JSON.Encoder do
   # ── axis 1 ───────────────────────────────────────────────────────────
   defp encode_message(name, data, schema, opts) do
     case WKT.lookup(name) do
+      %{enc: :wrapper} ->
+        encode_wrapper(name, data, schema, opts)
+
       %{enc: _} = entry ->
         WKT.encode(entry, data, schema, opts, callbacks())
 
@@ -41,6 +44,25 @@ defmodule PB.JSON.Encoder do
           msg -> encode_regular(msg, data, schema, opts)
         end
     end
+  end
+
+  # ── wrappers ─────────────────────────────────────────────────────────
+  # A wrapper prints as its `value` field, which an absent value leaves at
+  # its default.
+  defp encode_wrapper(name, data, schema, opts) when is_map(data) do
+    field = schema.messages[name].fields_by_name.value
+
+    value =
+      case Map.fetch(data, :value) do
+        {:ok, value} when value != nil -> value
+        _unset -> field |> Scalar.default_value() |> elem(1)
+      end
+
+    encode_scalar(field, value, schema, opts)
+  end
+
+  defp encode_wrapper(_name, data, _schema, _opts) do
+    Errors.raise!(:invalid_value, "expected wrapper value", details: %{got: data})
   end
 
   # ── regular message ──────────────────────────────────────────────────
@@ -128,9 +150,19 @@ defmodule PB.JSON.Encoder do
   end
 
   # ── axis 3 ───────────────────────────────────────────────────────────
+  defp encode_scalar(%{type: :TYPE_MESSAGE} = field, value, schema, opts),
+    do: encode_message(field.type_name, value, schema, opts)
+
+  # Scalars are checked by the same rules as `PB.encode/4` before printing.
   defp encode_scalar(field, value, schema, opts) do
+    case Scalar.validate_encode(field, value, []) do
+      :ok -> encode_valid_scalar(field, value, schema, opts)
+      {:error, reason} -> raise RuntimeErrors.to_error(reason)
+    end
+  end
+
+  defp encode_valid_scalar(field, value, schema, opts) do
     case field.type do
-      :TYPE_MESSAGE -> encode_message(field.type_name, value, schema, opts)
       :TYPE_ENUM -> Scalars.encode_enum(schema, field, value, opts)
       :TYPE_STRING -> value
       :TYPE_BYTES -> Base.encode64(value)
@@ -173,39 +205,8 @@ defmodule PB.JSON.Encoder do
   end
 
   defp default_scalar_json(schema, field, opts) do
-    case field.type do
-      :TYPE_BOOL -> false
-      :TYPE_STRING -> ""
-      :TYPE_BYTES -> ""
-      :TYPE_DOUBLE -> 0.0
-      :TYPE_FLOAT -> 0.0
-      :TYPE_INT64 -> "0"
-      :TYPE_UINT64 -> "0"
-      :TYPE_FIXED64 -> "0"
-      :TYPE_SFIXED64 -> "0"
-      :TYPE_SINT64 -> "0"
-      :TYPE_ENUM -> default_enum_json(schema, field, opts)
-      _ -> 0
-    end
-  end
-
-  defp default_enum_json(schema, field, opts) do
-    cond do
-      field.type_name == @null_value ->
-        Scalars.encode_null_value_enum!(field, 0)
-
-      opts[:enums_as_ints] ->
-        0
-
-      enum = schema.enums[field.type_name] ->
-        case Map.get(enum.by_number, 0) do
-          nil -> 0
-          name -> Atom.to_string(name)
-        end
-
-      true ->
-        0
-    end
+    {:ok, default} = Scalar.default_value(field)
+    encode_valid_scalar(field, default, schema, opts)
   end
 
   # ── helpers ──────────────────────────────────────────────────────────
