@@ -7,7 +7,7 @@ defmodule PB.CEL.WellKnownTypes do
   alias PB.WellKnownTypes.Codec, as: WKTCodec
   alias PB.WellKnownTypes.Time, as: WKTTime
 
-  @type_url_prefix "type.googleapis.com/"
+  @type_url_prefix PB.WellKnownTypes.Any.default_prefix()
   @timestamp_type "google.protobuf.Timestamp"
   @duration_type "google.protobuf.Duration"
   @timestamp_type_url @type_url_prefix <> @timestamp_type

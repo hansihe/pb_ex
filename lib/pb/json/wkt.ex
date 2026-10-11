@@ -24,7 +24,7 @@ defmodule PB.JSON.WKT do
 
   alias PB.JSON.{Errors, Scalars}
   alias PB.Runtime.Scalar
-  alias PB.WellKnownTypes.Spec
+  alias PB.WellKnownTypes.{Any, Spec}
 
   @field_mask :"google.protobuf.FieldMask"
   @timestamp :"google.protobuf.Timestamp"
@@ -742,15 +742,9 @@ defmodule PB.JSON.WKT do
   # and any leading path segments are ignored (canonical ProtoJSON). The URL
   # must contain at least one `/` and a non-empty trailing segment.
   defp parse_any_type_url!(url) when is_binary(url) do
-    case String.split(url, "/") do
-      [_ | _] = segments when length(segments) >= 2 ->
-        case List.last(segments) do
-          "" -> invalid_any_type_url!(url)
-          fqn -> any_fqn!(fqn)
-        end
-
-      _ ->
-        invalid_any_type_url!(url)
+    case Any.split_type_url(url) do
+      {:ok, _prefix, fqn} -> any_fqn!(fqn)
+      :error -> invalid_any_type_url!(url)
     end
   end
 
@@ -771,18 +765,18 @@ defmodule PB.JSON.WKT do
     end
   end
 
-  defp decode_any_inner_bytes!(_schema, _fqn, ""), do: %{}
-
+  # The JSON pipelines work on canonical proto-maps, so the packed message is
+  # converted through the schema's native representation in both directions.
   defp decode_any_inner_bytes!(schema, fqn, bytes) do
-    case PB.decode(bytes, schema, fqn) do
-      {:ok, decoded} -> decoded
+    case Any.unpack(bytes, schema, fqn) do
+      {:ok, fields} -> fields
       {:error, error} -> raise error
     end
   end
 
-  defp encode_any_inner_bytes!(decoded, schema, fqn) do
-    case PB.encode(decoded, schema, fqn) do
-      {:ok, bytes} -> IO.iodata_to_binary(bytes)
+  defp encode_any_inner_bytes!(fields, schema, fqn) do
+    case Any.pack(fields, schema, fqn) do
+      {:ok, bytes} -> bytes
       {:error, error} -> raise error
     end
   end

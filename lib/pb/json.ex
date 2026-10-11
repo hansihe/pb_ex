@@ -46,8 +46,9 @@ defmodule PB.JSON do
   object with a `@type` URL plus the embedded message — flat-merged when the
   embedded message uses the default JSON object form, or under a `value`
   field when the embedded message itself has a custom JSON mapping (other
-  WKTs, including nested `Any`). Only the `type.googleapis.com/<fqn>` URL
-  prefix is accepted.
+  WKTs, including nested `Any`). The `@type` URL may use any host: its last
+  path segment names the embedded message, as canonical ProtoJSON specifies.
+  The embedded message honors the schema's projections like any other.
 
   ## Options
 

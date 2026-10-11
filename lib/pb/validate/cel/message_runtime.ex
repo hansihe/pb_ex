@@ -21,6 +21,7 @@ defmodule PB.Validate.CEL.MessageRuntime do
   alias PB.Runtime.Errors
   alias PB.Runtime.MessageView
   alias PB.Runtime.MessageEquality
+  alias PB.WellKnownTypes.Any
   alias PB.Runtime.Representation
   alias PB.Runtime.Scalar
   alias PB.Wire
@@ -1022,7 +1023,7 @@ defmodule PB.Validate.CEL.MessageRuntime do
          {:ok, iodata} <- PB.encode(fields, schema, message) do
       {:ok,
        %{
-         type_url: "type.googleapis.com/" <> Atom.to_string(message),
+         type_url: Any.type_url(message),
          value: IO.iodata_to_binary(iodata)
        }}
     end

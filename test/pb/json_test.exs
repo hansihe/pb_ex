@@ -1,6 +1,10 @@
 defmodule PB.JSONTest do
   use ExUnit.Case
 
+  defmodule Nested do
+    defstruct [:a, :corecursive]
+  end
+
   alias PB.JSON
 
   # ── Schema covering oneof, map<string,int32>, enum, repeated message ─
@@ -2134,5 +2138,38 @@ defmodule PB.JSONTest do
 
   defp nested_object(depth) do
     Enum.reduce(1..depth, nil, fn _, acc -> %{"value" => acc} end)
+  end
+
+  describe "Any packing a projected type" do
+    @nested :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
+
+    setup do
+      descriptor_set = PB.decode_descriptor_set!(File.read!("test/fixtures/schema/test.binpb"))
+
+      schema =
+        PB.compile(descriptor_set,
+          projections: [{@nested, struct: Nested} | PB.WellKnownTypes.projections([:time])]
+        )
+
+      %{schema: schema}
+    end
+
+    test "decodes and encodes a struct-projected message", %{schema: schema} do
+      {:ok, value} = PB.encode(%Nested{a: 5}, schema, @nested)
+      any = %{type_url: "type.googleapis.com/#{@nested}", value: value}
+      json = %{"@type" => "type.googleapis.com/#{@nested}", "a" => 5}
+
+      assert JSON.from_term(json, schema, :"google.protobuf.Any") == {:ok, any}
+      assert JSON.to_term(any, schema, :"google.protobuf.Any") == {:ok, json}
+    end
+
+    test "decodes and encodes an adapted well-known type", %{schema: schema} do
+      {:ok, value} = PB.encode({:duration, 1_500_000_000}, schema, :"google.protobuf.Duration")
+      any = %{type_url: "type.googleapis.com/google.protobuf.Duration", value: value}
+      json = %{"@type" => "type.googleapis.com/google.protobuf.Duration", "value" => "1.500s"}
+
+      assert JSON.from_term(json, schema, :"google.protobuf.Any") == {:ok, any}
+      assert JSON.to_term(any, schema, :"google.protobuf.Any") == {:ok, json}
+    end
   end
 end
