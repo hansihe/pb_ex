@@ -167,6 +167,16 @@ defmodule PB.TestSupport.CELConformance do
     end)
   end
 
+  @doc """
+  The upstream text format source of a fixture, which decodes to the same
+  value as its `.binpb` output.
+  """
+  def fixture_text(fixture) when is_map(fixture) do
+    text = File.read!(Path.join(@fixture_root, fixture.text))
+    verify_sha256!(text, fixture.text, fixture.text_sha256)
+    text
+  end
+
   def simple_cases(output) when is_binary(output) do
     cached({:simple_cases, output}, fn ->
       fixture = Enum.find(fixtures(), &(&1.output == output))
@@ -775,12 +785,14 @@ defmodule PB.TestSupport.CELConformance do
         message_runtime: MessageRuntime
       )
 
-  defp verify_sha256!(bin, fixture) do
+  defp verify_sha256!(bin, fixture), do: verify_sha256!(bin, fixture.output, fixture.sha256)
+
+  defp verify_sha256!(bin, path, expected) do
     actual = :crypto.hash(:sha256, bin) |> Base.encode16(case: :lower)
 
-    unless actual == fixture.sha256 do
-      raise "CEL conformance fixture checksum mismatch for #{fixture.output}: " <>
-              "expected #{fixture.sha256}, got #{actual}"
+    unless actual == expected do
+      raise "CEL conformance fixture checksum mismatch for #{path}: " <>
+              "expected #{expected}, got #{actual}"
     end
   end
 

@@ -57,8 +57,13 @@ find "$simple_dir" -name '*.textproto' -type f | sort | while IFS= read -r sourc
 
   sha256="$(shasum -a 256 "$output" | awk '{ print $1 }')"
 
-  printf '    %%{suite: :simple, type: "%s", source: "%s", output: "%s", sha256: "%s"},\n' \
-    "$simple_type" "$rel_source" "$rel_output" "$sha256" >>"$manifest"
+  # Keep the text source too: PB.TextFormat must decode it to the same value.
+  rel_text="simple/${name}.textproto"
+  cp "$source" "$OUT_DIR/$rel_text"
+  text_sha256="$(shasum -a 256 "$OUT_DIR/$rel_text" | awk '{ print $1 }')"
+
+  printf '    %%{suite: :simple, type: "%s", source: "%s", output: "%s", sha256: "%s", text: "%s", text_sha256: "%s"},\n' \
+    "$simple_type" "$rel_source" "$rel_output" "$sha256" "$rel_text" "$text_sha256" >>"$manifest"
 done
 
 {

@@ -25,7 +25,9 @@ Intentional deviations:
   separately in `test/fixtures/protobuf_conformance/text_format_failures.txt`;
   the runner fails when a listed case starts passing, so the list only shrinks.
   Every parsing case passes; the text-output cases stay listed until a
-  text-format printer exists.
+  text-format printer exists. Separately, the upstream `.textproto` source of
+  each CEL conformance fixture must decode with `PB.TextFormat` to the same
+  value as its committed `buf convert` output.
 
 ## CEL
 
