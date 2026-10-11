@@ -9,7 +9,11 @@ defmodule PB.Validate.Violation do
 
   alias PB.Validate.Path
 
-  @type field_path :: Path.field_path()
+  @typedoc """
+  A path to a field or rule, as `buf.validate.FieldPath`: a map with
+  `:elements`, each describing one step.
+  """
+  @type field_path :: %{required(:elements) => [map()]}
 
   @type t :: %__MODULE__{
           rule_id: String.t(),

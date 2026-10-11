@@ -67,8 +67,8 @@ defmodule PB.Validate do
 
   Accepted options:
 
-    * `:context` - `%PB.Validate.Context{}` or keyword/map options passed to
-      `PB.Validate.Context.new/1`.
+    * `:context` - a keyword list or map of context values, currently only
+      `:now` (as below).
     * `:now` - timestamp used for CEL `now`: unix nanoseconds, `DateTime`, or
       a CEL timestamp tuple `{:timestamp, unix_nanoseconds}`.
   """
