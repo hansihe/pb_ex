@@ -534,6 +534,53 @@ defmodule PB.TextFormatTest do
     end
   end
 
+  describe "field numbers" do
+    test "name fields and extensions with allow_field_numbers" do
+      assert decode("1: 5 14: 'x' 18 { a: 1 }", @proto3, allow_field_numbers: true) ==
+               {:ok, %{optional_int32: 5, optional_string: "x", optional_nested_message: %{a: 1}}}
+
+      assert decode("120: 7", @proto2, allow_field_numbers: true) ==
+               {:ok, %{__extensions__: %{"protobuf_test_messages.proto2.extension_int32": 7}}}
+    end
+
+    test "follow the named field's rules" do
+      assert {:error, %DecodeError{kind: :duplicate_field}} =
+               decode("1: 5 optional_int32: 6", @proto3, allow_field_numbers: true)
+
+      assert {:error, %ValueError{kind: :value_out_of_range, path: [:optional_int32]}} =
+               decode("1: 2147483648", @proto3, allow_field_numbers: true)
+    end
+
+    test "a reserved number is skipped" do
+      assert decode("505: [1, 'x'] 999999 { a: 1 } 1: 5", @proto3, allow_field_numbers: true) ==
+               {:ok, %{optional_int32: 5}}
+    end
+
+    test "unknown numbers are unknown fields" do
+      assert {:error, %ValueError{kind: :unknown_field, path: ["12345"]}} =
+               decode("12345: 1", @proto3, allow_field_numbers: true)
+
+      assert {:error, %ValueError{kind: :unknown_field, path: ["150"]}} =
+               decode("150: 1", @proto2, allow_field_numbers: true)
+
+      assert decode("12345: 1 150 {}", @proto2, allow_field_numbers: true, ignore_unknown: true) ==
+               {:ok, %{}}
+    end
+
+    test "are unknown names without allow_field_numbers" do
+      assert {:error, %ValueError{kind: :unknown_field, path: ["1"]}} = decode("1: 5")
+      assert decode("1: 5 2 { a: 1 }", @proto3, ignore_unknown: true) == {:ok, %{}}
+    end
+
+    test "must be decimal int32 values" do
+      for text <- ["0x1: 5", "2147483648: 5"] do
+        assert {:error, %ValueError{kind: :unknown_field}} =
+                 decode(text, @proto3, allow_field_numbers: true),
+               text
+      end
+    end
+  end
+
   describe "google.protobuf.Any" do
     @nested :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
     @nested_url "type.googleapis.com/protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"

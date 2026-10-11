@@ -6,7 +6,8 @@ defmodule PB.TextFormat.Parser do
   #
   #   message := { field } (end of input | "}" | ">")
   #   field   := name [":"] value [";" | ","]
-  #   name    := identifier | "[" identifier { ("." | "/") identifier } "]"
+  #   name    := identifier | integer
+  #            | "[" identifier { ("." | "/") identifier } "]"
   #   value   := message_value | list | scalar
   #   message_value := "{" message "}" | "<" message ">"
   #   list    := "[" [ element { "," element } ] "]"
@@ -29,7 +30,11 @@ defmodule PB.TextFormat.Parser do
 
   @max_depth PB.Wire.max_decode_depth()
 
-  @type name :: {:field, String.t()} | {:extension, String.t()} | {:type_url, String.t()}
+  @type name ::
+          {:field, String.t()}
+          | {:number, String.t()}
+          | {:extension, String.t()}
+          | {:type_url, String.t()}
 
   @type field :: %{
           kind: :field,
@@ -100,6 +105,10 @@ defmodule PB.TextFormat.Parser do
   end
 
   defp parse_name([%{kind: :identifier, value: name} | rest]), do: {:ok, {:field, name}, rest}
+
+  # C++ only reads a number as a field name when field numbers or unknown
+  # fields are allowed; the decoder applies that rule.
+  defp parse_name([%{kind: :integer, value: number} | rest]), do: {:ok, {:number, number}, rest}
 
   defp parse_name([%{kind: :symbol, value: "["} | rest]) do
     with {:ok, parts, rest} <- parse_bracketed_name(rest, []) do

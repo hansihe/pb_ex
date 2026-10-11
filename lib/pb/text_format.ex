@@ -59,6 +59,11 @@ defmodule PB.TextFormat do
     * `:ignore_unknown` — when `true`, fields the message does not define are
       skipped instead of returning
       `{:error, %PB.ValueError{kind: :unknown_field}}`. Defaults to `false`.
+    * `:allow_field_numbers` — when `true`, a field may be named by its number
+      (`3: "x"`), as the C++ parser's `AllowFieldNumber` permits. A number
+      naming an extension sets that extension, and a reserved number is
+      skipped. Without it a number is treated as an unknown field name.
+      Defaults to `false`.
 
   An unknown option key or a non-boolean value returns
   `{:error, %PB.OptionError{}}`.
@@ -69,9 +74,9 @@ defmodule PB.TextFormat do
   alias PB.Runtime.{Frontend, Options}
   alias PB.TextFormat.{Decoder, Lexer, Parser}
 
-  @type opts :: [ignore_unknown: boolean]
+  @type opts :: [ignore_unknown: boolean, allow_field_numbers: boolean]
 
-  @decode_opts [:ignore_unknown]
+  @decode_opts [:ignore_unknown, :allow_field_numbers]
   @operation :text_decode
 
   @doc """

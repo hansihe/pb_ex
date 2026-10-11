@@ -57,6 +57,7 @@ See [Decoding into structs](../how-to/structs-and-representation.md) and
 | Option | Values | Default |
 |--------|--------|---------|
 | `:ignore_unknown` | `boolean` | `false` |
+| `:allow_field_numbers` | `boolean` | `false` |
 
 ## `PB.Validate.validate/4`
 

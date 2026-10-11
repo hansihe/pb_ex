@@ -25,6 +25,9 @@ defmodule PB.TextFormat.Decoder do
   #     C++ resolves (`type.googleapis.com/` or `type.googleprod.com/`)
   #   * reserved field names are skipped, and with `ignore_unknown` so are
   #     unknown fields, as C++ does with `allow_unknown_field`
+  #   * with `allow_field_numbers`, a decimal number names the field, or the
+  #     extension, with that number, and a reserved number is skipped, as C++
+  #     does with `allow_field_number`; otherwise a number is an unknown name
   #
   # Failures are thrown as `{:text_error, reason}` and returned by run/4. A
   # reason is a `PB.Runtime.Errors` tuple carrying a path, or one of
@@ -105,6 +108,30 @@ defmodule PB.TextFormat.Decoder do
     end
   end
 
+  defp resolve(name, msg, %{name: {:number, text}} = node, opts, path) do
+    number = if Keyword.get(opts, :allow_field_numbers, false), do: field_number(text)
+
+    cond do
+      is_nil(number) ->
+        unknown!(name, node, text, opts, path)
+
+      in_ranges?(number, msg.extension_ranges) ->
+        case Map.fetch(msg.extensions_by_number, number) do
+          {:ok, field} -> {:extension, field}
+          :error -> unknown!(name, node, text, opts, path)
+        end
+
+      in_ranges?(number, Map.get(msg, :reserved_ranges, [])) ->
+        skip!(node, path)
+
+      field = Map.get(msg.fields_by_number, number) ->
+        {:field, field}
+
+      true ->
+        unknown!(name, node, text, opts, path)
+    end
+  end
+
   # In an Any, C++ reads any bracketed name as a type URL, so it needs a `/`.
   defp resolve(@any, _msg, %{name: {:extension, name}} = node, _opts, path),
     do: malformed!(~s(expected a type URL such as "type.googleapis.com/#{name}"), node, path)
@@ -137,6 +164,18 @@ defmodule PB.TextFormat.Decoder do
          do: field
     end
   end
+
+  # Like C++ `SimpleAtoi` into an int32: decimal only.
+  defp field_number(text) do
+    case Integer.parse(text) do
+      {number, ""} when number <= 0x7FFFFFFF -> number
+      _ -> nil
+    end
+  end
+
+  # Descriptor ranges are end-exclusive.
+  defp in_ranges?(number, ranges),
+    do: Enum.any?(ranges, fn %{start: first, end: last} -> number >= first and number < last end)
 
   defp split_name(full_name) do
     full_name = Atom.to_string(full_name)

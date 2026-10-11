@@ -74,7 +74,7 @@ defmodule PB.TextFormat.ParserTest do
     end
 
     test "rejects malformed field names" do
-      assert {~s(expected field name, found "1"), 0} = error("1: 2")
+      assert {~s(expected field name, found "1.5"), 0} = error("1.5: 2")
       assert {~s(expected field name, found "}"), 0} = error("}")
       assert {~s(expected identifier, found "]"), 1} = error("[]: 1")
       assert {~s(expected "]", found ":"), 4} = error("[a.b: 1")
