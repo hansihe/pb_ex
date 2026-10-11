@@ -240,4 +240,46 @@ defmodule PB.CEL do
   def eval!(source, values \\ %{}, env \\ Env.empty()) do
     source |> eval(values, env) |> Program.unwrap!()
   end
+
+  @doc """
+  Reads `name.f1.f2...` from `values` as evaluating that expression with `env`
+  would, but tells an unset field apart from one set to its default.
+
+  Returns `:absent` when `has()` is false at some step of the path: a field
+  with presence that is unset (for a proto3 field without presence, one that
+  holds its default), or a map key that is missing. Otherwise returns what
+  evaluation would. `path` is a list of field names or map keys, as in the
+  `{:var, name, path}` arguments of `PB.CEL.Checked.references/1`; `name` must
+  be a variable declared in `env`.
+
+      env = PB.CEL.Env.build(vars: [req: {:map, :string, :string}])
+
+      PB.CEL.select(env, %{req: %{"a" => ""}}, "req", ["a"])
+      #=> {:ok, {:string, ""}}
+
+      PB.CEL.select(env, %{req: %{}}, "req", ["a"])
+      #=> :absent
+  """
+  @spec select(Env.t(), keyword | map, atom | String.t(), [String.t()]) ::
+          {:ok, Value.t()} | :absent | {:unknown, Unknown.t()} | {:error, Error.t()}
+  def select(%Env{} = env, values, name, path) when is_list(path) do
+    root = %{id: 1, expr_kind: {:ident_expr, %{name: to_string(name)}}}
+
+    {expr, _next_id} =
+      Enum.reduce(path, {root, 2}, fn field, {operand, id} when is_binary(field) ->
+        key = %{id: id, expr_kind: {:const_expr, %{constant_kind: {:string_value, field}}}}
+        select = {:call_expr, %{function: "_?._", args: [operand, key]}}
+        {%{id: id + 1, expr_kind: select}, id + 2}
+      end)
+
+    source_info = %{location: "<select>", positions: %{}, macro_calls: %{}, line_offsets: []}
+
+    with {:ok, program} <- compile(%{expr: expr, source_info: source_info}, env) do
+      case {path, Program.eval(program, values)} do
+        {[_ | _], {:ok, {:optional, :none}}} -> :absent
+        {[_ | _], {:ok, {:optional, {:some, value}}}} -> {:ok, value}
+        {_path, result} -> result
+      end
+    end
+  end
 end
