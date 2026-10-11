@@ -8,6 +8,14 @@ defmodule PB.CEL.ValueTest do
   alias PB.WellKnownTypes.Codec, as: WKTCodec
   alias PB.WellKnownTypes.Time, as: WKTTime
 
+  test "infers tagged values from plain terms" do
+    assert Value.infer(%{"a" => [1, nil]}) ==
+             {:ok, Value.map(%{Value.string("a") => Value.list([Value.int(1), Value.null()])})}
+
+    env = PB.CEL.Env.build(vars: %{x: :dyn})
+    assert PB.CEL.eval(~S|x.a + x["b"]|, %{x: %{"a" => 1, "b" => 2}}, env) == {:ok, Value.int(3)}
+  end
+
   test "decodes cel.expr.ExprValue and cel.expr.Value scalars" do
     assert Value.from_expr_value(%{kind: {:value, %{kind: {:int64_value, 42}}}}) ==
              {:ok, Value.int(42)}

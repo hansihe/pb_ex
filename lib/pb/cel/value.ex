@@ -347,6 +347,10 @@ defmodule PB.CEL.Value do
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+    |> case do
+      {:ok, values} -> {:ok, map(values)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   def infer(value), do: {:error, "cannot convert #{inspect(value)} to a CEL value"}
