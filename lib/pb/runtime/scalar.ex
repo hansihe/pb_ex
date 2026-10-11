@@ -85,7 +85,7 @@ defmodule PB.Runtime.Scalar do
       :TYPE_BOOL -> value == false
       :TYPE_STRING -> value == ""
       :TYPE_BYTES -> value == ""
-      :TYPE_ENUM -> value == 0 or value == default_enum(field)
+      :TYPE_ENUM -> default_enum?(field, value)
       :TYPE_MESSAGE -> false
       _numeric -> value == 0
     end
@@ -187,7 +187,12 @@ defmodule PB.Runtime.Scalar do
 
   defp default_enum(%{default: default}), do: default
 
-  defp default_enum(%{enum: enum}), do: Map.get(enum.by_number, 0, 0)
+  defp default_enum(%{enum: enum}), do: enum.default
+
+  defp default_enum?(field, value) do
+    default = default_enum(field)
+    value == default or value == Map.get(field.enum.by_name, default)
+  end
 
   defp decode_enum(field, raw) do
     signed = Wire.signed32(raw)

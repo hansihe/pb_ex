@@ -70,6 +70,7 @@ defmodule PB.Schema.Compiled do
   @type enum :: %{
           required(:by_name) => %{optional(atom()) => integer()},
           required(:by_number) => %{optional(integer()) => atom()},
+          required(:default) => atom() | integer(),
           required(:features) => map()
         }
 

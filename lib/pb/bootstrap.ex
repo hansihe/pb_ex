@@ -217,7 +217,8 @@ defmodule PB.Bootstrap do
                             16 => :TYPE_SFIXED64,
                             17 => :TYPE_SINT32,
                             18 => :TYPE_SINT64
-                          }
+                          },
+                          default: :TYPE_DOUBLE
                         },
                         :"google.protobuf.FieldDescriptorProto.Label" => %{
                           by_name: %{
@@ -229,7 +230,8 @@ defmodule PB.Bootstrap do
                             1 => :LABEL_OPTIONAL,
                             2 => :LABEL_REQUIRED,
                             3 => :LABEL_REPEATED
-                          }
+                          },
+                          default: :LABEL_OPTIONAL
                         }
                       },
                       services: %{},

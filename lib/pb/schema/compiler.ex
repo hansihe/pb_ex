@@ -155,16 +155,23 @@ defmodule PB.Schema.Compiler do
       fqn = make_fqn(parent, to_atom(e[:name]))
       vals = e[:value] || []
       by_name = Map.new(vals, &{to_atom(&1[:name]), &1[:number]})
-      by_number = Map.new(vals, &{&1[:number], to_atom(&1[:name])})
+      # Aliases share a number; like protoc, the first declared name wins.
+      by_number = vals |> Enum.reverse() |> Map.new(&{&1[:number], to_atom(&1[:name])})
       enum_features = Features.enum_features(features, e[:options])
 
       put_in(acc, [:enums, fqn], %{
         by_name: by_name,
         by_number: by_number,
+        default: enum_default(vals),
         features: enum_features
       })
     end)
   end
+
+  # An enum field without an explicit default defaults to the first declared
+  # value, which is 0 in open enums but may be any number in closed ones.
+  defp enum_default([first | _]), do: to_atom(first[:name])
+  defp enum_default([]), do: 0
 
   defp compile_services(services, package, acc) do
     Enum.reduce(services, acc, fn svc, acc ->
