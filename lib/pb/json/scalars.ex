@@ -153,21 +153,21 @@ defmodule PB.JSON.Scalars do
       opts.enums_as_ints -> enum_to_int(schema, field, value)
       is_atom(value) -> Atom.to_string(value)
       is_integer(value) -> enum_int_to_name(schema, field, value)
-      true -> Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})
+      true -> Errors.raise!(:unknown_enum_value, value, details: %{enum: field.type_name})
     end
   end
 
   def encode_null_value_enum!(_field, value) when value in [:NULL_VALUE, 0], do: nil
 
   def encode_null_value_enum!(field, value) do
-    Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})
+    Errors.raise!(:unknown_enum_value, value, details: %{enum: field.type_name})
   end
 
   defp enum_to_int(schema, field, value) when is_integer(value) do
     case schema.enums[field.type_name] do
       %{by_number: by_number} = enum ->
         if Features.closed_enum?(enum) and not Map.has_key?(by_number, value) do
-          Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})
+          Errors.raise!(:unknown_enum_value, value, details: %{enum: field.type_name})
         else
           value
         end
@@ -193,7 +193,7 @@ defmodule PB.JSON.Scalars do
         case Map.get(enum.by_number, value) do
           nil ->
             if Features.closed_enum?(enum) do
-              Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})
+              Errors.raise!(:unknown_enum_value, value, details: %{enum: field.type_name})
             else
               value
             end
@@ -218,7 +218,7 @@ defmodule PB.JSON.Scalars do
         name
 
       Features.closed_enum?(enum) ->
-        Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})
+        Errors.raise!(:unknown_enum_value, value, details: %{enum: field.type_name})
 
       true ->
         value
@@ -253,9 +253,9 @@ defmodule PB.JSON.Scalars do
     end
   end
 
-  def decode_enum(_schema, field, value, _opts) do
-    Errors.raise!(:invalid_enum_value, value,
-      details: %{expected: [:string, :integer], enum: field.type_name}
+  def decode_enum(_schema, _field, value, _opts) do
+    Errors.raise!(:invalid_value, "expected enum name or number",
+      details: %{expected: :enum, got: value}
     )
   end
 
@@ -266,7 +266,7 @@ defmodule PB.JSON.Scalars do
     if opts.unknown_fields == :ignore do
       :skip
     else
-      Errors.raise!(:invalid_enum_value, value, details: %{enum: field.type_name})
+      Errors.raise!(:unknown_enum_value, value, details: %{enum: field.type_name})
     end
   end
 

@@ -494,6 +494,13 @@ defmodule PB.JSONTest do
       assert json == %{"role" => "ADMIN"}
     end
 
+    test "decode reports values that are not enum names or numbers as invalid", %{
+      schema: schema
+    } do
+      assert {:error, %PB.ValueError{kind: :invalid_value, got: true}} =
+               JSON.from_term(%{"role" => true}, schema, :"j.Person")
+    end
+
     test "encode rejects names the enum does not declare", %{schema: schema} do
       assert {:error, %PB.ValueError{kind: :unknown_enum_value}} =
                JSON.to_term(%{role: :BOGUS}, schema, :"j.Person")
@@ -517,7 +524,7 @@ defmodule PB.JSONTest do
     end
 
     test "decode unknown string raises", %{schema: schema} do
-      assert {:error, %PB.ValueError{operation: :json_decode, kind: :invalid_enum_value}} =
+      assert {:error, %PB.ValueError{operation: :json_decode, kind: :unknown_enum_value}} =
                JSON.from_term(%{"role" => "BOGUS"}, schema, :"j.Person")
     end
 
@@ -665,7 +672,7 @@ defmodule PB.JSONTest do
     end
 
     test "default (unknown_fields: :error) still rejects unknown string", %{ies: ies} do
-      assert {:error, %PB.ValueError{operation: :json_decode, kind: :invalid_enum_value}} =
+      assert {:error, %PB.ValueError{operation: :json_decode, kind: :unknown_enum_value}} =
                JSON.from_term(%{"color" => "MAUVE"}, ies, :"ie.M")
     end
 
@@ -1792,7 +1799,7 @@ defmodule PB.JSONTest do
     end
 
     test "encode rejects an unknown null_value enum payload", %{schema: schema} do
-      assert {:error, %PB.ValueError{kind: :invalid_enum_value, value: :BAD}} =
+      assert {:error, %PB.ValueError{kind: :unknown_enum_value, value: :BAD}} =
                JSON.to_term(%{kind: {:null_value, :BAD}}, schema, @value)
     end
 

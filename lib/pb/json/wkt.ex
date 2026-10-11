@@ -396,7 +396,7 @@ defmodule PB.JSON.WKT do
   defp encode_value(%{kind: {:null_value, v}}) when v in [:NULL_VALUE, 0, nil], do: nil
 
   defp encode_value(%{kind: {:null_value, v}}) do
-    Errors.raise!(:invalid_enum_value, v, details: %{enum: :"google.protobuf.NullValue"})
+    Errors.raise!(:unknown_enum_value, v, details: %{enum: :"google.protobuf.NullValue"})
   end
 
   defp encode_value(%{kind: {:bool_value, b}}) when is_boolean(b), do: b

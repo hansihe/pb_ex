@@ -14,7 +14,6 @@ defmodule PB.ValueError do
           | :invalid_value
           | :value_out_of_range
           | :invalid_oneof
-          | :invalid_enum_value
           | :unknown_enum_value
           | :missing_required
           | :message_name_mismatch
@@ -98,9 +97,6 @@ defmodule PB.ValueError do
 
   defp format(%__MODULE__{kind: :unknown_enum_value, path: path, value: value, enum: enum}),
     do: "unknown enum value at #{PB.Error.format_path(path)}: #{inspect(value)} for #{inspect(enum)}"
-
-  defp format(%__MODULE__{kind: :invalid_enum_value, path: path, value: value, enum: enum}),
-    do: "invalid enum value at #{PB.Error.format_path(path)}: #{inspect(value)} for #{inspect(enum)}"
 
   defp format(%__MODULE__{kind: :message_name_mismatch, path: path, expected: expected, got: got}) do
     "message name mismatch at #{PB.Error.format_path(path)}: expected " <>

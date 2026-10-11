@@ -71,15 +71,12 @@ defmodule PB.JSON.Errors do
     %ValueError{kind: :value_out_of_range, path: path(opts), value: value, min: d[:min], max: d[:max]}
   end
 
-  defp build(:invalid_enum_value, value, opts) do
-    d = details(opts)
-
+  defp build(:unknown_enum_value, value, opts) do
     %ValueError{
-      kind: :invalid_enum_value,
+      kind: :unknown_enum_value,
       path: path(opts),
       value: value,
-      enum: d[:enum],
-      expected: d[:expected]
+      enum: details(opts)[:enum]
     }
   end
 
