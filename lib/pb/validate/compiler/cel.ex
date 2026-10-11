@@ -9,7 +9,6 @@ defmodule PB.Validate.Compiler.CEL do
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Checked
   alias PB.CEL.Regexes
-  alias PB.CEL.ProtoType
   alias PB.Validate.CELExtensions
   alias PB.Validate.CompileError
   alias PB.Validate.Schema, as: ValidateSchema
@@ -103,8 +102,7 @@ defmodule PB.Validate.Compiler.CEL do
     env =
       CEL.Env.build(
         schema: schema,
-        message_schema: PB.Validate.CEL.MessageSchema,
-        vars: Map.put_new(vars, "now", ProtoType.timestamp()),
+        vars: Map.put_new(vars, "now", :timestamp),
         functions: CELExtensions.functions()
       )
 

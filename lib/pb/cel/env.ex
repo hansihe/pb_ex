@@ -9,7 +9,10 @@ defmodule PB.CEL.Env do
   # library; custom functions are appended to the same checker signature path.
   @moduledoc false
 
+  alias PB.CEL.Checker.Literals
   alias PB.CEL.Library
+  alias PB.Runtime.Errors, as: RuntimeErrors
+  alias PB.Runtime.Options
   alias PB.CEL.Function
   alias PB.CEL.Function.Overload
   alias PB.CEL.Checker.Types, as: CType
@@ -40,144 +43,161 @@ defmodule PB.CEL.Env do
           validate_literals: [PB.CEL.Checker.Literals.kind()]
         }
 
-  @spec new(keyword | map | t) :: t
-  def new(%__MODULE__{} = env) do
-    %{env | vars: Map.new(env.vars, fn {name, type} -> {name, CType.from_input(type)} end)}
-  end
-
-  def new(vars) when is_list(vars) or is_map(vars) do
-    Enum.reduce(vars, %__MODULE__{}, fn {name, type}, env ->
-      put_var(env, name, type)
-    end)
-  end
-
-  @doc """
-  Returns an empty environment with no variables, no functions, no schema, and
-  no container. Used as the default for `PB.CEL.eval/3` when no env is
-  needed.
-  """
-  @spec empty() :: t
-  def empty, do: %__MODULE__{}
+  @build_options [
+    schema: {:any, nil},
+    container: {:any, nil},
+    vars: {:any, []},
+    functions: {:list, []},
+    validate_literals: {:list, []},
+    message_schema: {:any, nil},
+    message_runtime: {:any, nil}
+  ]
 
   @doc """
-  Builds an environment from typical options.
+  Builds an environment.
 
-  Equivalent to `from_options/1` but reads more naturally at call sites.
+      env =
+        PB.CEL.Env.build(
+          schema: MyApp.Schema,
+          container: "my.pkg",
+          vars: [user: {:message, "my.pkg.User"}, tags: {:list, :string}],
+          functions: [my_function]
+        )
 
-      env = PB.CEL.Env.build(
-        schema: schema,
-        vars: [name: :string, ids: {:list, :int}],
-        functions: [my_function],
-        container: "my.pkg"
-      )
+  ## Options
 
-  `validate_literals: [:duration, :timestamp, :regex]` (any subset) makes
-  checking reject literal arguments the evaluator would reject:
-  `duration('30d')`, `timestamp('nope')` or `s.matches('[')`. By default these
-  fail when evaluated, as CEL specifies.
+    * `:vars` — the variables expressions may read, as a keyword list or map
+      from name to `t:PB.CEL.Type.t/0`.
+    * `:functions` — custom functions, as `PB.CEL.Function` structs. See the
+      "Custom CEL functions" guide.
+    * `:schema` — a schema from `PB.compile/2`, or a module that
+      `use PB.Schema`, whose messages and enums expressions may use.
+    * `:container` — the protobuf package names are resolved in, as with
+      `container` in other CEL implementations: with `"my.pkg"`, `User`
+      resolves to `my.pkg.User`.
+    * `:validate_literals` — a subset of `[:duration, :timestamp, :regex]`.
+      Checking then rejects literal arguments evaluation would reject, such as
+      `duration('30d')`, `timestamp('nope')` or `s.matches('[')`. By default
+      these fail when evaluated, as CEL specifies.
+
+  Raises `PB.OptionError` for an unknown option or an invalid value.
   """
   @spec build(keyword) :: t
-  def build(opts) when is_list(opts), do: from_options(opts)
+  def build(opts \\ []) do
+    case Options.validate(opts, @build_options) do
+      {:ok, _valid} -> from_options(opts)
+      {:error, reason} -> raise RuntimeErrors.to_error(reason)
+    end
+  end
 
+  # The checker rebuilds an environment from `env:` plus overrides, so unset
+  # options leave the base environment alone.
+  @doc false
   @spec from_options(keyword) :: t
   def from_options(opts) when is_list(opts) do
+    schema = Keyword.get(opts, :schema)
+    default_provider = fn pb_provider -> if schema, do: pb_provider end
+
     opts
     |> Keyword.get(:env, %__MODULE__{})
-    |> new()
-    |> put_message_schema(Keyword.get(opts, :message_schema, nil))
-    |> put_message_runtime(Keyword.get(opts, :message_runtime, nil))
-    |> put_schema(Keyword.get(opts, :schema, nil))
-    |> put_container(Keyword.get(opts, :container, nil))
-    |> merge_vars(Keyword.get(opts, :vars, %{}))
+    |> put_message_schema(
+      Keyword.get_lazy(opts, :message_schema, fn ->
+        default_provider.(PB.Validate.CEL.MessageSchema)
+      end)
+    )
+    |> put_message_runtime(
+      Keyword.get_lazy(opts, :message_runtime, fn ->
+        default_provider.(PB.Validate.CEL.MessageRuntime)
+      end)
+    )
+    |> put_schema(schema)
+    |> put_container(Keyword.get(opts, :container))
+    |> merge_vars(Keyword.get(opts, :vars, []))
     |> merge_functions(Keyword.get(opts, :functions, []))
     |> put_validate_literals(Keyword.get(opts, :validate_literals))
     |> register_library_functions()
   end
 
+  @doc false
+  @spec empty() :: t
+  def empty, do: %__MODULE__{}
+
   defp put_validate_literals(env, nil), do: env
 
   defp put_validate_literals(env, kinds) do
-    unless is_list(kinds) and kinds -- PB.CEL.Checker.Literals.kinds() == [] do
-      raise ArgumentError,
-            "expected :validate_literals to be a list of " <>
-              "#{inspect(PB.CEL.Checker.Literals.kinds())}, got: #{inspect(kinds)}"
+    unless is_list(kinds) and kinds -- Literals.kinds() == [] do
+      reason = "expected a subset of #{inspect(Literals.kinds())}"
+      invalid_option!(:validate_literals, kinds, reason)
     end
 
     %{env | validate_literals: kinds}
   end
 
-  @spec put_message_schema(t, module() | nil) :: t
-  def put_message_schema(%__MODULE__{} = env, nil), do: env
+  defp put_message_schema(env, nil), do: env
 
-  def put_message_schema(%__MODULE__{} = env, message_schema) when is_atom(message_schema) do
-    Code.ensure_loaded(message_schema)
+  defp put_message_schema(env, provider),
+    do: %{env | message_schema: provider!(:message_schema, provider, :normalize, 1)}
 
-    unless function_exported?(message_schema, :normalize, 1) do
-      raise ArgumentError,
-            "expected :message_schema to implement PB.CEL.Message.Schema, got: #{inspect(message_schema)}"
+  defp put_message_runtime(env, nil), do: env
+
+  defp put_message_runtime(env, provider),
+    do: %{env | message_runtime: provider!(:message_runtime, provider, :from_decoded, 3)}
+
+  defp provider!(option, provider, function, arity) do
+    unless is_atom(provider) and Code.ensure_loaded?(provider) and
+             function_exported?(provider, function, arity) do
+      invalid_option!(option, provider, "expected a provider module")
     end
 
-    %{env | message_schema: message_schema}
+    provider
   end
 
-  def put_message_schema(%__MODULE__{}, message_schema) do
-    raise ArgumentError,
-          "expected :message_schema to be a module, got: #{inspect(message_schema)}"
+  defp put_schema(env, nil), do: env
+  defp put_schema(env, schema), do: %{env | schema: env.message_schema.normalize(schema)}
+
+  defp put_container(env, nil), do: env
+
+  defp put_container(env, container) when is_binary(container),
+    do: %{env | container: normalize_container(container)}
+
+  defp put_container(_env, container),
+    do: invalid_option!(:container, container, "expected a string")
+
+  defp merge_vars(env, vars) when is_list(vars) or is_map(vars) do
+    Enum.reduce(vars, env, fn
+      {name, type}, env when is_atom(name) or is_binary(name) ->
+        %{env | vars: Map.put(env.vars, normalize_name(name), var_type!(name, type))}
+
+      entry, _env ->
+        invalid_option!(:vars, entry, "expected {name, type}")
+    end)
   end
 
-  @spec put_message_runtime(t, module() | nil) :: t
-  def put_message_runtime(%__MODULE__{} = env, nil), do: env
+  defp merge_vars(_env, vars), do: invalid_option!(:vars, vars, "expected a keyword list or map")
 
-  def put_message_runtime(%__MODULE__{} = env, message_runtime) when is_atom(message_runtime) do
-    Code.ensure_loaded(message_runtime)
-
-    unless function_exported?(message_runtime, :from_decoded, 3) do
-      raise ArgumentError,
-            "expected :message_runtime to implement PB.CEL.Message.Runtime, got: #{inspect(message_runtime)}"
-    end
-
-    %{env | message_runtime: message_runtime}
+  defp var_type!(name, type) do
+    CType.from_input(type)
+  rescue
+    FunctionClauseError ->
+      invalid_option!(:vars, type, "#{inspect(name)} has no PB.CEL.Type: #{inspect(type)}")
   end
 
-  def put_message_runtime(%__MODULE__{}, message_runtime) do
-    raise ArgumentError,
-          "expected :message_runtime to be a module, got: #{inspect(message_runtime)}"
+  defp merge_functions(env, functions) do
+    Enum.reduce(functions, env, fn
+      %Function{} = function, env ->
+        %{env | functions: [normalize_function(function) | env.functions]}
+
+      other, _env ->
+        invalid_option!(:functions, other, "expected a %PB.CEL.Function{}")
+    end)
   end
 
-  @spec put_schema(t, term()) :: t
-  def put_schema(%__MODULE__{} = env, nil), do: env
-
-  def put_schema(%__MODULE__{} = env, schema) do
-    %{env | schema: env.message_schema.normalize(schema)}
+  @spec invalid_option!(atom, term, String.t()) :: no_return
+  defp invalid_option!(option, value, reason) do
+    raise PB.OptionError, kind: :invalid_option, option: option, value: value, reason: reason
   end
 
-  @spec put_container(t, String.t() | nil) :: t
-  def put_container(%__MODULE__{} = env, nil), do: env
-
-  def put_container(%__MODULE__{} = env, container) when is_binary(container) do
-    %{env | container: normalize_container(container)}
-  end
-
-  @spec put_var(t, atom | String.t(), CType.t() | PB.CEL.ProtoType.input()) :: t
-  def put_var(%__MODULE__{} = env, name, type) when is_atom(name) or is_binary(name) do
-    %{env | vars: Map.put(env.vars, normalize_name(name), CType.from_input(type))}
-  end
-
-  @spec merge_vars(t, keyword | map) :: t
-  def merge_vars(%__MODULE__{} = env, vars) when is_list(vars) or is_map(vars) do
-    Enum.reduce(vars, env, fn {name, type}, env -> put_var(env, name, type) end)
-  end
-
-  @spec put_function(t, Function.t()) :: t
-  def put_function(%__MODULE__{} = env, %Function{} = function) do
-    %{env | functions: [normalize_function(function) | env.functions]}
-  end
-
-  @spec merge_functions(t, [Function.t()]) :: t
-  def merge_functions(%__MODULE__{} = env, functions) when is_list(functions) do
-    Enum.reduce(functions, env, fn function, env -> put_function(env, function) end)
-  end
-
+  @doc false
   @spec namespaces(t) :: MapSet.t(String.t())
   def namespaces(%__MODULE__{} = env) do
     for function <- env.functions,
@@ -186,6 +206,7 @@ defmodule PB.CEL.Env do
         do: namespace
   end
 
+  @doc false
   @spec fetch_var(t, String.t()) :: {:ok, CType.t()} | :error
   def fetch_var(%__MODULE__{} = env, name) when is_binary(name) do
     Map.fetch(env.vars, name)
@@ -213,11 +234,11 @@ defmodule PB.CEL.Env do
   defp normalize_container("." <> container), do: normalize_container(container)
   defp normalize_container(container), do: String.trim(container)
 
-  defp normalize_function(%Function{overloads: overloads, dynamic_overloads: dynamic} = function) do
+  defp normalize_function(%Function{} = function) do
     %{
       function
-      | overloads: Enum.map(overloads, &normalize_overload(&1, function)),
-        dynamic_overloads: Enum.map(dynamic, &normalize_overload(&1, function))
+      | overloads: Enum.map(function.overloads, &normalize_overload(&1, function)),
+        dynamic_overloads: Enum.map(function.dynamic_overloads, &normalize_overload(&1, function))
     }
   end
 
@@ -234,16 +255,11 @@ defmodule PB.CEL.Env do
     %{overload | eval: {:mfa, {mod, fun}}}
   end
 
-  defp normalize_overload(%Overload{eval: eval}, function) when is_function(eval) do
-    raise ArgumentError,
-          "CEL custom function #{inspect(function.name)} overload eval must be an " <>
-            "{Module, function_atom} MFA tuple; closures and anonymous functions are not " <>
-            "supported. Got: #{inspect(eval)}"
-  end
-
   defp normalize_overload(%Overload{eval: eval}, function) do
-    raise ArgumentError,
-          "CEL custom function #{inspect(function.name)} overload eval must be an " <>
-            "{Module, function_atom} MFA tuple. Got: #{inspect(eval)}"
+    invalid_option!(
+      :functions,
+      eval,
+      "#{inspect(function.name)} overload :eval must be {Module, function}, got: #{inspect(eval)}"
+    )
   end
 end

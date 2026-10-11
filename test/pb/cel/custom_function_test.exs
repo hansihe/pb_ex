@@ -105,7 +105,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -123,7 +123,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -141,7 +141,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -159,7 +159,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -177,7 +177,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -195,7 +195,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -213,7 +213,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -231,7 +231,7 @@ defmodule PB.CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise ArgumentError, ~r/must be an \{Module, function_atom\} MFA tuple/, fn ->
+    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -303,7 +303,8 @@ defmodule PB.CEL.CustomFunctionTest do
     env = env(vars: [x: :int], functions: functions)
 
     {:ok, checked} = CEL.check("first(x) && first(2)", env)
-    [first_call, second_call] = for call <- CEL.Checked.references(checked).calls, do: call.expr_id
+    [first_call, second_call] =
+      for call <- CEL.Checked.references(checked).calls, do: call.expr_id
     program = CEL.Program.new(checked, env)
 
     assert CEL.eval_program(program, %{x: 1}) == {:ok, Value.bool(true)}

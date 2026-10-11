@@ -30,6 +30,34 @@ defmodule PB.CEL.ProgramTest do
     assert CEL.eval_program!(program, %{"n" => 4}) == Value.int(5)
   end
 
+  test "Env.build/1 validates its options" do
+    for {opts, pattern} <- [
+          {[bogus: 1], ~r/unknown option\(s\): \[:bogus\]/},
+          {[vars: [x: :nope]], ~r/:vars: :x has no PB.CEL.Type: :nope/},
+          {[vars: :nope], ~r/:vars: expected a keyword list or map/},
+          {[functions: [:nope]], ~r/:functions: expected a %PB.CEL.Function\{\}/},
+          {[container: :pkg], ~r/:container: expected a string/},
+          {[message_schema: Enum], ~r/:message_schema: expected a provider module/}
+        ] do
+      assert_raise PB.OptionError, pattern, fn -> Env.build(opts) end
+    end
+  end
+
+  test "Env.build/1 with only :schema reads PB messages" do
+    env =
+      Env.build(
+        schema: PB.TestSupport.TestSchema,
+        container: "cel.expr.conformance.proto3",
+        vars: [n: :int]
+      )
+    assert {:ok, {:bool, true}} = PB.CEL.eval("n == 1", %{n: 1}, env)
+
+    {:ok, value} =
+      PB.CEL.eval("TestAllTypes{single_int64: 3}.single_int64", %{}, env)
+
+    assert value == {:int, 3}
+  end
+
   test "Env.empty/0 returns a default environment" do
     assert %Env{} = env = Env.empty()
     assert env.vars == %{}
