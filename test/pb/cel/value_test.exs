@@ -1,7 +1,7 @@
 defmodule PB.CEL.ValueTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.Value
   alias PB.Validate.CEL.MessageRuntime
   alias PB.Validate.CEL.MessageSchema
@@ -123,13 +123,13 @@ defmodule PB.CEL.ValueTest do
 
   test "decodes CEL type values" do
     assert Value.from_expr_value(%{kind: {:type_value, "null_type"}}) ==
-             {:ok, {:type, Type.null()}}
+             {:ok, {:type, ProtoType.null()}}
 
     assert Value.from_expr_value(%{kind: {:type_value, "list"}}) ==
-             {:ok, {:type, Type.list(Type.dyn())}}
+             {:ok, {:type, ProtoType.list(ProtoType.dyn())}}
 
     assert Value.from_expr_value(%{kind: {:type_value, "google.protobuf.Timestamp"}}) ==
-             {:ok, {:type, Type.timestamp()}}
+             {:ok, {:type, ProtoType.timestamp()}}
   end
 
   test "round-trips supported values through cel.expr.ExprValue shape" do
@@ -181,7 +181,7 @@ defmodule PB.CEL.ValueTest do
       assert Value.to_native(Value.object("type.googleapis.com/x", <<>>)) ==
                {:object, "type.googleapis.com/x", <<>>}
 
-      assert Value.to_native({:type, Type.null()}) == {:type, Type.null()}
+      assert Value.to_native({:type, ProtoType.null()}) == {:type, ProtoType.null()}
     end
   end
 end

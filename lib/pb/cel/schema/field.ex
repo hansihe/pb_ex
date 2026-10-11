@@ -1,7 +1,7 @@
 defmodule PB.CEL.Schema.Field do
   @moduledoc false
 
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.WellKnownTypes
 
   @signed_int_types [
@@ -24,41 +24,41 @@ defmodule PB.CEL.Schema.Field do
   defguard float_type?(type) when type in @float_types
   defguard message_type?(type) when type in @message_types
 
-  @spec cel_type(PB.CEL.Message.Schema.schema(), t()) :: {:ok, Type.t()} | {:error, String.t()}
+  @spec cel_type(PB.CEL.Message.Schema.schema(), t()) :: {:ok, ProtoType.t()} | {:error, String.t()}
   def cel_type(schema, %{cardinality: :map, map_key: key, map_value: value}) do
     with {:ok, key_type} <- singular_cel_type(schema, key),
          {:ok, value_type} <- singular_cel_type(schema, value) do
-      {:ok, Type.map(key_type, value_type)}
+      {:ok, ProtoType.map(key_type, value_type)}
     end
   end
 
   def cel_type(schema, %{cardinality: :repeated} = field) do
     with {:ok, elem_type} <- singular_cel_type(schema, field) do
-      {:ok, Type.list(elem_type)}
+      {:ok, ProtoType.list(elem_type)}
     end
   end
 
   def cel_type(schema, field), do: singular_cel_type(schema, field)
 
   @spec singular_cel_type(PB.CEL.Message.Schema.schema(), t()) ::
-          {:ok, Type.t()} | {:error, String.t()}
+          {:ok, ProtoType.t()} | {:error, String.t()}
   def singular_cel_type(_schema, %{type: type}) when signed_int_type?(type),
-    do: {:ok, Type.int()}
+    do: {:ok, ProtoType.int()}
 
   def singular_cel_type(_schema, %{type: type}) when unsigned_int_type?(type),
-    do: {:ok, Type.uint()}
+    do: {:ok, ProtoType.uint()}
 
   def singular_cel_type(_schema, %{type: type}) when float_type?(type),
-    do: {:ok, Type.double()}
+    do: {:ok, ProtoType.double()}
 
-  def singular_cel_type(_schema, %{type: :TYPE_BOOL}), do: {:ok, Type.bool()}
-  def singular_cel_type(_schema, %{type: :TYPE_STRING}), do: {:ok, Type.string()}
-  def singular_cel_type(_schema, %{type: :TYPE_BYTES}), do: {:ok, Type.bytes()}
+  def singular_cel_type(_schema, %{type: :TYPE_BOOL}), do: {:ok, ProtoType.bool()}
+  def singular_cel_type(_schema, %{type: :TYPE_STRING}), do: {:ok, ProtoType.string()}
+  def singular_cel_type(_schema, %{type: :TYPE_BYTES}), do: {:ok, ProtoType.bytes()}
 
   def singular_cel_type(_schema, %{type: :TYPE_ENUM, type_name: type_name}),
-    do: {:ok, Type.message(Atom.to_string(type_name))}
+    do: {:ok, ProtoType.message(Atom.to_string(type_name))}
 
-  def singular_cel_type(_schema, %{type: :TYPE_ENUM}), do: {:ok, Type.int()}
+  def singular_cel_type(_schema, %{type: :TYPE_ENUM}), do: {:ok, ProtoType.int()}
 
   def singular_cel_type(_schema, %{type: type, type_name: type_name})
       when message_type?(type) do
@@ -66,7 +66,7 @@ defmodule PB.CEL.Schema.Field do
 
     case WellKnownTypes.field_type(name) do
       {:ok, type} -> {:ok, type}
-      :error -> {:ok, Type.message(name)}
+      :error -> {:ok, ProtoType.message(name)}
     end
   end
 

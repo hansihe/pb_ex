@@ -1,7 +1,7 @@
 defmodule PB.CEL.Checker.Types do
   @moduledoc false
 
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.WellKnownTypes
 
   @type primitive :: :bool | :int | :uint | :double | :string | :bytes
@@ -84,7 +84,7 @@ defmodule PB.CEL.Checker.Types do
   @spec var(var_id) :: t
   def var(id) when is_integer(id) and id >= 0, do: {:var, id}
 
-  @spec from_input(Type.input() | t) :: t
+  @spec from_input(PB.CEL.Type.t() | ProtoType.input() | t) :: t
   def from_input(:dyn), do: dyn()
   def from_input(:null), do: null()
   def from_input(:bool), do: bool()
@@ -94,6 +94,8 @@ defmodule PB.CEL.Checker.Types do
   def from_input(:string), do: string()
   def from_input(:bytes), do: bytes()
   def from_input(:type), do: type()
+  def from_input(:timestamp), do: timestamp()
+  def from_input(:duration), do: duration()
 
   def from_input({:wrapper, primitive} = type)
       when primitive in [:bool, :int, :uint, :double, :string, :bytes], do: type
@@ -113,7 +115,7 @@ defmodule PB.CEL.Checker.Types do
   def from_input({:var, _id} = type), do: type
   def from_input(%{type_kind: {_kind, _value}} = type), do: from_cel(type)
 
-  @spec from_cel(Type.t()) :: t
+  @spec from_cel(ProtoType.t()) :: t
   def from_cel(%{type_kind: {:dyn, %{}}}), do: dyn()
   def from_cel(%{type_kind: {:null, :NULL_VALUE}}), do: null()
 
@@ -150,44 +152,44 @@ defmodule PB.CEL.Checker.Types do
     {:abstract, name, Enum.map(params, &from_cel/1)}
   end
 
-  @spec to_cel(t, %{var_id => t}) :: Type.t()
+  @spec to_cel(t, %{var_id => t}) :: ProtoType.t()
   def to_cel(type, bindings \\ %{}) do
     case finalize(type, bindings) do
       :dyn ->
-        Type.dyn()
+        ProtoType.dyn()
 
       :null ->
-        Type.null()
+        ProtoType.null()
 
       primitive when is_map_key(@primitive_to_cel, primitive) ->
-        Type.coerce(primitive)
+        ProtoType.coerce(primitive)
 
       {:wrapper, primitive} ->
-        Type.wrapper(Map.fetch!(@primitive_to_cel, primitive))
+        ProtoType.wrapper(Map.fetch!(@primitive_to_cel, primitive))
 
       {:type, type} ->
-        Type.type(to_cel(type, bindings))
+        ProtoType.type(to_cel(type, bindings))
 
       {:list, elem_type} ->
-        Type.list(to_cel(elem_type, bindings))
+        ProtoType.list(to_cel(elem_type, bindings))
 
       {:map, key_type, value_type} ->
-        Type.map(to_cel(key_type, bindings), to_cel(value_type, bindings))
+        ProtoType.map(to_cel(key_type, bindings), to_cel(value_type, bindings))
 
       {:message, "google.protobuf.Timestamp"} ->
-        Type.timestamp()
+        ProtoType.timestamp()
 
       {:message, "google.protobuf.Duration"} ->
-        Type.duration()
+        ProtoType.duration()
 
       {:message, name} ->
-        Type.message(name)
+        ProtoType.message(name)
 
       {:optional, value_type} ->
-        Type.optional(to_cel(value_type, bindings))
+        ProtoType.optional(to_cel(value_type, bindings))
 
       {:abstract, name, params} ->
-        Type.abstract(name, Enum.map(params, &to_cel(&1, bindings)))
+        ProtoType.abstract(name, Enum.map(params, &to_cel(&1, bindings)))
     end
   end
 
@@ -324,7 +326,7 @@ defmodule PB.CEL.Checker.Types do
   @spec nullable?(t) :: boolean
   def nullable?(type), do: optional?(type) or type_kind(type) in [:message_type, :wrapper]
 
-  @spec assignable?(t | Type.t(), t | Type.t()) :: boolean
+  @spec assignable?(t | ProtoType.t(), t | ProtoType.t()) :: boolean
   def assignable?(expected, actual) do
     expected = from_input(expected)
     actual = from_input(actual)
@@ -333,14 +335,14 @@ defmodule PB.CEL.Checker.Types do
       assignable_scalar?(expected, actual) or assignable_composite?(expected, actual)
   end
 
-  @spec common([t | Type.t()]) :: t
+  @spec common([t | ProtoType.t()]) :: t
   def common([]), do: dyn()
 
   def common([type | rest]) do
     Enum.reduce(rest, from_input(type), &common_pair(&2, from_input(&1)))
   end
 
-  @spec well_known_assignable?(t | Type.t(), t | Type.t()) :: boolean
+  @spec well_known_assignable?(t | ProtoType.t(), t | ProtoType.t()) :: boolean
   def well_known_assignable?(expected, actual) do
     actual = from_input(actual)
 

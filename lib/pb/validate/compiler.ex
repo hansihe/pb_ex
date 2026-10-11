@@ -18,7 +18,7 @@ defmodule PB.Validate.Compiler do
   # `PB.Validate.Compiler.Context` (the user schema plus the once-built merged
   # standard-rule schema) through the field compiler.
 
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.Validate.Compiler.CEL
   alias PB.Validate.Compiler.Context
   alias PB.Validate.Compiler.Extensions
@@ -62,14 +62,14 @@ defmodule PB.Validate.Compiler do
         Extensions.message_cel_rules(message),
         ctx.user_schema,
         Atom.to_string(fqn),
-        Type.message(Atom.to_string(fqn)),
+        ProtoType.message(Atom.to_string(fqn)),
         :message_cel
       )
       |> CEL.add_user_cel_validation(
         Extensions.message_cel_expression_rules(message),
         ctx.user_schema,
         Atom.to_string(fqn),
-        Type.message(Atom.to_string(fqn)),
+        ProtoType.message(Atom.to_string(fqn)),
         :message_cel,
         :message_cel_expression
       )

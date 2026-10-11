@@ -12,7 +12,7 @@ defmodule PB.CEL.Value do
   alias PB.CEL.Proto
   alias PB.CEL.Runtime.NoMessageRuntime
   alias PB.CEL.Runtime.NoMessageSchema
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.WellKnownTypes
   alias PB.WellKnownTypes.Time, as: WKTTime
 
@@ -35,7 +35,7 @@ defmodule PB.CEL.Value do
           | {:map, %{t => t}}
           | {:message, String.t() | atom(), %{(String.t() | atom()) => t}}
           | {:optional, :none | {:some, t}}
-          | {:type, Type.t() | CType.t()}
+          | {:type, ProtoType.t() | CType.t()}
 
   defguardp is_value(value)
             when value == :null or
@@ -185,7 +185,7 @@ defmodule PB.CEL.Value do
   end
 
   defp do_from_expr_value(%{kind: {:type_value, type_name}}, schema) when is_binary(type_name) do
-    case Type.denotation(type_name) do
+    case ProtoType.denotation(type_name) do
       {:ok, type} ->
         {:ok, {:type, type}}
 
@@ -236,11 +236,11 @@ defmodule PB.CEL.Value do
     cond do
       match?({:ok, _message}, message_schema.resolve_message(schema, type_name)) ->
         {:ok, message} = message_schema.resolve_message(schema, type_name)
-        {:ok, {:type, Type.message(Atom.to_string(message))}}
+        {:ok, {:type, ProtoType.message(Atom.to_string(message))}}
 
       match?({:ok, _enum}, message_schema.resolve_enum(schema, type_name)) ->
         {:ok, enum} = message_schema.resolve_enum(schema, type_name)
-        {:ok, {:type, Type.message(Atom.to_string(enum))}}
+        {:ok, {:type, ProtoType.message(Atom.to_string(enum))}}
 
       true ->
         {:error, {:unsupported_type_value, type_name}}
@@ -262,7 +262,8 @@ defmodule PB.CEL.Value do
     end
   end
 
-  @spec coerce(term, CType.t() | Type.t()) :: {:ok, t} | {:error, String.t()}
+  @spec coerce(term, PB.CEL.Type.t() | CType.t() | ProtoType.t()) ::
+          {:ok, t} | {:error, String.t()}
   def coerce(value, type) when is_value(value) do
     type = CType.from_input(type)
     actual = type_of(value)
@@ -307,6 +308,15 @@ defmodule PB.CEL.Value do
       CType.primitive?(type, :BYTES) and is_binary(value) ->
         {:ok, bytes(value)}
 
+      type == CType.timestamp() and is_struct(value, DateTime) ->
+        value |> DateTime.to_unix(:nanosecond) |> PB.CEL.Runtime.Time.timestamp()
+
+      type == CType.timestamp() and is_map(value) ->
+        time_message(value, type, &WKTTime.from_proto_timestamp/1)
+
+      type == CType.duration() and is_map(value) ->
+        time_message(value, type, &WKTTime.from_proto_duration/1)
+
       is_list(value) ->
         case CType.list_elem(type) do
           {:ok, elem_type} -> coerce_list(value, elem_type)
@@ -324,6 +334,17 @@ defmodule PB.CEL.Value do
     end
   end
 
+  # A `google.protobuf.Timestamp` or `Duration` as PB decodes it,
+  # `%{seconds: s, nanos: n}`, with either key absent when zero.
+  defp time_message(value, type, from_proto) do
+    with [] <- Map.keys(value) -- [:seconds, :nanos],
+         {:ok, time} <- from_proto.(value) do
+      {:ok, time}
+    else
+      _invalid -> type_error(value, type)
+    end
+  end
+
   @spec infer(term) :: {:ok, t} | {:error, String.t()}
   def infer(value) when is_value(value), do: {:ok, value}
   def infer(nil), do: {:ok, null()}
@@ -337,6 +358,8 @@ defmodule PB.CEL.Value do
       {:ok, list(values)}
     end
   end
+
+  def infer(%DateTime{} = value), do: coerce(value, :timestamp)
 
   def infer(value) when is_map(value) do
     Enum.reduce_while(value, {:ok, %{}}, fn {key, val}, {:ok, acc} ->

@@ -4,7 +4,7 @@ defmodule PB.CEL.EvaluatorTest do
   alias PB.CEL
   alias PB.CEL.Checked
   alias PB.CEL.Error
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.Value
   alias PB.Validate.CEL.MessageRuntime, as: Message
   alias PB.Validate.CELExtensions
@@ -527,10 +527,10 @@ defmodule PB.CEL.EvaluatorTest do
              Value.enum("cel.expr.conformance.proto3.GlobalEnum", 2)
 
     assert CEL.eval!("GlobalEnum", %{}, opts) ==
-             {:type, Type.message("cel.expr.conformance.proto3.GlobalEnum")}
+             {:type, ProtoType.message("cel.expr.conformance.proto3.GlobalEnum")}
 
     assert CEL.eval!("type(GlobalEnum.GOO)", %{}, opts) ==
-             {:type, Type.message("cel.expr.conformance.proto3.GlobalEnum")}
+             {:type, ProtoType.message("cel.expr.conformance.proto3.GlobalEnum")}
 
     assert CEL.eval!("int(GlobalEnum.GAZ)", %{}, opts) == Value.int(2)
 

@@ -1,151 +1,73 @@
 defmodule PB.CEL.Type do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
-  # Serialization adapter for CEL's `cel.expr.Type` representation.
-  #
-  # Values are represented in the generated `cel.expr.Type` map shape for public
-  # API inputs, type-value encoding, and `PB.CEL.Checked.to_proto/1`. Internal
-  # checker and runtime semantics use a separate, private type representation.
-  @moduledoc false
+  @moduledoc """
+  CEL types, in the shorthand `PB.CEL` uses wherever it takes or returns a
+  type: variable declarations in `PB.CEL.Env.build/1`, overload signatures in
+  `PB.CEL.Function.Overload`, and the types of `PB.CEL.Expr` nodes and
+  `PB.CEL.Checked.type/2`.
 
-  alias PB.CEL.Proto
-  alias PB.CEL.WellKnownTypes
+    * `:bool`, `:int`, `:uint`, `:double`, `:string`, `:bytes`
+    * `:timestamp` and `:duration` — `google.protobuf.Timestamp` and
+      `google.protobuf.Duration`
+    * `:null` and `:dyn`
+    * `{:list, t}` and `{:map, key, value}`
+    * `{:message, "pkg.Message"}` — a protobuf message, by full name
+    * `{:wrapper, primitive}` — a wrapper message such as
+      `google.protobuf.Int64Value` (`{:wrapper, :int}`)
+    * `{:optional, t}` — `optional_type(t)`
+    * `{:type, t}` — the type of a type value; `:type` alone is
+      `{:type, :dyn}` when declaring
+    * `{:abstract, name, params}` — any other parameterised type
 
-  @type t :: Proto.type()
-  @type input ::
-          t
-          | :dyn
+  An enum-typed expression has type `:int`, as in CEL.
+  """
+
+  alias PB.CEL.Checker.Types, as: CheckerTypes
+
+  @type primitive :: :bool | :int | :uint | :double | :string | :bytes
+
+  @type t ::
+          :dyn
           | :null
-          | :bool
-          | :int
-          | :uint
-          | :double
-          | :string
-          | :bytes
-          | :type
-          | {:list, input}
-          | {:map, input, input}
+          | primitive
+          | :timestamp
+          | :duration
+          | {:wrapper, primitive}
+          | {:type, t}
+          | {:list, t}
+          | {:map, t, t}
           | {:message, String.t()}
-          | {:optional, input}
+          | {:optional, t}
+          | {:abstract, String.t(), [t]}
 
-  @primitive_types %{
-    bool: :BOOL,
-    int: :INT64,
-    uint: :UINT64,
-    double: :DOUBLE,
-    string: :STRING,
-    bytes: :BYTES
-  }
+  @timestamp {:message, "google.protobuf.Timestamp"}
+  @duration {:message, "google.protobuf.Duration"}
 
-  @type_names Map.keys(@primitive_types) ++
-                [:dyn, :null, :null_type, :type, :list, :map, :optional_type]
+  @doc """
+  Spells a type as CEL does, for messages to users.
 
-  @spec dyn() :: t
-  def dyn, do: oneof(:dyn, %{})
+      iex> PB.CEL.Type.format({:map, :string, {:list, :int}})
+      "map(string, list(int))"
 
-  @spec null() :: t
-  def null, do: oneof(:null, :NULL_VALUE)
+      iex> PB.CEL.Type.format(:timestamp)
+      "google.protobuf.Timestamp"
+  """
+  @spec format(t) :: String.t()
+  def format(type), do: type |> CheckerTypes.from_input() |> CheckerTypes.format()
 
-  @spec bool() :: t
-  def bool, do: primitive(:BOOL)
+  # The checker spells timestamp and duration as their messages and may leave
+  # an unresolved type variable, which is dyn to a reader.
+  @doc false
+  @spec from_checker(CheckerTypes.t()) :: t
+  def from_checker(@timestamp), do: :timestamp
+  def from_checker(@duration), do: :duration
+  def from_checker({:var, _id}), do: :dyn
+  def from_checker({:type, type}), do: {:type, from_checker(type)}
+  def from_checker({:list, elem}), do: {:list, from_checker(elem)}
+  def from_checker({:map, key, value}), do: {:map, from_checker(key), from_checker(value)}
+  def from_checker({:optional, value}), do: {:optional, from_checker(value)}
 
-  @spec int() :: t
-  def int, do: primitive(:INT64)
+  def from_checker({:abstract, name, params}),
+    do: {:abstract, name, Enum.map(params, &from_checker/1)}
 
-  @spec uint() :: t
-  def uint, do: primitive(:UINT64)
-
-  @spec double() :: t
-  def double, do: primitive(:DOUBLE)
-
-  @spec string() :: t
-  def string, do: primitive(:STRING)
-
-  @spec bytes() :: t
-  def bytes, do: primitive(:BYTES)
-
-  @spec timestamp() :: t
-  def timestamp, do: well_known(:TIMESTAMP)
-
-  @spec duration() :: t
-  def duration, do: well_known(:DURATION)
-
-  @spec wrapper(atom) :: t
-  def wrapper(kind) when kind in [:BOOL, :INT64, :UINT64, :DOUBLE, :STRING, :BYTES] do
-    oneof(:wrapper, kind)
-  end
-
-  @spec well_known(atom) :: t
-  def well_known(kind) when kind in [:TIMESTAMP, :DURATION], do: oneof(:well_known, kind)
-
-  @spec error() :: t
-  def error, do: oneof(:error, %{})
-
-  @spec type(t) :: t
-  def type(type \\ dyn()), do: oneof(:type, type)
-
-  @spec list(t) :: t
-  def list(elem_type \\ dyn()), do: oneof(:list_type, %{elem_type: elem_type})
-
-  @spec map(t, t) :: t
-  def map(key_type \\ dyn(), value_type \\ dyn()) do
-    oneof(:map_type, %{key_type: key_type, value_type: value_type})
-  end
-
-  @spec message(String.t()) :: t
-  def message(name) when is_binary(name), do: oneof(:message_type, name)
-
-  @spec optional(t) :: t
-  def optional(value_type), do: abstract("optional_type", [value_type])
-
-  @spec abstract(String.t(), [t]) :: t
-  def abstract(name, params) when is_binary(name) and is_list(params) do
-    oneof(:abstract_type, %{name: name, parameter_types: params})
-  end
-
-  @spec coerce(input) :: t
-  def coerce(%{type_kind: {_kind, _value}} = type), do: type
-  def coerce(:dyn), do: dyn()
-  def coerce(:null), do: null()
-  def coerce(:bool), do: bool()
-  def coerce(:int), do: int()
-  def coerce(:uint), do: uint()
-  def coerce(:double), do: double()
-  def coerce(:string), do: string()
-  def coerce(:bytes), do: bytes()
-  def coerce(:type), do: type()
-  def coerce({:list, elem_type}), do: list(coerce(elem_type))
-  def coerce({:map, key_type, value_type}), do: map(coerce(key_type), coerce(value_type))
-  def coerce({:message, name}) when is_binary(name), do: message(name)
-  def coerce({:optional, value_type}), do: optional(coerce(value_type))
-
-  @spec denotation(String.t()) :: {:ok, t} | :error
-  def denotation(name) when is_binary(name) do
-    case WellKnownTypes.type_denotation(name) do
-      {:ok, type} ->
-        {:ok, type}
-
-      :error ->
-        case String.to_existing_atom(name) do
-          atom when atom in @type_names -> {:ok, denotation_atom(atom)}
-          _other -> :error
-        end
-    end
-  rescue
-    ArgumentError -> :error
-  end
-
-  defp oneof(kind, value), do: %{type_kind: {kind, value}}
-
-  defp primitive(kind), do: oneof(:primitive, kind)
-
-  defp denotation_atom(:dyn), do: dyn()
-  defp denotation_atom(:null), do: null()
-  defp denotation_atom(:null_type), do: null()
-  defp denotation_atom(:type), do: type()
-  defp denotation_atom(:list), do: list(dyn())
-  defp denotation_atom(:map), do: map(dyn(), dyn())
-  defp denotation_atom(:optional_type), do: optional(dyn())
-  defp denotation_atom(atom), do: primitive(Map.fetch!(@primitive_types, atom))
+  def from_checker(type), do: type
 end

@@ -49,5 +49,5 @@ defmodule PB.CEL.Message.Schema do
               | :unknown_message
               | :unknown_extension
   @callback field_info_ref(provider(), field_ref()) :: {:ok, map()} | :error
-  @callback field_type(provider(), map()) :: {:ok, PB.CEL.Type.t()} | {:error, String.t()}
+  @callback field_type(provider(), map()) :: {:ok, PB.CEL.ProtoType.t()} | {:error, String.t()}
 end

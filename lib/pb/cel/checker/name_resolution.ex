@@ -4,7 +4,7 @@ defmodule PB.CEL.Checker.NameResolution do
   alias PB.CEL.Env
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Proto
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.WellKnownTypes
 
   @type resolved ::
@@ -22,7 +22,7 @@ defmodule PB.CEL.Checker.NameResolution do
               required(:kind) => :type,
               required(:name) => String.t(),
               required(:type) => CType.t(),
-              required(:denotation) => Type.t()
+              required(:denotation) => ProtoType.t()
             }
           | %{
               required(:kind) => :enum_value,
@@ -167,7 +167,7 @@ defmodule PB.CEL.Checker.NameResolution do
   end
 
   defp resolve_type_denotation(name) do
-    case Type.denotation(name) do
+    case ProtoType.denotation(name) do
       {:ok, denotation} ->
         %{
           kind: :type,
@@ -188,12 +188,12 @@ defmodule PB.CEL.Checker.NameResolution do
 
         case WellKnownTypes.type_denotation(message) do
           {:ok, denotation} -> {:ok, denotation}
-          :error -> {:ok, Type.message(message)}
+          :error -> {:ok, ProtoType.message(message)}
         end
 
       :error ->
         case env.message_schema.resolve_enum(env.schema, name) do
-          {:ok, enum} -> {:ok, Type.message(Atom.to_string(enum))}
+          {:ok, enum} -> {:ok, ProtoType.message(Atom.to_string(enum))}
           :error -> :error
         end
     end

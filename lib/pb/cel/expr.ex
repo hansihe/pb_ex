@@ -35,7 +35,6 @@ defmodule PB.CEL.Expr do
   @moduledoc false
 
   alias PB.CEL.Checked
-  alias PB.CEL.Checker.Types, as: CType
 
   defmodule Const do
     @moduledoc false
@@ -88,7 +87,7 @@ defmodule PB.CEL.Expr do
     ]
   end
 
-  @type type :: CType.t() | nil
+  @type type :: PB.CEL.Type.t() | nil
   @type t ::
           %Const{id: Checked.expr_id(), type: type, value: PB.CEL.Value.t()}
           | %Ident{id: Checked.expr_id(), type: type, name: String.t(), scope: scope}
@@ -188,7 +187,7 @@ defmodule PB.CEL.Expr do
   end
 
   defp node(id, checked) do
-    build(id, Checked.op(checked, id), node_type(id, checked), checked)
+    build(id, Checked.op(checked, id), Checked.type(checked, id), checked)
   end
 
   defp build(id, {:const, %{value: value}}, type, _checked) do
@@ -223,7 +222,7 @@ defmodule PB.CEL.Expr do
 
   defp build(id, {:special, %{kind: :bind} = op}, type, checked) do
     [init_id, body_id] = op.arg_ids
-    var = %Ident{id: op.var_id, type: node_type(init_id, checked), name: op.var, scope: :local}
+    var = %Ident{id: op.var_id, type: Checked.type(checked, init_id), name: op.var, scope: :local}
 
     %Call{
       id: id,
@@ -239,7 +238,7 @@ defmodule PB.CEL.Expr do
     [var_id, body_id] = op.arg_ids
 
     var_type =
-      case node_type(op.target_id, checked) do
+      case Checked.type(checked, op.target_id) do
         {:optional, value_type} -> value_type
         _type -> :dyn
       end
@@ -322,10 +321,4 @@ defmodule PB.CEL.Expr do
   defp ident_scope(:type), do: :type
   defp ident_scope(:enum_value), do: :enum
 
-  defp node_type(id, %Checked{types: types}) do
-    case Map.fetch(types, id) do
-      {:ok, type} -> CType.finalize(type)
-      :error -> nil
-    end
-  end
 end

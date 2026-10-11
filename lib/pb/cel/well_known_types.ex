@@ -1,7 +1,7 @@
 defmodule PB.CEL.WellKnownTypes do
   @moduledoc false
 
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.Value
   alias PB.CEL.Runtime.Time
   alias PB.WellKnownTypes.Any
@@ -51,46 +51,46 @@ defmodule PB.CEL.WellKnownTypes do
   @spec literal_message?(String.t()) :: boolean
   def literal_message?(name) when is_binary(name), do: MapSet.member?(@literal_messages, name)
 
-  @spec field_type(String.t()) :: {:ok, Type.t()} | :error
+  @spec field_type(String.t()) :: {:ok, ProtoType.t()} | :error
   def field_type(name) when is_binary(name) do
     cond do
       wrapper_type = @wrapper_types[name] ->
         {:ok, wrapper_field_type(wrapper_type)}
 
       name == @timestamp_type ->
-        {:ok, Type.timestamp()}
+        {:ok, ProtoType.timestamp()}
 
       name == @duration_type ->
-        {:ok, Type.duration()}
+        {:ok, ProtoType.duration()}
 
       name == "google.protobuf.Any" ->
-        {:ok, Type.dyn()}
+        {:ok, ProtoType.dyn()}
 
       name == "google.protobuf.ListValue" ->
-        {:ok, Type.list(Type.dyn())}
+        {:ok, ProtoType.list(ProtoType.dyn())}
 
       name == "google.protobuf.Struct" ->
-        {:ok, Type.map(Type.string(), Type.dyn())}
+        {:ok, ProtoType.map(ProtoType.string(), ProtoType.dyn())}
 
       name == "google.protobuf.Value" ->
-        {:ok, Type.dyn()}
+        {:ok, ProtoType.dyn()}
 
       true ->
         :error
     end
   end
 
-  @spec literal_type(String.t(), %{String.t() => Type.t()}) :: {:ok, Type.t()} | :error
+  @spec literal_type(String.t(), %{String.t() => ProtoType.t()}) :: {:ok, ProtoType.t()} | :error
   def literal_type(message_name, fields) do
     cond do
       wrapper_type = @wrapper_types[message_name] ->
         {:ok, wrapper_literal_type(wrapper_type)}
 
       message_name == "google.protobuf.ListValue" ->
-        {:ok, Map.get(fields, "values", Type.list(Type.dyn()))}
+        {:ok, Map.get(fields, "values", ProtoType.list(ProtoType.dyn()))}
 
       message_name == "google.protobuf.Struct" ->
-        {:ok, Map.get(fields, "fields", Type.map(Type.string(), Type.dyn()))}
+        {:ok, Map.get(fields, "fields", ProtoType.map(ProtoType.string(), ProtoType.dyn()))}
 
       message_name == "google.protobuf.Value" ->
         {:ok, value_literal_type(fields)}
@@ -167,11 +167,11 @@ defmodule PB.CEL.WellKnownTypes do
     end
   end
 
-  @spec type_denotation(String.t()) :: {:ok, Type.t()} | :error
+  @spec type_denotation(String.t()) :: {:ok, ProtoType.t()} | :error
   def type_denotation(name) when is_binary(name) do
     case name do
-      @timestamp_type -> {:ok, Type.timestamp()}
-      @duration_type -> {:ok, Type.duration()}
+      @timestamp_type -> {:ok, ProtoType.timestamp()}
+      @duration_type -> {:ok, ProtoType.duration()}
       _other -> :error
     end
   end
@@ -186,29 +186,29 @@ defmodule PB.CEL.WellKnownTypes do
     end
   end
 
-  defp wrapper_field_type(:int), do: Type.wrapper(:INT64)
-  defp wrapper_field_type(:uint), do: Type.wrapper(:UINT64)
-  defp wrapper_field_type(:double), do: Type.wrapper(:DOUBLE)
-  defp wrapper_field_type(:bool), do: Type.wrapper(:BOOL)
-  defp wrapper_field_type(:string), do: Type.wrapper(:STRING)
-  defp wrapper_field_type(:bytes), do: Type.wrapper(:BYTES)
+  defp wrapper_field_type(:int), do: ProtoType.wrapper(:INT64)
+  defp wrapper_field_type(:uint), do: ProtoType.wrapper(:UINT64)
+  defp wrapper_field_type(:double), do: ProtoType.wrapper(:DOUBLE)
+  defp wrapper_field_type(:bool), do: ProtoType.wrapper(:BOOL)
+  defp wrapper_field_type(:string), do: ProtoType.wrapper(:STRING)
+  defp wrapper_field_type(:bytes), do: ProtoType.wrapper(:BYTES)
 
-  defp wrapper_literal_type(:int), do: Type.int()
-  defp wrapper_literal_type(:uint), do: Type.uint()
-  defp wrapper_literal_type(:double), do: Type.double()
-  defp wrapper_literal_type(:bool), do: Type.bool()
-  defp wrapper_literal_type(:string), do: Type.string()
-  defp wrapper_literal_type(:bytes), do: Type.bytes()
+  defp wrapper_literal_type(:int), do: ProtoType.int()
+  defp wrapper_literal_type(:uint), do: ProtoType.uint()
+  defp wrapper_literal_type(:double), do: ProtoType.double()
+  defp wrapper_literal_type(:bool), do: ProtoType.bool()
+  defp wrapper_literal_type(:string), do: ProtoType.string()
+  defp wrapper_literal_type(:bytes), do: ProtoType.bytes()
 
   defp value_literal_type(fields) do
     cond do
-      Map.has_key?(fields, "null_value") -> Type.null()
-      Map.has_key?(fields, "number_value") -> Type.double()
-      Map.has_key?(fields, "string_value") -> Type.string()
-      Map.has_key?(fields, "bool_value") -> Type.bool()
+      Map.has_key?(fields, "null_value") -> ProtoType.null()
+      Map.has_key?(fields, "number_value") -> ProtoType.double()
+      Map.has_key?(fields, "string_value") -> ProtoType.string()
+      Map.has_key?(fields, "bool_value") -> ProtoType.bool()
       Map.has_key?(fields, "struct_value") -> Map.fetch!(fields, "struct_value")
       Map.has_key?(fields, "list_value") -> Map.fetch!(fields, "list_value")
-      true -> Type.null()
+      true -> ProtoType.null()
     end
   end
 

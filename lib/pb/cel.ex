@@ -141,7 +141,7 @@ defmodule PB.CEL do
   AST came from `parse/2` or another trusted producer.
 
   Variable declaration values may be checker-native types, generated
-  `cel.expr.Type` maps (see `PB.CEL.Type`), or shorthand atoms/tuples such as
+  `cel.expr.Type` maps (see `PB.CEL.ProtoType`), or shorthand atoms/tuples such as
   `:int`, `{:list, :string}`, or `{:map, :string, :dyn}`.
   """
   @spec check(String.t() | Proto.parsed_expr(), Env.t()) ::

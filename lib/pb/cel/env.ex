@@ -158,7 +158,7 @@ defmodule PB.CEL.Env do
     %{env | container: normalize_container(container)}
   end
 
-  @spec put_var(t, atom | String.t(), CType.t() | PB.CEL.Type.input()) :: t
+  @spec put_var(t, atom | String.t(), CType.t() | PB.CEL.ProtoType.input()) :: t
   def put_var(%__MODULE__{} = env, name, type) when is_atom(name) or is_binary(name) do
     %{env | vars: Map.put(env.vars, normalize_name(name), CType.from_input(type))}
   end

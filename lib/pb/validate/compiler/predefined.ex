@@ -7,7 +7,7 @@ defmodule PB.Validate.Compiler.Predefined do
   # All schema lookups run against the merged standard-rule schema.
 
   alias PB.CEL.Schema.Field
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.Validate.CEL.FieldReader
   alias PB.Validate.CEL.MessageRuntime, as: CELMessage
   alias PB.Validate.Compiler.CEL
@@ -37,7 +37,7 @@ defmodule PB.Validate.Compiler.Predefined do
          {:ok, field_rules_field} <- Context.fetch_field(field_rules_message, rules_name),
          {:ok, rules_message_name} <- rules_message_name(field_rules_field),
          {:ok, rules_message} <- Context.fetch_message(rule_schema, rules_message_name) do
-      rules_type = Type.message(Atom.to_string(rules_message_name))
+      rules_type = ProtoType.message(Atom.to_string(rules_message_name))
 
       rules_message
       |> sorted_rule_fields()

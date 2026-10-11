@@ -23,7 +23,7 @@ defmodule PB.CEL.Checked do
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Function
   alias PB.CEL.Proto
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.Value
 
   defstruct [
@@ -124,7 +124,7 @@ defmodule PB.CEL.Checked do
              required(:kind) => ident_kind(),
              required(:name) => String.t(),
              optional(:type) => CType.t(),
-             optional(:denotation) => Type.t(),
+             optional(:denotation) => ProtoType.t(),
              optional(:value) => term
            }}
 
@@ -192,16 +192,29 @@ defmodule PB.CEL.Checked do
     )
   end
 
-  @spec type(t, Proto.expr() | expr_id) :: CType.t()
-  def type(%__MODULE__{} = checked, %{id: id}), do: type(checked, id)
-  def type(%__MODULE__{types: types}, id) when is_integer(id), do: Map.fetch!(types, id)
+  @doc """
+  The type of the whole expression.
+  """
+  @spec type(t) :: PB.CEL.Type.t()
+  def type(%__MODULE__{expr: expr} = checked), do: type(checked, expr.id)
 
-  @spec proto_type(t, Proto.expr() | expr_id) :: Type.t()
-  def proto_type(%__MODULE__{} = checked, expr_or_id) do
-    checked
-    |> type(expr_or_id)
-    |> CType.to_cel()
+  @doc """
+  The type of the expression with the given id, or `nil` if the checker did
+  not type it (such as a comprehension's variable name).
+  """
+  @spec type(t, expr_id) :: PB.CEL.Type.t() | nil
+  def type(%__MODULE__{types: types}, id) when is_integer(id) do
+    case Map.fetch(types, id) do
+      {:ok, type} -> type |> CType.finalize() |> PB.CEL.Type.from_checker()
+      :error -> nil
+    end
   end
+
+  @spec proto_type(t, Proto.expr() | expr_id) :: ProtoType.t()
+  def proto_type(%__MODULE__{} = checked, %{id: id}), do: proto_type(checked, id)
+
+  def proto_type(%__MODULE__{types: types}, id) when is_integer(id),
+    do: types |> Map.fetch!(id) |> CType.to_cel()
 
   @spec ref(t, Proto.expr() | expr_id) :: ref | nil
   def ref(%__MODULE__{} = checked, %{id: id}), do: ref(checked, id)

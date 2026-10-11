@@ -11,7 +11,7 @@ defmodule PB.Validate.CEL.MessageSchema do
   # `:message_schema`. CEL's own default is the no-op `PB.CEL.Runtime.NoMessageSchema`.
 
   alias PB.CEL.Schema.Field
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
 
   @behaviour PB.CEL.Message.Schema
 
@@ -203,7 +203,7 @@ defmodule PB.Validate.CEL.MessageSchema do
   end
 
   @spec field_type(schema, PB.Schema.Compiled.field()) ::
-          {:ok, Type.t()} | {:error, String.t()}
+          {:ok, ProtoType.t()} | {:error, String.t()}
   def field_type(schema, field), do: Field.cel_type(schema, field)
 
   defp fetch_message_info(%{messages: messages}, message), do: Map.fetch(messages, message)

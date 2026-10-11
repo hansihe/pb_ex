@@ -5,7 +5,7 @@ defmodule PB.CEL.CheckerTest do
   alias PB.CEL.Error
   alias PB.CEL.Checked
   alias PB.CEL.Proto
-  alias PB.CEL.Type
+  alias PB.CEL.ProtoType
   alias PB.CEL.Checker.TypePattern
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Function
@@ -284,7 +284,7 @@ defmodule PB.CEL.CheckerTest do
       )
 
     assert root_type(checked) == CType.list(CType.wrapper(:int))
-    assert Checked.proto_type(checked, checked.expr) == Type.list(Type.wrapper(:INT64))
+    assert Checked.proto_type(checked, checked.expr) == ProtoType.list(ProtoType.wrapper(:INT64))
 
     checked =
       CEL.check!(
@@ -295,7 +295,7 @@ defmodule PB.CEL.CheckerTest do
         )
       )
 
-    assert Checked.proto_type(checked, checked.expr) == Type.timestamp()
+    assert Checked.proto_type(checked, checked.expr) == ProtoType.timestamp()
 
     assert {:error, %Error{phase: :check, message: "no such field \"missing\""}} =
              CEL.check(
@@ -469,7 +469,7 @@ defmodule PB.CEL.CheckerTest do
               %{
                 kind: :type,
                 name: "cel.expr.conformance.proto3.GlobalEnum",
-                denotation: PB.CEL.Type.message("cel.expr.conformance.proto3.GlobalEnum"),
+                denotation: PB.CEL.ProtoType.message("cel.expr.conformance.proto3.GlobalEnum"),
                 value: %{kind: {:type_value, "cel.expr.conformance.proto3.GlobalEnum"}}
               }}
 

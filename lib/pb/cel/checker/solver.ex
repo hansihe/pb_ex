@@ -21,7 +21,7 @@ defmodule PB.CEL.Checker.Solver do
   @spec resolve(t, Types.t()) :: Types.t()
   def resolve(%__MODULE__{} = solver, type), do: Types.resolve(type, solver.bindings)
 
-  @spec finalize(t, Types.t()) :: PB.CEL.Type.t()
+  @spec finalize(t, Types.t()) :: PB.CEL.ProtoType.t()
   def finalize(%__MODULE__{} = solver, type),
     do: solver |> finalize_native(type) |> Types.to_cel()
 
