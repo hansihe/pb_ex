@@ -13,6 +13,10 @@ defmodule PB.TextFormatTest do
     defstruct [:id, :req]
   end
 
+  defmodule Nested do
+    defstruct [:a, :corecursive]
+  end
+
   @ext_descriptor_set %{
     file: [
       %{
@@ -530,11 +534,121 @@ defmodule PB.TextFormatTest do
     end
   end
 
-  describe "not yet supported" do
-    test "type URLs outside google.protobuf.Any are rejected" do
-      assert {:error, %DecodeError{kind: :malformed_text} = error} =
-               decode("[type.googleapis.com/pkg.Msg] {}")
+  describe "google.protobuf.Any" do
+    @nested :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
+    @nested_url "type.googleapis.com/protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
 
+    defp packed(message, data, schema \\ TestSchema) do
+      {:ok, bytes} = PB.encode(data, schema, message)
+      bytes
+    end
+
+    test "the expanded form packs the message into type_url and value" do
+      expected = %{optional_any: %{type_url: @nested_url, value: packed(@nested, %{a: 5})}}
+
+      for text <- [
+            "optional_any { [#{@nested_url}] { a: 5 } }",
+            "optional_any: < [#{@nested_url}]: < a: 5 > >",
+            "optional_any { [ type.googleapis.com / protobuf_test_messages . proto3.TestAllTypesProto3.NestedMessage ] { a: 5 } }"
+          ] do
+        assert decode!(text) == expected, text
+      end
+    end
+
+    test "keeps a type.googleprod.com prefix as written" do
+      url = "type.googleprod.com/#{@nested}"
+      assert value("optional_any { [#{url}] { a: 5 } }", :optional_any).type_url == url
+    end
+
+    test "an empty packed message leaves value unset" do
+      assert value("optional_any { [#{@nested_url}] {} }", :optional_any) == %{
+               type_url: @nested_url
+             }
+    end
+
+    test "nests, and works in lists" do
+      inner_url = "type.googleapis.com/#{@proto3}"
+
+      text = """
+      repeated_any [
+        { [#{@nested_url}] { a: 1 } },
+        { [type.googleapis.com/google.protobuf.Any] { [#{inner_url}] { optional_int32: 2 } } }
+      ]
+      """
+
+      inner = %{type_url: inner_url, value: packed(@proto3, %{optional_int32: 2})}
+
+      assert value(text, :repeated_any) == [
+               %{type_url: @nested_url, value: packed(@nested, %{a: 1})},
+               %{
+                 type_url: "type.googleapis.com/google.protobuf.Any",
+                 value: packed(:"google.protobuf.Any", inner)
+               }
+             ]
+    end
+
+    test "the explicit type_url and value fields still work" do
+      assert decode!(~s(optional_any { type_url: "x/y" value: "\\001" })) ==
+               %{optional_any: %{type_url: "x/y", value: <<1>>}}
+    end
+
+    test "packs projected message types through their projection" do
+      descriptor_set = PB.decode_descriptor_set!(File.read!("test/fixtures/schema/test.binpb"))
+      schema = PB.compile(descriptor_set, projections: [{@nested, struct: Nested}])
+
+      assert TextFormat.decode("[#{@nested_url}] { a: 5 }", schema, :"google.protobuf.Any") ==
+               {:ok, %{type_url: @nested_url, value: packed(@nested, %Nested{a: 5}, schema)}}
+    end
+
+    test "rejects prefixes C++ does not resolve and unknown types" do
+      for url <- ["example.com/#{@nested}", "type.googleapis.com/no.Such", "a/b/#{@nested}"] do
+        assert {:error,
+                %DecodeError{kind: :malformed_text, details: %{line: 1, column: 16}} = error} =
+                 decode("optional_any { [#{url}] {} }"),
+               url
+
+        assert Exception.message(error) =~
+                 ~s(could not find type "#{url}" for google.protobuf.Any)
+      end
+    end
+
+    test "rejects a bracketed name without a slash" do
+      assert {:error, %DecodeError{kind: :malformed_text} = error} =
+               decode("optional_any { [#{@nested}] {} }")
+
+      assert Exception.message(error) =~ "expected a type URL"
+    end
+
+    test "the packed value must be a message" do
+      for value <- [": 1", ": [{}]"] do
+        assert {:error, %DecodeError{kind: :malformed_text}} =
+                 decode("optional_any { [#{@nested_url}]#{value} }"),
+               value
+      end
+    end
+
+    test "cannot be set twice" do
+      for text <- [
+            "optional_any { [#{@nested_url}] {} [#{@nested_url}] {} }",
+            ~s(optional_any { type_url: "x/y" [#{@nested_url}] {} }),
+            ~s(optional_any { [#{@nested_url}] {} value: "" })
+          ] do
+        assert {:error, %DecodeError{kind: :duplicate_field}} = decode(text), text
+      end
+    end
+
+    test "locates errors in the packed message under value" do
+      assert {:error, %ValueError{kind: :invalid_value, path: [:optional_any, :value, :a]}} =
+               decode("optional_any { [#{@nested_url}] { a: 'x' } }")
+    end
+
+    test "checks required fields of the packed message" do
+      assert {:error, %ValueError{kind: :missing_required}} =
+               decode("optional_any { [type.googleapis.com/#{@required}] {} }")
+    end
+
+    test "type URLs outside an Any are rejected" do
+      assert {:error, %DecodeError{kind: :malformed_text} = error} = decode("[#{@nested_url}] {}")
       assert Exception.message(error) =~ "is only allowed in a google.protobuf.Any"
     end
   end

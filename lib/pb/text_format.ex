@@ -28,16 +28,17 @@ defmodule PB.TextFormat do
   name, so `Data { ... }` sets the field `data`. Fields named after one of the
   message's reserved names are skipped.
 
+  Inside a `google.protobuf.Any`, the expanded form
+  `[type.googleapis.com/pkg.Message] { ... }` sets `type_url` and packs the
+  message into `value`, honoring the packed type's projections. As in C++, the
+  URL prefix must be `type.googleapis.com/` or `type.googleprod.com/`.
+
   PB is stricter than C++ in two places. A non-repeated field given twice is
   always rejected (C++ lets an implicit-presence field repeat after a default
   value). Unicode escapes may not encode surrogates, even as a valid pair, as
   the conformance suite requires.
 
-  ## Not yet supported
-
-  Expanded `google.protobuf.Any` values
-  (`[type.googleapis.com/pkg.Message] { ... }`) are rejected for now. There is
-  no text format encoder yet.
+  There is no text format encoder yet.
 
   ## Errors
 

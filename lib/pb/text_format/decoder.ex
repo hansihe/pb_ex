@@ -20,6 +20,9 @@ defmodule PB.TextFormat.Decoder do
   #     with the type nested in the same message) also answers to the type name
   #   * extensions are named `[full.extension.name]` and stored under
   #     `:__extensions__`
+  #   * inside a google.protobuf.Any, `[prefix/pkg.Message] { ... }` sets
+  #     `type_url` and packs the message into `value`; the prefix must be one
+  #     C++ resolves (`type.googleapis.com/` or `type.googleprod.com/`)
   #   * reserved field names are skipped, and with `ignore_unknown` so are
   #     unknown fields, as C++ does with `allow_unknown_field`
   #
@@ -31,6 +34,7 @@ defmodule PB.TextFormat.Decoder do
   alias PB.Runtime.{Oneofs, RequiredFields, Scalar}
   alias PB.Schema.Features
   alias PB.TextFormat.Scalars
+  alias PB.WellKnownTypes.Any
 
   @any :"google.protobuf.Any"
   @extension_key :__extensions__
@@ -52,6 +56,10 @@ defmodule PB.TextFormat.Decoder do
         case resolve(name, msg, node, opts, path) do
           :skip ->
             {acc, seen}
+
+          {:any, url} ->
+            {fields, seen} = put_any(acc.field, seen, url, node, schema, opts, path)
+            {%{acc | field: fields}, seen}
 
           {kind, field} ->
             field_path = path ++ field_path(kind, field)
@@ -97,6 +105,10 @@ defmodule PB.TextFormat.Decoder do
     end
   end
 
+  # In an Any, C++ reads any bracketed name as a type URL, so it needs a `/`.
+  defp resolve(@any, _msg, %{name: {:extension, name}} = node, _opts, path),
+    do: malformed!(~s(expected a type URL such as "type.googleapis.com/#{name}"), node, path)
+
   defp resolve(name, msg, %{name: {:extension, ext_name}} = node, opts, path) do
     case lookup(msg.extensions_by_name, ext_name) do
       nil -> unknown!(name, node, "[#{ext_name}]", opts, path)
@@ -104,8 +116,7 @@ defmodule PB.TextFormat.Decoder do
     end
   end
 
-  defp resolve(@any, _msg, %{name: {:type_url, _url}} = node, _opts, path),
-    do: malformed!("expanded google.protobuf.Any values are not supported yet", node, path)
+  defp resolve(@any, _msg, %{name: {:type_url, url}}, _opts, _path), do: {:any, url}
 
   defp resolve(_name, _msg, %{name: {:type_url, url}} = node, _opts, path),
     do: malformed!("\"[#{url}]\" is only allowed in a google.protobuf.Any", node, path)
@@ -214,9 +225,48 @@ defmodule PB.TextFormat.Decoder do
       true ->
         value = decode_value(field, node.value, schema, opts, path)
 
-        if Features.implicit_presence?(field) and Scalar.default_value?(field, value),
-          do: acc,
-          else: Map.put(acc, field.name, value)
+        put_singular(acc, field, value)
+    end
+  end
+
+  defp put_singular(acc, field, value) do
+    if Features.implicit_presence?(field) and Scalar.default_value?(field, value),
+      do: acc,
+      else: Map.put(acc, field.name, value)
+  end
+
+  # The expanded form claims both Any fields, so it cannot repeat or be mixed
+  # with an explicit `type_url` or `value`.
+  defp put_any(fields, seen, url, node, schema, opts, path) do
+    any_fields = schema.messages[@any].fields_by_name
+    seen = claim!(:field, any_fields.type_url, node, seen, path ++ [:type_url])
+    seen = claim!(:field, any_fields.value, node, seen, path ++ [:value])
+
+    name = any_type!(url, node, schema, path)
+    packed = decode_message_value(name, node.value, schema, opts, path ++ [:value])
+
+    bytes =
+      case Any.pack(packed, schema, name) do
+        {:ok, bytes} -> bytes
+        {:error, error} -> throw({:text_error, error})
+      end
+
+    fields =
+      fields
+      |> put_singular(any_fields.type_url, url)
+      |> put_singular(any_fields.value, bytes)
+
+    {fields, seen}
+  end
+
+  defp any_type!(url, node, schema, path) do
+    with {:ok, prefix, name} <- Any.split_type_url(url),
+         true <- prefix in Any.google_prefixes(),
+         atom when not is_nil(atom) <- existing_atom(name),
+         true <- Map.has_key?(schema.messages, atom) do
+      atom
+    else
+      _ -> malformed!(~s(could not find type "#{url}" for google.protobuf.Any), node, path)
     end
   end
 
