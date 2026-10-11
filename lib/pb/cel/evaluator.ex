@@ -681,6 +681,18 @@ defmodule PB.CEL.Evaluator do
   defp merge_unknown(nil, %Unknown{} = unknown), do: unknown
   defp merge_unknown(%Unknown{} = acc, %Unknown{} = unknown), do: Unknown.merge(acc, unknown)
 
+  # An enum variable takes what `PB.decode/4` gives an enum field: a value's
+  # name as an atom, or its number.
+  defp coerce_runtime_value(value, {:message, name} = type, %State{} = state)
+       when is_integer(value) or (is_atom(value) and value not in [nil, true, false]) do
+    if state.message_schema.known_enum?(state.schema, name) do
+      arg = if is_integer(value), do: Value.int(value), else: Value.string(Atom.to_string(value))
+      RuntimeEnum.construct(state.message_schema, state.schema, name, arg)
+    else
+      coerce_value(value, type)
+    end
+  end
+
   defp coerce_runtime_value(value, {:message, name} = type, %State{} = state) do
     if cel_value?(value) do
       coerce_value(value, type)

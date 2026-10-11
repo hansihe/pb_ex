@@ -55,6 +55,24 @@ defmodule PB.CEL.TypeTest do
     assert CEL.Checked.type(CEL.check!("e", env)) == {:enum, enum}
   end
 
+  test "enum values bind from PB's decoded atoms and numbers" do
+    enum = "cel.expr.conformance.proto3.GlobalEnum"
+    env = CEL.Env.build(schema: PB.TestSupport.TestSchema, vars: [e: {:enum, enum}])
+
+    assert CEL.eval("e", %{e: :GAZ}, env) == {:ok, {:enum, enum, 2}}
+    assert CEL.eval("e", %{e: 2}, env) == {:ok, {:enum, enum, 2}}
+    assert CEL.eval("e", %{e: 42}, env) == {:ok, {:enum, enum, 42}}
+    assert CEL.eval("e", %{e: {:enum, enum, 1}}, env) == {:ok, {:enum, enum, 1}}
+
+    assert {:error, %CEL.Error{message: "unknown enum value \"NOPE\"" <> _}} =
+             CEL.eval("e", %{e: :NOPE}, env)
+
+    assert {:error, %CEL.Error{message: "enum value is out of int32 range"}} =
+             CEL.eval("e", %{e: 3_000_000_000}, env)
+
+    assert {:error, %CEL.Error{}} = CEL.eval("e", %{e: true}, env)
+  end
+
   test "an id the checker did not type has no type" do
     checked = CEL.check!("[1].all(x, x > 0)")
     assert CEL.Checked.type(checked, 999_999) == nil

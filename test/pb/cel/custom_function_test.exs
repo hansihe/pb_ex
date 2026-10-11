@@ -24,6 +24,14 @@ defmodule PB.CEL.CustomFunctionTest do
       end
     end
 
+    def decide([{:string, _rule}]) do
+      {:ok, Value.enum("cel.expr.conformance.proto3.GlobalEnum", 2)}
+    end
+
+    def enum_number([{:enum, _name, number}]), do: {:ok, Value.int(number)}
+
+    def describe([value]), do: {:ok, Value.string(inspect(value))}
+
     def record(args, call, vars) do
       send(self(), {:called, args, call, vars})
       {:ok, Value.bool(true)}
@@ -321,6 +329,88 @@ defmodule PB.CEL.CustomFunctionTest do
 
     assert CEL.eval("ns.third(x)", %{x: 1}, env) == {:ok, Value.bool(true)}
     assert_received {:called, [int: 1], %{function: "ns.third", overload_id: "third_int"}, _}
+  end
+
+  describe "enum and wrapper types in overload signatures" do
+    @global_enum "cel.expr.conformance.proto3.GlobalEnum"
+
+    defp enum_env do
+      decide = %Function{
+        name: "decide",
+        overloads: [
+          %Overload{
+            id: "decide_string",
+            args: [:string],
+            result: {:enum, @global_enum},
+            eval: {Handlers, :decide}
+          }
+        ]
+      }
+
+      number = %Function{
+        name: "number",
+        overloads: [
+          %Overload{
+            id: "number_global_enum",
+            args: [{:enum, @global_enum}],
+            result: :int,
+            eval: {Handlers, :enum_number}
+          }
+        ]
+      }
+
+      env(
+        schema: PB.TestSupport.TestSchema,
+        container: "cel.expr.conformance.proto3",
+        functions: [decide, number]
+      )
+    end
+
+    test "an enum result compares with its own enum's values, not another's" do
+      env = enum_env()
+
+      assert CEL.check!("decide('r')", env) |> CEL.Checked.type() == {:enum, @global_enum}
+      assert CEL.eval!("decide('r')", %{}, env) == {:enum, @global_enum, 2}
+      assert CEL.eval!("decide('r') == GlobalEnum.GAZ", %{}, env) == {:bool, true}
+
+      assert {:error, %CEL.Error{phase: :check, message: message}} =
+               CEL.check("decide('r') == TestAllTypes.NestedEnum.BAZ", env)
+
+      assert message =~ "no matching overload for _==_"
+    end
+
+    test "an enum argument takes values of that enum only" do
+      env = enum_env()
+
+      assert CEL.eval!("number(GlobalEnum.GAR)", %{}, env) == {:int, 1}
+      assert CEL.eval!("number(decide('r'))", %{}, env) == {:int, 2}
+
+      assert {:error, %CEL.Error{phase: :check}} =
+               CEL.check("number(TestAllTypes.NestedEnum.BAZ)", env)
+
+      assert {:error, %CEL.Error{phase: :check}} = CEL.check("number(1)", env)
+    end
+
+    test "a wrapper argument takes its primitive, the wrapper or null" do
+      describe = %Function{
+        name: "describe",
+        overloads: [
+          %Overload{
+            id: "describe_int_wrapper",
+            args: [{:wrapper, :int}],
+            result: :string,
+            eval: {Handlers, :describe}
+          }
+        ]
+      }
+
+      env = env(functions: [describe], vars: [w: {:wrapper, :int}])
+
+      assert CEL.eval!("describe(1)", %{}, env) == {:string, "{:int, 1}"}
+      assert CEL.eval!("describe(null)", %{}, env) == {:string, ":null"}
+      assert CEL.eval!("describe(w)", %{w: nil}, env) == {:string, ":null"}
+      assert {:error, %CEL.Error{phase: :check}} = CEL.check("describe(1u)", env)
+    end
   end
 
   defp env(opts), do: CEL.Env.build(opts)

@@ -81,7 +81,11 @@ PB.CEL.Value.to_native(value)
 - The target receives **one argument**: the list of evaluated `PB.CEL.Value`
   arguments. For receiver-mode calls (`x.greet(y)`) the target value is prepended
   to that list.
-- It must return `{:ok, value} | {:unknown, reason} | {:error, reason}`.
+- It must return `{:ok, value} | {:unknown, reason} | {:error, reason}`, with
+  `value` a `PB.CEL.Value` of the declared result type. Nothing checks the
+  value against that type, so build it with the constructors: an `{:enum,
+  "pkg.Enum"}` result is `PB.CEL.Value.enum("pkg.Enum", number)`, which is
+  also how enum arguments arrive.
   `{:unknown, reason}` makes the call's result unknown; `reason` is any term and
   is reported in the `PB.CEL.Unknown` entry `{{:call, name, expr_id}, reason}`.
 - The function is not called when an argument is an error or unknown; the call

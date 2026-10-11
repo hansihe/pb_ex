@@ -26,9 +26,13 @@ defmodule PB.CEL do
   Variables are bound by name (atom or string keys) to plain Elixir terms, which
   are converted using the variable's declared type: integers, floats, strings,
   booleans, lists and maps, `DateTime` for `:timestamp`, and PB's decoded maps
-  for messages. Results are `t:PB.CEL.Value.t/0` terms, tagged so that CEL's
-  distinctions survive: `{:int, 1}` and `{:uint, 1}`, `{:string, "a"}` and
-  `{:bytes, "a"}`. `PB.CEL.Value.to_native/1` turns one back into a plain term.
+  for messages. Enums are bound as PB decodes them, a value's name as an atom
+  or its number, and `nil` binds a wrapper variable to `null`.
+
+  Results are `t:PB.CEL.Value.t/0` terms, tagged so that CEL's distinctions
+  survive: `{:int, 1}` and `{:uint, 1}`, `{:string, "a"}` and `{:bytes, "a"}`,
+  `{:enum, "pkg.Enum", 2}`. `PB.CEL.Value.to_native/1` turns one back into a
+  plain term.
 
   ## Results
 

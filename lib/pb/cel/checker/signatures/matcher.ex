@@ -153,6 +153,16 @@ defmodule PB.CEL.Checker.Signatures.Matcher do
     match_exact(CType.message(name), actual, solver, nested?)
   end
 
+  # The checker types an enum as a message of the enum's name.
+  defp match_concrete_type({:enum, name}, actual, solver, nested?) do
+    match_exact(CType.message(name), actual, solver, nested?)
+  end
+
+  # A wrapper parameter takes its primitive, the wrapper itself, or null.
+  defp match_concrete_type({:wrapper, primitive}, actual, solver, _nested?) do
+    Solver.assignable(solver, CType.wrapper(primitive), actual)
+  end
+
   defp match_concrete_type({:type, type_pattern}, actual, solver, _nested?) do
     case Solver.resolve(solver, actual) do
       {:type, actual_type} -> match_concrete_type(type_pattern, actual_type, solver, true)
@@ -582,6 +592,14 @@ defmodule PB.CEL.Checker.Signatures.Matcher do
 
   defp instantiate({:message, name}, params, solver) do
     {:ok, CType.message(name), params, solver}
+  end
+
+  defp instantiate({:enum, name}, params, solver) do
+    {:ok, CType.message(name), params, solver}
+  end
+
+  defp instantiate({:wrapper, primitive}, params, solver) do
+    {:ok, CType.wrapper(primitive), params, solver}
   end
 
   defp instantiate({:optional, value_type}, params, solver) do

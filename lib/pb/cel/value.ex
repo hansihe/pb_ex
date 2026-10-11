@@ -299,7 +299,7 @@ defmodule PB.CEL.Value do
   def coerce(nil, type) do
     type = CType.from_input(type)
 
-    if CType.type_kind(type) == :null or CType.dyn?(type),
+    if CType.type_kind(type) in [:null, :wrapper] or CType.dyn?(type),
       do: {:ok, null()},
       else: type_error(nil, type)
   end
