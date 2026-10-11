@@ -73,7 +73,7 @@ defmodule PB.TestSupport.ProtobufConformance.Testee do
 
     with {:ok, message_name} <- fetch_message_type(message_types, message_type),
          {:ok, decoded} <- decode_input(schema, message_name, request) do
-      encode_output(schema, message_name, decoded, Map.get(request, :requested_output_format))
+      encode_output(schema, message_name, decoded, request)
     else
       {:skip, reason} -> skipped(reason)
       {:parse_error, reason} -> parse_error(reason)
@@ -127,35 +127,49 @@ defmodule PB.TestSupport.ProtobufConformance.Testee do
     end
   end
 
-  defp encode_output(schema, message_name, decoded, :PROTOBUF) do
+  defp encode_output(schema, message_name, decoded, request) do
+    encode_output(
+      schema,
+      message_name,
+      decoded,
+      Map.get(request, :requested_output_format),
+      request
+    )
+  end
+
+  defp encode_output(schema, message_name, decoded, :PROTOBUF, _request) do
     case PB.encode(decoded, schema, message_name) do
       {:ok, encoded} -> protobuf_payload(IO.iodata_to_binary(encoded))
       {:error, error} -> serialize_error(Exception.message(error))
     end
   end
 
-  defp encode_output(schema, message_name, decoded, :JSON) do
+  defp encode_output(schema, message_name, decoded, :JSON, _request) do
     case PB.JSON.encode(decoded, schema, message_name) do
       {:ok, payload} -> json_payload(payload)
       {:error, error} -> serialize_error(Exception.message(error))
     end
   end
 
-  defp encode_output(_schema, _message_name, _decoded, :JSPB),
+  defp encode_output(_schema, _message_name, _decoded, :JSPB, _request),
     do: skipped("JSPB conformance is not supported by PB")
 
-  # Not skipped: the suite's expected-parse-failure cases request text output,
-  # so skipping would hide inputs PB wrongly accepts. Valid text-output cases
-  # stay on the text-format failure list until the printer lands.
-  defp encode_output(_schema, _message_name, _decoded, :TEXT_FORMAT),
-    do: runtime_error("text-format output is not implemented yet")
+  defp encode_output(schema, message_name, decoded, :TEXT_FORMAT, request) do
+    opts = [print_unknown_fields: Map.get(request, :print_unknown_fields, false)]
 
-  defp encode_output(_schema, _message_name, _decoded, format),
+    case PB.TextFormat.encode(decoded, schema, message_name, opts) do
+      {:ok, payload} -> text_payload(payload)
+      {:error, error} -> serialize_error(Exception.message(error))
+    end
+  end
+
+  defp encode_output(_schema, _message_name, _decoded, format, _request),
     do: runtime_error("unsupported requested output format #{inspect(format)}")
 
   defp parse_error(message), do: %{result: {:parse_error, message}}
   defp protobuf_payload(payload), do: %{result: {:protobuf_payload, payload}}
   defp json_payload(payload), do: %{result: {:json_payload, payload}}
+  defp text_payload(payload), do: %{result: {:text_payload, payload}}
   defp runtime_error(message), do: %{result: {:runtime_error, message}}
   defp serialize_error(message), do: %{result: {:serialize_error, message}}
   defp skipped(message), do: %{result: {:skipped, message}}

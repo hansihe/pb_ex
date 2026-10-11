@@ -59,7 +59,7 @@ walkthrough.
 - **Application-friendly shapes** — decode into structs, sum types, or unwrapped
   values, and map messages to native Elixir values with adapters.
 - **ProtoJSON** — `PB.JSON`.
-- **Text format** decoding — `PB.TextFormat` (encoding is not supported yet).
+- **Text format** — `PB.TextFormat`.
 - **protovalidate** validation with a built-in CEL engine — `PB.Validate`.
 - **Schema introspection** for messages, enums, services, and extensions —
   `PB.Schema`.

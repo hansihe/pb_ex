@@ -2,7 +2,8 @@ defmodule PB.TextFormat.FuzzTest do
   use ExUnit.Case, async: true
 
   # Mutates valid inputs and checks that decoding only ever returns a result
-  # or a PB error, never raises. Seeded, so failures reproduce.
+  # or a PB error, never raises, and that whatever decodes prints and decodes
+  # back to the same value. Seeded, so failures reproduce.
 
   alias PB.TestSupport.TestSchema
 
@@ -81,11 +82,18 @@ defmodule PB.TextFormat.FuzzTest do
           end
 
         case result do
-          {:ok, _value} -> :ok
+          {:ok, value} -> assert_round_trip(value, message, text)
           {:error, error} -> assert is_exception(error) and pb_error?(error), inspect(result)
         end
       end
     end
+  end
+
+  defp assert_round_trip(value, message, source) do
+    printed = PB.TextFormat.encode!(value, TestSchema, message)
+
+    assert PB.TextFormat.decode(printed, TestSchema, message) == {:ok, value},
+           "#{inspect(source)} printed as #{inspect(printed)}, which does not decode back"
   end
 
   defp pb_error?(error),

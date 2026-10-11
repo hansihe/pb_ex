@@ -43,6 +43,7 @@ defmodule PB.Error do
           | :json_encode
           | :json_decode
           | :text_decode
+          | :text_encode
           | :validate
           | :message_equal
           | :introspect

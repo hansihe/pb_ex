@@ -1,6 +1,8 @@
 defmodule PB.TextFormatTest do
   use ExUnit.Case, async: true
 
+  import Bitwise
+
   alias PB.{DecodeError, OptionError, SchemaError, TextFormat, ValueError}
   alias PB.TestSupport.TestSchema
 
@@ -86,6 +88,14 @@ defmodule PB.TextFormatTest do
   }
 
   defp ext_schema(opts \\ []), do: PB.compile(@ext_descriptor_set, opts)
+
+  @nested :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
+  @nested_url "type.googleapis.com/protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
+
+  defp packed(message, data, schema \\ TestSchema) do
+    {:ok, bytes} = PB.encode(data, schema, message)
+    bytes
+  end
 
   defp decode(text, message \\ @proto3, opts \\ []),
     do: TextFormat.decode(text, TestSchema, message, opts)
@@ -582,14 +592,6 @@ defmodule PB.TextFormatTest do
   end
 
   describe "google.protobuf.Any" do
-    @nested :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
-    @nested_url "type.googleapis.com/protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
-
-    defp packed(message, data, schema \\ TestSchema) do
-      {:ok, bytes} = PB.encode(data, schema, message)
-      bytes
-    end
-
     test "the expanded form packs the message into type_url and value" do
       expected = %{optional_any: %{type_url: @nested_url, value: packed(@nested, %{a: 5})}}
 
@@ -697,6 +699,187 @@ defmodule PB.TextFormatTest do
     test "type URLs outside an Any are rejected" do
       assert {:error, %DecodeError{kind: :malformed_text} = error} = decode("[#{@nested_url}] {}")
       assert Exception.message(error) =~ "is only allowed in a google.protobuf.Any"
+    end
+  end
+
+  describe "encoding" do
+    defp encode!(value, message \\ @proto3, opts \\ []),
+      do: TextFormat.encode!(value, TestSchema, message, opts)
+
+    @rich %{
+      optional_int32: -5,
+      optional_uint64: 255,
+      optional_float: 3.192837,
+      optional_double: 0.1,
+      optional_string: "héllo \"q\"\n",
+      optional_bytes: <<0, 255, ?a>>,
+      optional_nested_message: %{a: 1, corecursive: %{}},
+      optional_nested_enum: :BAZ,
+      repeated_int32: [1, 2],
+      repeated_string: ["a"],
+      map_string_string: %{"b" => "2", "a" => "1"},
+      oneof_field: {:oneof_uint32, 7}
+    }
+
+    test "prints the C++ layout, in field-number order with sorted map entries" do
+      assert encode!(@rich) == ~S"""
+             optional_int32: -5
+             optional_uint64: 255
+             optional_float: 3.192837
+             optional_double: 0.1
+             optional_string: "héllo \"q\"\n"
+             optional_bytes: "\x00\xffa"
+             optional_nested_message {
+               a: 1
+               corecursive {}
+             }
+             optional_nested_enum: BAZ
+             repeated_int32: 1
+             repeated_int32: 2
+             repeated_string: "a"
+             map_string_string {
+               key: "a"
+               value: "1"
+             }
+             map_string_string {
+               key: "b"
+               value: "2"
+             }
+             oneof_uint32: 7
+             """
+    end
+
+    test "single_line and short_repeated" do
+      value = %{
+        repeated_int32: [1, 2],
+        repeated_nested_enum: [:FOO, :BAR],
+        repeated_string: ["a", "b"]
+      }
+
+      assert encode!(value, @proto3, single_line: true, short_repeated: true) ==
+               ~S(repeated_int32: [1, 2] repeated_string: "a" repeated_string: "b" repeated_nested_enum: [FOO, BAR])
+    end
+
+    test "prints what the wire would carry" do
+      assert encode!(%{optional_int32: 0, optional_string: "", optional_nested_enum: 1}) ==
+               "optional_nested_enum: BAR\n"
+
+      assert encode!(%{optional_nested_enum: 42}) == "optional_nested_enum: 42\n"
+      assert encode!(%{optional_float: 0.1}) == "optional_float: 0.1\n"
+      assert encode!(%{optional_int32: 0}, @proto2) == "optional_int32: 0\n"
+      assert encode!(%{}) == ""
+    end
+
+    test "prints group-like fields by type name and extensions by full name" do
+      value = %{
+        data: %{group_int32: 1},
+        optional_int32: 2,
+        __extensions__: %{"protobuf_test_messages.proto2.extension_int32": 5}
+      }
+
+      assert encode!(value, @proto2) == """
+             optional_int32: 2
+             [protobuf_test_messages.proto2.extension_int32]: 5
+             Data {
+               group_int32: 1
+             }
+             """
+    end
+
+    test "expands Any values whose type resolves" do
+      packed = %{type_url: @nested_url, value: packed(@nested, %{a: 5})}
+
+      assert encode!(%{optional_any: packed}) == """
+             optional_any {
+               [#{@nested_url}] {
+                 a: 5
+               }
+             }
+             """
+
+      prod = %{packed | type_url: "type.googleprod.com/#{@nested}"}
+      assert encode!(%{optional_any: prod}) =~ "[type.googleprod.com/#{@nested}] {"
+    end
+
+    test "prints other Any values raw" do
+      for any <- [
+            %{type_url: "example.com/#{@nested}", value: packed(@nested, %{a: 5})},
+            %{type_url: "type.googleapis.com/no.Such", value: <<1>>},
+            %{type_url: @nested_url, value: <<0xFF>>}
+          ] do
+        assert encode!(%{optional_any: any}) =~ ~s(  type_url: "#{any.type_url}"\n), inspect(any)
+      end
+    end
+
+    test "prints unknown fields by number unless told not to" do
+      unknowns = [
+        PB.UnknownField.from_raw(12_345, 0, <<150, 1>>),
+        PB.UnknownField.from_raw(12_346, 2, <<3, 8, 150, 1>>),
+        PB.UnknownField.from_raw(12_347, 2, <<2, 0xFF, 0xFE>>),
+        PB.UnknownField.from_raw(12_348, 5, <<1, 0, 0, 0>>)
+      ]
+
+      value = %{optional_int32: 1, __unknown_fields__: unknowns}
+
+      assert encode!(value) == ~S"""
+             optional_int32: 1
+             12345: 150
+             12346 {
+               1: 150
+             }
+             12347: "\xff\xfe"
+             12348: 0x00000001
+             """
+
+      assert encode!(value, @proto3, print_unknown_fields: false) == "optional_int32: 1\n"
+    end
+
+    test "encodes projected types through their projection" do
+      descriptor_set = PB.decode_descriptor_set!(File.read!("test/fixtures/schema/test.binpb"))
+      schema = PB.compile(descriptor_set, projections: [{@nested, struct: Nested}])
+
+      assert TextFormat.encode(%Nested{a: 5}, schema, @nested) == {:ok, "a: 5\n"}
+    end
+
+    test "decodes back to the same value" do
+      for {value, message} <- [
+            {@rich, @proto3},
+            {%{
+               data: %{group_int32: 1},
+               __extensions__: %{"protobuf_test_messages.proto2.extension_int32": 5}
+             }, @proto2},
+            {%{optional_any: %{type_url: @nested_url, value: packed(@nested, %{a: 5})}}, @proto3}
+          ] do
+        {:ok, canonical} = PB.normalize(value, TestSchema, message)
+
+        for opts <- [[], [single_line: true, short_repeated: true]] do
+          assert decode!(encode!(value, message, opts), message) == canonical
+        end
+      end
+    end
+
+    test "returns the errors PB.encode would, as text_encode" do
+      assert {:error, %ValueError{kind: :value_out_of_range, operation: :text_encode}} =
+               TextFormat.encode(%{optional_int32: 1 <<< 40}, TestSchema, @proto3)
+
+      assert {:error, %ValueError{kind: :unknown_field, operation: :text_encode}} =
+               TextFormat.encode(%{nope: 1}, TestSchema, @proto3)
+
+      assert {:error, %ValueError{kind: :missing_required, operation: :text_encode}} =
+               TextFormat.encode(%{}, TestSchema, @required)
+
+      assert {:error, %SchemaError{kind: :unknown_message, operation: :text_encode}} =
+               TextFormat.encode(%{}, TestSchema, :"no.Such")
+
+      assert {:error, %OptionError{kind: :unknown_options}} =
+               TextFormat.encode(%{}, TestSchema, @proto3, ignore_unknown: true)
+
+      assert_raise ValueError, fn -> encode!(%{optional_int32: "x"}) end
+    end
+
+    test "encode_iodata returns iodata" do
+      assert {:ok, iodata} = TextFormat.encode_iodata(%{optional_int32: 1}, TestSchema, @proto3)
+      assert IO.iodata_to_binary(iodata) == "optional_int32: 1\n"
     end
   end
 

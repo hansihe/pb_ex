@@ -3,7 +3,8 @@ defmodule PB.TextFormat.CELCorpusTest do
 
   # The CEL conformance fixtures are upstream `.textproto` files that
   # `buf convert` turned into the committed `.binpb` files. Decoding the text
-  # with PB.TextFormat must give the same value as decoding the binary.
+  # with PB.TextFormat must give the same value as decoding the binary, and
+  # printing that value must decode back to it.
   #
   # Packed google.protobuf.Any payloads are compared as messages rather than
   # bytes: buf always writes map entry keys, PB omits default ones, and both
@@ -21,6 +22,15 @@ defmodule PB.TextFormat.CELCorpusTest do
 
       assert {:ok, decoded} = PB.TextFormat.decode(text, TestSchema, type)
       assert unpack_any(decoded) == unpack_any(CELConformance.decode_fixture(@fixture))
+    end
+
+    test "#{fixture.output} prints and decodes back" do
+      type = String.to_atom(@fixture.type)
+      value = CELConformance.decode_fixture(@fixture)
+
+      printed = PB.TextFormat.encode!(value, TestSchema, type)
+      assert {:ok, decoded} = PB.TextFormat.decode(printed, TestSchema, type)
+      assert unpack_any(decoded) == unpack_any(value)
     end
   end
 

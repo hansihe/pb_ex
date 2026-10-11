@@ -59,6 +59,14 @@ See [Decoding into structs](../how-to/structs-and-representation.md) and
 | `:ignore_unknown` | `boolean` | `false` |
 | `:allow_field_numbers` | `boolean` | `false` |
 
+## `PB.TextFormat` encode (`encode/4`, `encode_iodata/4`)
+
+| Option | Values | Default |
+|--------|--------|---------|
+| `:single_line` | `boolean` | `false` |
+| `:short_repeated` | `boolean` | `false` |
+| `:print_unknown_fields` | `boolean` | `true` |
+
 ## `PB.Validate.validate/4`
 
 | Option | Values | Notes |

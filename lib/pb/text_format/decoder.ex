@@ -36,7 +36,7 @@ defmodule PB.TextFormat.Decoder do
 
   alias PB.Runtime.{Oneofs, RequiredFields, Scalar}
   alias PB.Schema.Features
-  alias PB.TextFormat.Scalars
+  alias PB.TextFormat.{FieldNames, Scalars}
   alias PB.WellKnownTypes.Any
 
   @any :"google.protobuf.Any"
@@ -150,19 +150,12 @@ defmodule PB.TextFormat.Decoder do
 
   # C++ also accepts a group-like field by its message type's name, spelled
   # exactly: the lowercased text must name the field, and the text must be the
-  # type's simple name. Group-like means delimited, named after the lowercased
-  # type, and with the type nested in this message (so declared in the same
-  # file and scope, as C++ `IsGroupLike` requires).
+  # type's simple name.
   defp group_by_type_name(message_name, msg, text) do
     field = lookup(msg.fields_by_name, String.downcase(text, :ascii))
 
-    if field && field.encoding == :delimited do
-      {scope, type} = split_name(field.type_name)
-
-      if type == text and Atom.to_string(field.name) == String.downcase(type, :ascii) and
-           scope == Atom.to_string(message_name),
-         do: field
-    end
+    if field && FieldNames.group_like?(message_name, field) && FieldNames.type_name(field) == text,
+      do: field
   end
 
   # Like C++ `SimpleAtoi` into an int32: decimal only.
@@ -176,21 +169,6 @@ defmodule PB.TextFormat.Decoder do
   # Descriptor ranges are end-exclusive.
   defp in_ranges?(number, ranges),
     do: Enum.any?(ranges, fn %{start: first, end: last} -> number >= first and number < last end)
-
-  defp split_name(full_name) do
-    full_name = Atom.to_string(full_name)
-
-    case :binary.matches(full_name, ".") do
-      [] ->
-        {"", full_name}
-
-      matches ->
-        {dot, 1} = List.last(matches)
-
-        {binary_part(full_name, 0, dot),
-         binary_part(full_name, dot + 1, byte_size(full_name) - dot - 1)}
-    end
-  end
 
   defp unknown!(message_name, node, field_name, opts, path) do
     if Keyword.get(opts, :ignore_unknown, false),
