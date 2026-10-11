@@ -2,6 +2,7 @@ defmodule PB.RepeatedEncodingTest do
   use ExUnit.Case
 
   import PB.TestSupport.Assertions
+  import PB.TestSupport.CodegenConsistency, only: [assert_decode_consistent: 3]
 
   # ── T3 - Proto2 syntax ──────────────────────────────────────────────
 
@@ -679,10 +680,37 @@ defmodule PB.RepeatedEncodingTest do
                ]
              }
 
-      # roles["a"] = ADMIN with an unknown field 3 inside the entry: as in C++,
-      # the entry is kept and the unknown field dropped.
-      bin = <<0x0A, 7, 0x0A, 1, ?a, 0x10, 1, 0x18, 7>>
-      assert PB.decode(bin, schema, :"closedm.Msg") == {:ok, %{roles: %{"a" => :ADMIN}}}
+      # Anything else inside an entry is skipped and the entry kept, as in C++
+      # and Go: an unknown field 3, a value with the wrong wire type, a missing
+      # key or value.
+      for {bin, roles} <- [
+            {<<0x0A, 7, 0x0A, 1, ?a, 0x10, 1, 0x18, 7>>, %{"a" => :ADMIN}},
+            {<<0x0A, 6, 0x0A, 1, ?a, 0x12, 1, 1>>, %{"a" => :NONE}},
+            {<<0x0A, 2, 0x10, 1>>, %{"" => :ADMIN}},
+            {<<0x0A, 0>>, %{"" => :NONE}}
+          ] do
+        assert PB.decode(bin, schema, :"closedm.Msg") == {:ok, %{roles: roles}}
+        assert_decode_consistent(schema, :"closedm.Msg", bin)
+      end
+
+      assert_decode_consistent(schema, :"closedm.Msg", <<0x0A, 5, 0x0A, 1, ?a, 0x10, 99>>)
+    end
+
+    test "a message value repeated inside one map entry merges" do
+      schema = PB.TestSupport.TestSchema
+      message = :"protobuf_test_messages.proto3.TestAllTypesProto3"
+      field = schema.schema().messages[message].fields_by_name.map_string_nested_message
+
+      entry =
+        <<0x0A, 1, ?x>> <>
+          <<0x12, 2, 0x08, 1>> <> <<0x12, 4, 0x12, 2, 0x08, 2>>
+
+      bin = PB.Wire.encode_tag(field.number, 2) <> <<byte_size(entry)>> <> entry
+
+      assert {:ok, %{map_string_nested_message: %{"x" => value}}} =
+               PB.decode(bin, schema, message)
+
+      assert value == %{a: 1, corecursive: %{optional_int32: 2}}
     end
   end
 end

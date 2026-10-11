@@ -577,21 +577,11 @@ defmodule PB.Codegen.DecoderTest do
     )
   end
 
-  test "returns structured field path for wrong wire type", %{person_decoder: decoder} do
+  test "keeps fields with the wrong wire type as unknown fields", %{person_decoder: decoder} do
     # Field 1 (:name) is length-delimited. Encode the same field number with
     # varint wire type to exercise generated compatibility checks.
-    bin = <<0x08, 0x2A>>
-
-    error =
-      assert_error(assert_decode_consistent(decoder, bin),
-        operation: :decode,
-        message_name: :"test.Person",
-        kind: :malformed,
-        path: [:name],
-        reason: :wrong_wire_type
-      )
-
-    assert error.details == %{expected_wire_type: 2, got_wire_type: 0}
+    assert {:ok, decoded} = assert_decode_consistent(decoder, <<0x08, 0x2A>>)
+    assert decoded.__unknown_fields__ == [PB.UnknownField.from_raw(1, 0, <<0x2A>>)]
   end
 
   test "returns structured nested repeated field path for malformed input", %{
@@ -610,8 +600,8 @@ defmodule PB.Codegen.DecoderTest do
   end
 
   test "bang decoder raises structured errors", %{person_decoder: decoder} do
-    assert_raise PB.DecodeError, ~r/wrong_wire_type/, fn ->
-      apply(decoder.module, decoder.decode!, [<<0x08, 0x2A>>])
+    assert_raise PB.DecodeError, ~r/truncated_length_delimited/, fn ->
+      apply(decoder.module, decoder.decode!, [<<0x0A, 0x05, "x">>])
     end
   end
 end

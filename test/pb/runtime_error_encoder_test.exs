@@ -80,40 +80,28 @@ defmodule PB.RuntimeErrorEncoderTest do
       )
     end
 
-    test "known string field with varint wire type returns error", %{es: es} do
-      # field 1 is TYPE_STRING and must use wire type 2, not wire type 0.
-      assert_error(PB.decode(<<0x08, 0x7B>>, es, :"err.Msg"),
-        operation: :decode,
-        kind: :malformed,
-        message_name: :"err.Msg",
-        path: [:name],
-        reason: :wrong_wire_type,
-        details: %{expected_wire_type: 2, got_wire_type: 0}
-      )
-    end
+    test "known fields with the wrong wire type are kept as unknown fields", %{es: es} do
+      # As in C++ and Go: name is a string sent as a varint, and count is a
+      # singular int32 sent length-delimited (including in packed form).
+      for bin <- [<<0x08, 0x7B>>, <<0x1A, 1, 0x7B>>, <<0x1A, 2, 10, 20>>] do
+        {:ok, tag, value} = PB.Wire.decode_tag(bin)
 
-    test "known int32 field with length-delimited wire type returns error", %{es: es} do
-      # field 3 is TYPE_INT32 and must use wire type 0, not wire type 2.
-      assert_error(PB.decode(<<0x1A, 1, 0x7B>>, es, :"err.Msg"),
-        operation: :decode,
-        kind: :malformed,
-        message_name: :"err.Msg",
-        path: [:count],
-        reason: :wrong_wire_type,
-        details: %{expected_wire_type: 0, got_wire_type: 2}
-      )
-    end
+        assert PB.decode(bin, es, :"err.Msg") ==
+                 {:ok,
+                  %{
+                    __unknown_fields__: [
+                      PB.UnknownField.from_raw(Bitwise.>>>(tag, 3), Bitwise.&&&(tag, 7), value)
+                    ]
+                  }}
+      end
 
-    test "singular int32 does not accept packed wire type", %{es: es} do
-      # Same wire bytes as a packed int32, but field 3 is singular.
-      assert_error(PB.decode(<<0x1A, 2, 10, 20>>, es, :"err.Msg"),
-        operation: :decode,
-        kind: :malformed,
-        message_name: :"err.Msg",
-        path: [:count],
-        reason: :wrong_wire_type,
-        details: %{expected_wire_type: 0, got_wire_type: 2}
-      )
+      # The unknown field does not hide later values of the same field.
+      assert PB.decode(<<0x08, 0x7B, 0x0A, 1, ?a>>, es, :"err.Msg") ==
+               {:ok,
+                %{
+                  name: "a",
+                  __unknown_fields__: [PB.UnknownField.from_raw(1, 0, <<0x7B>>)]
+                }}
     end
 
     test "packed field with truncated payload returns error", %{es: es} do
@@ -127,19 +115,16 @@ defmodule PB.RuntimeErrorEncoderTest do
       )
     end
 
-    test "nested malformed fields include full field path", %{schema: schema} do
+    test "nested fields with the wrong wire type are kept as unknown fields", %{
+      schema: schema
+    } do
       # Person.phones[0].number is a string, but the nested field is encoded as varint.
       nested = <<0x08, 0x7B>>
 
-      assert_error(
-        PB.decode(<<0x22, byte_size(nested), nested::binary>>, schema, :"test.Person"),
-        operation: :decode,
-        kind: :malformed,
-        message_name: :"test.Person",
-        path: [:phones, {:index, 0}, :number],
-        reason: :wrong_wire_type,
-        details: %{expected_wire_type: 2, got_wire_type: 0}
-      )
+      assert {:ok, %{phones: [phone]}} =
+               PB.decode(<<0x22, byte_size(nested), nested::binary>>, schema, :"test.Person")
+
+      assert phone.__unknown_fields__ == [PB.UnknownField.from_raw(1, 0, <<0x7B>>)]
     end
 
     test "repeated int32 still accepts packed and unpacked wire encodings", %{es: es} do

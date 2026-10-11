@@ -111,11 +111,8 @@ defmodule PB.Runtime.Decoder.Scan do
          :ok <- Wire.validate_wire_type(wtype) do
       case msg.fields_by_number[fnum] do
         nil ->
-          with {:ok, raw, rest} <- Wire.read_unknown_field(fnum, wtype, rest) do
-            acc = UnknownField.append(acc, UnknownField.from_raw(fnum, wtype, raw))
+          with {:ok, acc, rest} <- decode_unknown_field(fnum, wtype, rest, acc, path) do
             decode_regular_fields(schema, msg, rest, acc, depth, opts, path)
-          else
-            {:error, reason} -> decode_error_at(reason, path)
           end
 
         field ->
@@ -162,9 +159,7 @@ defmodule PB.Runtime.Decoder.Scan do
         nil ->
           case extensions_by_number[fnum] do
             nil ->
-              with {:ok, raw, rest} <- Wire.read_unknown_field(fnum, wtype, rest) do
-                acc = UnknownField.append(acc, UnknownField.from_raw(fnum, wtype, raw))
-
+              with {:ok, acc, rest} <- decode_unknown_field(fnum, wtype, rest, acc, path) do
                 decode_extensible_fields(
                   schema,
                   msg,
@@ -175,8 +170,6 @@ defmodule PB.Runtime.Decoder.Scan do
                   opts,
                   path
                 )
-              else
-                {:error, reason} -> decode_error_at(reason, path)
               end
 
             extension ->
@@ -237,15 +230,28 @@ defmodule PB.Runtime.Decoder.Scan do
     end
   end
 
+  # A known field with a wire type it cannot have is kept as an unknown field,
+  # as C++ and Go do.
   defp decode_known_field(schema, msg, field, wtype, rest, acc, depth, opts, path, storage) do
-    with :ok <- ensure_compatible_wire(field, wtype) do
-      if packed_wire?(field, wtype) do
+    cond do
+      packed_wire?(field, wtype) ->
         decode_packed_field(schema, field, rest, acc, path, storage)
-      else
+
+      wtype == field.wire_type ->
         decode_unpacked_field(schema, msg, field, wtype, rest, acc, depth, opts, path, storage)
-      end
-    else
-      {:error, reason} -> decode_error_at(reason, path ++ field_path(field, storage))
+
+      true ->
+        decode_unknown_field(field.number, wtype, rest, acc, path)
+    end
+  end
+
+  defp decode_unknown_field(fnum, wtype, rest, acc, path) do
+    case Wire.read_unknown_field(fnum, wtype, rest) do
+      {:ok, raw, rest} ->
+        {:ok, UnknownField.append(acc, UnknownField.from_raw(fnum, wtype, raw)), rest}
+
+      {:error, reason} ->
+        decode_error_at(reason, path)
     end
   end
 
@@ -275,6 +281,38 @@ defmodule PB.Runtime.Decoder.Scan do
   defp decode_unpacked_field(
          schema,
          msg,
+         %{cardinality: :map, map_entry: entry} = field,
+         wtype,
+         rest,
+         acc,
+         depth,
+         opts,
+         path,
+         storage
+       ) do
+    value_path = decode_value_path(acc, field, path, storage)
+
+    with {:ok, raw_body, body, rest} <- read_field_value(field, wtype, rest) do
+      case decode_map_entry(schema, entry, body, depth, opts, value_path) do
+        {:ok, entry_acc} ->
+          {:ok, store_decoded_value(schema, acc, msg, field, entry_acc, storage), rest}
+
+        :closed_enum_value ->
+          unknown = UnknownField.from_raw(field.number, wtype, raw_body)
+          {:ok, UnknownField.append(acc, unknown), rest}
+
+        {:error, error} ->
+          {:error, error}
+      end
+    else
+      {:error, %{__exception__: true} = error} -> {:error, error}
+      {:error, reason} -> decode_error_at(reason, value_path)
+    end
+  end
+
+  defp decode_unpacked_field(
+         schema,
+         msg,
          %{type: :TYPE_MESSAGE} = field,
          wtype,
          rest,
@@ -286,17 +324,10 @@ defmodule PB.Runtime.Decoder.Scan do
        ) do
     value_path = decode_value_path(acc, field, path, storage)
 
-    with {:ok, raw_body, raw, rest} <- read_field_value(field, wtype, rest) do
+    with {:ok, _raw_body, raw, rest} <- read_field_value(field, wtype, rest) do
       case interpret(schema, field, raw, depth, opts, value_path) do
         {:ok, value} ->
-          acc =
-            if unknown_map_entry?(schema, field, value) do
-              UnknownField.append(acc, UnknownField.from_raw(field.number, wtype, raw_body))
-            else
-              store_decoded_value(schema, acc, msg, field, value, storage)
-            end
-
-          {:ok, acc, rest}
+          {:ok, store_decoded_value(schema, acc, msg, field, value, storage), rest}
 
         {:error, %{__exception__: true} = error} ->
           {:error, error}
@@ -329,19 +360,6 @@ defmodule PB.Runtime.Decoder.Scan do
     else
       {:error, %{__exception__: true} = error} -> {:error, error}
       {:error, reason} -> decode_error_at(reason, decode_value_path(acc, field, path, storage))
-    end
-  end
-
-  defp compatible_wire?(field, wtype), do: wtype == field.wire_type or packed_wire?(field, wtype)
-
-  defp ensure_compatible_wire(field, wtype) do
-    if compatible_wire?(field, wtype) do
-      :ok
-    else
-      Wire.malformed(:wrong_wire_type, %{
-        expected_wire_type: field.wire_type,
-        got_wire_type: wtype
-      })
     end
   end
 
@@ -484,18 +502,48 @@ defmodule PB.Runtime.Decoder.Scan do
     end
   end
 
-  # As in C++, a map entry whose closed enum value was rejected (and so kept
-  # as an unknown field of the entry) moves whole to the unknown fields; any
-  # other unknown field inside an entry is dropped and the entry kept.
-  defp unknown_map_entry?(schema, field, value) do
-    case RuntimeSchema.map_entry_message(schema, field) do
-      %{fields_by_name: %{value: %{number: number}}} when is_map(value) ->
-        value
-        |> Map.get(UnknownField.key(), [])
-        |> Enum.any?(&(&1.number == number))
+  # Map entries decode like Go's consumeMap: field 1 is the key, field 2 the
+  # value, and anything else, including a key or value with the wrong wire
+  # type, is skipped. A closed enum value that is not declared instead moves
+  # the whole entry to the unknown fields, as in C++ (Go has no closed enums).
+  # Missing keys and values default in finalization.
+  defp decode_map_entry(_schema, _entry, _body, depth, _opts, path)
+       when depth >= @max_decode_depth,
+       do: decode_error_at({:malformed, :max_decode_depth_exceeded}, path)
 
-      _other ->
-        false
+  defp decode_map_entry(schema, entry, body, depth, opts, path),
+    do: decode_map_entry_fields(schema, entry, body, %{}, depth + 1, opts, path)
+
+  defp decode_map_entry_fields(_schema, _entry, <<>>, acc, _depth, _opts, _path), do: {:ok, acc}
+
+  defp decode_map_entry_fields(schema, entry, bin, acc, depth, opts, path) do
+    with {:ok, tag_val, rest} <- Wire.decode_tag(bin),
+         fnum = tag_val >>> 3,
+         wtype = tag_val &&& 0x07,
+         :ok <- Wire.validate_field_number(fnum),
+         :ok <- Wire.validate_wire_type(wtype) do
+      case entry.fields_by_number[fnum] do
+        %{wire_type: ^wtype} = field ->
+          field_path = path ++ [field.name]
+
+          with {:ok, _raw_body, raw, rest} <- read_field_value(field, wtype, rest),
+               {:ok, value} <- interpret(schema, field, raw, depth, opts, field_path) do
+            acc = store_decoded_value(schema, acc, entry, field, value, :field)
+            decode_map_entry_fields(schema, entry, rest, acc, depth, opts, path)
+          else
+            {:error, {:closed_enum_value, _raw}} -> :closed_enum_value
+            {:error, reason} -> decode_error_at(reason, field_path)
+          end
+
+        _other ->
+          with {:ok, _raw, rest} <- Wire.read_unknown_field(fnum, wtype, rest) do
+            decode_map_entry_fields(schema, entry, rest, acc, depth, opts, path)
+          else
+            {:error, reason} -> decode_error_at(reason, path)
+          end
+      end
+    else
+      {:error, reason} -> decode_error_at(reason, path)
     end
   end
 

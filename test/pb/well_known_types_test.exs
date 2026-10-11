@@ -217,9 +217,14 @@ defmodule PB.WellKnownTypesTest do
               message_name: @host,
               kind: :malformed,
               path: [:age, :value],
-              reason: :wrong_wire_type,
-              details: %{expected_wire_type: 0, got_wire_type: 5}
-            }} = PB.decode(<<0x0A, 0x05, 0x0D, 0, 0, 0, 0>>, schema, @host)
+              reason: :truncated_varint
+            }} = PB.decode(<<0x0A, 0x02, 0x08, 0x80>>, schema, @host)
+  end
+
+  test "wrapper values with the wrong wire type are skipped", %{schema: schema} do
+    # age is an Int32Value whose value arrives as fixed32: it is an unknown
+    # field of the wrapper, which the wrapper's scalar form cannot carry.
+    assert PB.decode(<<0x0A, 0x05, 0x0D, 0, 0, 0, 0>>, schema, @host) == {:ok, %{age: 0}}
   end
 
   test "generated codecs use wrapper adapters", %{schema: schema} do

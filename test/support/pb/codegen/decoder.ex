@@ -127,13 +127,7 @@ defmodule PB.Codegen.Decoder do
 
     skip_clause =
       quote do
-        _ ->
-          with {:ok, raw, rest} <- PB.Wire.read_unknown_field(fnum, wtype, rest) do
-            unknown = PB.UnknownField.from_raw(fnum, wtype, raw)
-            unquote(loop)(rest, PB.UnknownField.append(acc, unknown), path)
-          else
-            {:error, reason} -> PB.Codegen.Runtime.decode_error_at(reason, path)
-          end
+        _ -> unquote(unknown_body(loop))
       end
 
     dispatch = build_case(quote(do: fnum), field_clauses ++ extract_clauses(skip_clause))
@@ -242,7 +236,7 @@ defmodule PB.Codegen.Decoder do
         body =
           compatible_body(
             field,
-            field_path,
+            loop,
             repeated_update_body(loop, name, decode_expr, repeated_path)
           )
 
@@ -264,7 +258,7 @@ defmodule PB.Codegen.Decoder do
                 unquote(unpacked_body)
 
               true ->
-                unquote(wrong_wire_type(field, field_path))
+                unquote(unknown_body(loop))
             end
           end
 
@@ -277,7 +271,7 @@ defmodule PB.Codegen.Decoder do
         body =
           compatible_body(
             field,
-            field_path,
+            loop,
             repeated_update_body(loop, name, decode_expr, repeated_path)
           )
 
@@ -289,7 +283,7 @@ defmodule PB.Codegen.Decoder do
         body =
           compatible_body(
             field,
-            field_path,
+            loop,
             singular_put_body(loop, name, decode_expr, field_path, siblings)
           )
 
@@ -301,7 +295,7 @@ defmodule PB.Codegen.Decoder do
         body =
           compatible_body(
             field,
-            field_path,
+            loop,
             singular_put_body(loop, name, decode_expr, field_path, siblings)
           )
 
@@ -313,25 +307,34 @@ defmodule PB.Codegen.Decoder do
     {:->, [], [[pattern], body]}
   end
 
-  defp compatible_body(field, field_path, body) do
+  # A known field with a wire type it cannot have is kept as an unknown field,
+  # as in the runtime decoder.
+  defp compatible_body(field, loop, body) do
     quote do
       if wtype == unquote(field.wire_type) do
         unquote(body)
       else
-        unquote(wrong_wire_type(field, field_path))
+        unquote(unknown_body(loop))
       end
     end
   end
 
-  defp wrong_wire_type(field, path_ast) do
+  defp unknown_body(loop) do
     quote do
-      PB.Codegen.Runtime.decode_error_at(
-        {:malformed, :wrong_wire_type,
-         %{expected_wire_type: unquote(field.wire_type), got_wire_type: wtype}},
-        unquote(path_ast)
-      )
+      with {:ok, raw, rest} <- PB.Wire.read_unknown_field(fnum, wtype, rest) do
+        unknown = PB.UnknownField.from_raw(fnum, wtype, raw)
+        unquote(loop)(rest, PB.UnknownField.append(acc, unknown), path)
+      else
+        {:error, reason} -> PB.Codegen.Runtime.decode_error_at(reason, path)
+      end
     end
   end
+
+  defp closed_enum_value_field(%{map_entry: %{fields_by_name: %{value: value}}}) do
+    if value.type == :TYPE_ENUM and value.enum.features.enum_type == :CLOSED, do: value
+  end
+
+  defp closed_enum_value_field(_field), do: nil
 
   defp oneof_siblings(msg, field) do
     if PB.Schema.Features.oneof?(field) do
@@ -466,7 +469,11 @@ defmodule PB.Codegen.Decoder do
 
   defp message_decode_expr(field, targets, value_path) do
     type_name = field.type_name
-    preserve_unknown_entry? = Map.has_key?(field, :map_entry)
+    # A map entry whose closed enum value was rejected moves whole to the
+    # unknown fields, as in the runtime decoder. The entry decoder keeps the
+    # rejected value as an unknown field 2 with the value's wire type; other
+    # unknown fields inside an entry are dropped with the entry kept.
+    rejected_value = closed_enum_value_field(field)
 
     call =
       cond do
@@ -503,8 +510,12 @@ defmodule PB.Codegen.Decoder do
                rest
              ),
            {:ok, value} <- unquote(call) do
-        if unquote(preserve_unknown_entry?) and is_map(value) and
-             Map.has_key?(value, PB.UnknownField.key()) do
+        if unquote(rejected_value != nil) and is_map(value) and
+             Enum.any?(
+               Map.get(value, PB.UnknownField.key(), []),
+               &(&1.number == unquote(rejected_value && rejected_value.number) and
+                   &1.wire_type == 0)
+             ) do
           unknown =
             PB.UnknownField.from_raw(
               unquote(field.number),
