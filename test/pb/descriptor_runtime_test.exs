@@ -111,17 +111,11 @@ defmodule PB.DescriptorRuntimeTest do
     test "validation rejects mismatched message-name metadata", %{schema: schema} do
       key = :__message_name__
 
-      assert_raise PB.ValueError,
-                   ~r/message name mismatch .*expected :"test.Person", got :"test.PhoneNumber"/,
-                   fn ->
-                     PB.Validate.validate(
-                       %{
-                         key => :"test.PhoneNumber"
-                       },
-                       schema,
-                       :"test.Person"
-                     )
-                   end
+      assert {:error, %PB.ValueError{} = error} =
+               PB.Validate.validate(%{key => :"test.PhoneNumber"}, schema, :"test.Person")
+
+      assert Exception.message(error) =~
+               ~r/message name mismatch .*expected :"test.Person", got :"test.PhoneNumber"/
     end
   end
 

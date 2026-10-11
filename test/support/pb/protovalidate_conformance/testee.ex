@@ -147,7 +147,7 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
     |> PB.Validate.validate(schema, message_name)
     |> validation_result()
   rescue
-    exception in [PB.CEL.Error, RuntimeError] ->
+    exception in [RuntimeError] ->
       runtime_error(Exception.message(exception))
 
     exception ->
@@ -184,6 +184,11 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
 
   defp validation_result({:error, %PB.Validate.Error{} = error}),
     do: %{result: {:validation_error, PB.Validate.to_proto_violations(error)}}
+
+  defp validation_result({:error, %PB.CEL.Error{} = error}),
+    do: runtime_error(Exception.message(error))
+
+  defp validation_result({:error, error}), do: unexpected_error(Exception.message(error))
 
   defp success, do: %{result: {:success, true}}
   defp compilation_error(message), do: %{result: {:compilation_error, message}}

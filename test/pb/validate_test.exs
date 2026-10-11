@@ -127,10 +127,8 @@ defmodule PB.ValidateTest do
 
   test "field-level CEL reports wrong-typed message values as PB.ValueError",
        %{phase2_schema: schema} do
-    error =
-      assert_raise PB.ValueError, fn ->
-        PB.Validate.validate(%{value: "oops"}, schema, :"validate_phase2.NowCEL")
-      end
+    assert {:error, %PB.ValueError{} = error} =
+             PB.Validate.validate(%{value: "oops"}, schema, :"validate_phase2.NowCEL")
 
     assert error.operation == :validate
     assert error.kind == :invalid_value
@@ -825,11 +823,20 @@ defmodule PB.ValidateTest do
                  end
   end
 
-  test "validate raises PB.Error for unknown messages", %{phase2_schema: schema} do
-    error =
-      assert_raise PB.SchemaError, fn ->
-        PB.Validate.validate(%{}, schema, :"validate_phase2.Bogus")
-      end
+  test "validate returns errors for arguments PB.encode would reject", %{
+    phase2_schema: schema
+  } do
+    assert {:error, %PB.SchemaError{kind: :unknown_message, operation: :validate}} =
+             PB.Validate.validate(%{}, schema, "validate_phase2.FieldCEL")
+
+    assert_raise PB.SchemaError, fn ->
+      PB.Validate.validate!(%{}, schema, :"validate_phase2.Bogus")
+    end
+  end
+
+  test "validate returns PB.Error for unknown messages", %{phase2_schema: schema} do
+    assert {:error, %PB.SchemaError{} = error} =
+             PB.Validate.validate(%{}, schema, :"validate_phase2.Bogus")
 
     assert error.operation == :validate
     assert error.kind == :unknown_message
@@ -840,11 +847,9 @@ defmodule PB.ValidateTest do
              ~s|PB failed to validate :"validate_phase2.Bogus": unknown message :"validate_phase2.Bogus"|
   end
 
-  test "validate raises PB.Error when projection fails", %{phase2_schema: schema} do
-    error =
-      assert_raise PB.ValueError, fn ->
-        PB.Validate.validate(:not_a_map, schema, :"validate_phase2.FieldCEL")
-      end
+  test "validate returns PB.Error when projection fails", %{phase2_schema: schema} do
+    assert {:error, %PB.ValueError{} = error} =
+             PB.Validate.validate(:not_a_map, schema, :"validate_phase2.FieldCEL")
 
     assert error.operation == :validate
     assert error.kind == :invalid_value
@@ -857,20 +862,18 @@ defmodule PB.ValidateTest do
              ~s|PB failed to validate :"validate_phase2.FieldCEL": invalid value at <message>: expected :map, got :not_a_map|
   end
 
-  test "validate raises PB.Error for mismatched message-name metadata",
+  test "validate returns PB.Error for mismatched message-name metadata",
        %{phase2_schema: schema} do
     key = :__message_name__
 
-    error =
-      assert_raise PB.ValueError, fn ->
-        PB.Validate.validate(
-          %{
-            key => :"validate_phase2.Bogus"
-          },
-          schema,
-          :"validate_phase2.FieldCEL"
-        )
-      end
+    assert {:error, %PB.ValueError{} = error} =
+             PB.Validate.validate(
+               %{
+                 key => :"validate_phase2.Bogus"
+               },
+               schema,
+               :"validate_phase2.FieldCEL"
+             )
 
     assert error.operation == :validate
     assert error.kind == :message_name_mismatch

@@ -7,12 +7,13 @@ defmodule PB.Validate do
   adapted values are projected one message layer at a time before field rules,
   message rules, and CEL expressions read protobuf fields.
 
-  Validation rule failures return `{:error, %PB.Validate.Error{}}`.
-  Unknown validation messages, message-name metadata mismatches, non-map
-  validation input, and projection failures raise a `PB.Error` struct
-  (`PB.SchemaError` or `PB.ValueError`) with `operation: :validate`; a CEL
-  constraint that fails at runtime raises `PB.CEL.Error`. Those are
-  caller-contract / evaluation errors rather than protovalidate violations.
+  Validation rule failures return `{:error, %PB.Validate.Error{}}`. Unknown
+  messages, message-name metadata mismatches, values that do not match the
+  message shape, and projection failures return the `PB.Error` struct
+  `PB.encode/4` would (`PB.SchemaError` or `PB.ValueError`, with
+  `operation: :validate`); a CEL rule that fails to evaluate returns
+  `PB.CEL.Error`. Those are errors rather than protovalidate violations, so
+  they are not `PB.Validate.Error`s.
 
   Schemas may be supplied either as a compiled schema map or as a module that
   `use PB.Schema`.
@@ -38,7 +39,7 @@ defmodule PB.Validate do
 
   @message_name_key :__message_name__
 
-  @type result :: :ok | {:error, Error.t() | PB.OptionError.t()}
+  @type result :: :ok | {:error, Error.t() | PB.Error.t() | PB.CEL.Error.t()}
   @typep validation_result :: :ok | {:error, Error.t()}
   @typep message_context :: %{
            required(:schema) => PB.schema(),
@@ -60,9 +61,9 @@ defmodule PB.Validate do
   Validates `data` as `message_name` using `schema`.
 
   Rule failures return `{:error, %PB.Validate.Error{}}`. Option failures return
-  `{:error, %PB.OptionError{}}`. Caller-contract failures such as unknown
-  messages or values that do not match the message shape raise a `PB.Error`
-  struct.
+  `{:error, %PB.OptionError{}}`, and unknown messages or values that do not
+  match the message shape the `PB.Error` struct `PB.encode/4` would. A CEL rule
+  that fails to evaluate returns `{:error, %PB.CEL.Error{}}`.
 
   Accepted options:
 
@@ -72,7 +73,7 @@ defmodule PB.Validate do
       a CEL timestamp tuple `{:timestamp, unix_nanoseconds}`.
   """
   @spec validate(term(), PB.schema_source(), PB.message_name(), keyword) :: result
-  def validate(data, schema, message_name, opts \\ []) when is_atom(message_name) do
+  def validate(data, schema, message_name, opts \\ []) do
     result =
       with {:ok, opts} <- normalize_opts(opts),
            {:ok, context} <- validation_context(opts) do
@@ -84,6 +85,10 @@ defmodule PB.Validate do
       end
 
     RuntimeErrors.normalize_result(result, :validate, message_name)
+  rescue
+    # Rules are evaluated by raising on the first error; the API returns it.
+    error in [PB.SchemaError, PB.ValueError, PB.AdapterError, PB.CEL.Error] ->
+      {:error, RuntimeErrors.to_error(error, :validate, message_name)}
   end
 
   @doc """
@@ -94,7 +99,7 @@ defmodule PB.Validate do
   """
   @spec validate!(term(), PB.schema_source(), PB.message_name(), keyword) ::
           :ok
-  def validate!(data, schema, message_name, opts \\ []) when is_atom(message_name) do
+  def validate!(data, schema, message_name, opts \\ []) do
     case validate(data, schema, message_name, opts) do
       :ok ->
         :ok
