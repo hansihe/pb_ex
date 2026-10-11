@@ -46,7 +46,7 @@ defmodule PB.CEL.Syntax.Parser do
     with :ok <- check_source_size(source, opts),
          {:ok, tokens} <- Tokenizer.tokenize(source, opts) do
       state = %State{
-        tokens: tokens,
+        tokens: List.to_tuple(tokens),
         builder: Builder.new(source, opts),
         location: Keyword.get(opts, :location)
       }
@@ -444,7 +444,7 @@ defmodule PB.CEL.Syntax.Parser do
 
   defp message_path?(state) do
     case scan_message_path(state) do
-      {_name, %{tokens: tokens, index: index}, _pos} -> punct?(Enum.at(tokens, index), "{")
+      {_name, path_state, _pos} -> punct?(current(path_state), "{")
       nil -> false
     end
   end
@@ -587,8 +587,11 @@ defmodule PB.CEL.Syntax.Parser do
 
   defp ascend(%State{depth: depth} = state), do: %State{state | depth: depth - 1}
 
-  defp current(%State{} = state), do: Enum.at(state.tokens, state.index)
-  defp peek(%State{} = state, offset), do: Enum.at(state.tokens, state.index + offset)
+  defp current(%State{} = state), do: token_at(state.tokens, state.index)
+  defp peek(%State{} = state, offset), do: token_at(state.tokens, state.index + offset)
+
+  defp token_at(tokens, index) when index < tuple_size(tokens), do: elem(tokens, index)
+  defp token_at(_tokens, _index), do: nil
   defp advance(%State{} = state), do: %State{state | index: state.index + 1}
 
   defp optional_marker(state) do
