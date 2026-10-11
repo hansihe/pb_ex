@@ -137,6 +137,17 @@ defmodule PB.MixProject do
         PB.CEL.Value,
         PB.CEL.Unknown
       ],
+      "CEL expression view": [
+        PB.CEL.Expr.Const,
+        PB.CEL.Expr.Ident,
+        PB.CEL.Expr.Select,
+        PB.CEL.Expr.Call,
+        PB.CEL.Expr.MacroCall,
+        PB.CEL.Expr.ListLiteral,
+        PB.CEL.Expr.MapLiteral,
+        PB.CEL.Expr.MessageLiteral,
+        PB.CEL.Expr.Comprehension
+      ],
       Validation: [
         PB.Validate,
         PB.Validate.Error,

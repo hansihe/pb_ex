@@ -67,6 +67,17 @@ defmodule PB.CEL.ExprTest do
     assert %Ident{name: "int", scope: :type} = expr("type(1) == int").args |> List.last()
   end
 
+  test "represents an enum constructor as a call to the enum's full name" do
+    env = CEL.Env.build(schema: PB.TestSupport.TestSchema, container: "cel.expr.conformance")
+
+    assert %Call{
+             function: "cel.expr.conformance.proto3.GlobalEnum",
+             overload_id: "enum_constructor",
+             target: nil,
+             args: [%Const{value: {:int, 1}}]
+           } = "proto3.GlobalEnum(1)" |> CEL.check!(env) |> Checked.expr()
+  end
+
   test "represents cel.bind and optMap as macro calls binding a local" do
     assert %MacroCall{
              expansion: nil,

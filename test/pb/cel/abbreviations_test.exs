@@ -102,6 +102,9 @@ defmodule PB.CEL.AbbreviationsTest do
 
         assert resolved_name("GlobalEnum", env) == "#{@proto3}.GlobalEnum"
         assert CEL.eval!("GlobalEnum(2) == GlobalEnum.GAZ", %{}, env) == {:bool, true}
+
+        assert %PB.CEL.Expr.Call{function: "#{@proto3}.GlobalEnum"} =
+                 "GlobalEnum(2)" |> CEL.check!(env) |> Checked.expr()
       end
     end
 

@@ -3,26 +3,23 @@ defmodule PB.CEL.Expr do
   A read-only view of a checked CEL expression, in the spirit of cel-go's
   `common/ast`. Get one with `PB.CEL.Checked.expr/1`.
 
-  The view is a tree of node structs, each with the expression `id` and its
-  checked `type` (a `t:PB.CEL.Type.t/0`, or `nil` for a node the checker did not
-  type):
+  The view is a tree of node structs, each with the expression's `id` and its
+  checked `type` (a `t:PB.CEL.Type.t/0`, or `nil` for a node the checker did
+  not type):
 
-    * `Const` — a literal value, as a `t:PB.CEL.Value.t/0`.
-    * `Ident` — a name; `scope` is `:var` for a declared variable, `:local`
-      for a variable a macro binds, `:type` for a type name and `:enum` for an
-      enum value.
-    * `Select` — `operand.field`; `test_only` for `has(...)`, `optional` for
+    * `PB.CEL.Expr.Const` — a literal.
+    * `PB.CEL.Expr.Ident` — a variable, type or enum value, by full name.
+    * `PB.CEL.Expr.Select` — `operand.field`, `has(operand.field)` and
       `operand.?field`.
-    * `Call` — a function call, including operators (`_==_`, `_&&_`,
-      `_?_:_`, `@in`, ...), with the `overload_id` the checker chose.
-    * `MacroCall` — a macro as written: `l.exists(x, p)`, `l.map(x, f)`,
-      `cel.bind(v, init, body)`, `o.optMap(v, f)`, .... `args` start with the
-      variables the macro binds, as `:local` `Ident`s. For a comprehension
-      macro, `expansion` holds the `Comprehension` it expands to; it is `nil`
-      for `cel.bind`, `optMap` and `optFlatMap`.
-    * `ListLiteral`, `MapLiteral` and `MessageLiteral`.
-    * `Comprehension` — a comprehension that was not written as a macro, which
-      only happens in a parsed expression from elsewhere.
+    * `PB.CEL.Expr.Call` — a function call, operator or enum constructor.
+    * `PB.CEL.Expr.MacroCall` — a macro as written, such as `l.exists(x, p)`
+      or `cel.bind(v, init, body)`.
+    * `PB.CEL.Expr.ListLiteral`, `PB.CEL.Expr.MapLiteral` and
+      `PB.CEL.Expr.MessageLiteral`.
+    * `PB.CEL.Expr.Comprehension` — the loop a macro expands to.
+
+  `id` is the one `PB.CEL.Checked.type/2`, `PB.CEL.Checked.position/2` and
+  `PB.CEL.Checked.references/1` use.
 
   Match on the structs to inspect the tree, and use `reduce/3`, `filter/2` or
   `children/1` to walk it. They visit what the author wrote: a `MacroCall`'s
@@ -41,47 +38,184 @@ defmodule PB.CEL.Expr do
   alias PB.CEL.Checked
 
   defmodule Const do
-    @moduledoc false
+    @moduledoc """
+    A literal: `1`, `2u`, `'a'`, `b'a'`, `true`, `null`, ....
+    """
     defstruct [:id, :type, :value]
+
+    @typedoc "`value` is the literal as a `t:PB.CEL.Value.t/0`, such as `{:uint, 2}`."
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            value: PB.CEL.Value.t()
+          }
   end
 
   defmodule Ident do
-    @moduledoc false
+    @moduledoc """
+    A name, resolved by the checker.
+
+    `name` is the fully qualified name, after the container and abbreviations
+    are applied, so a select chain such as `pkg.Enum.VALUE` that names one
+    thing is a single `Ident`. `scope` says what it names:
+
+      * `:var` — a variable declared in the `PB.CEL.Env`.
+      * `:local` — a variable a macro binds, such as `x` in `l.all(x, x > 0)`.
+      * `:type` — a type, as in `type(x) == int` or `type(m) == pkg.Message`.
+      * `:enum` — an enum value, such as `pkg.Enum.VALUE`.
+    """
     defstruct [:id, :type, :name, :scope]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            name: String.t(),
+            scope: PB.CEL.Expr.scope()
+          }
   end
 
   defmodule Select do
-    @moduledoc false
+    @moduledoc """
+    A field selection: `operand.field`, or a map lookup written the same way.
+
+    `test_only` is true for a presence test, `has(operand.field)`, whose type
+    is `:bool`. `optional` is true for `operand.?field`, whose type is
+    `{:optional, t}`.
+    """
     defstruct [:id, :type, :operand, :field, test_only: false, optional: false]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            operand: PB.CEL.Expr.t(),
+            field: String.t(),
+            test_only: boolean,
+            optional: boolean
+          }
   end
 
   defmodule Call do
-    @moduledoc false
+    @moduledoc """
+    A function call, `f(args)` or `target.f(args)`.
+
+    `function` is the name as written, or for a namespaced function such as
+    `math.greatest(...)`, with its namespace; `target` is the receiver of a
+    method call and `nil` otherwise.
+
+    Operators are calls too, with CEL's internal names: `_+_`, `_==_`, `!_`,
+    `-_`, `_&&_`, `_||_`, `_?_:_`, `_[_]`, `_[?_]`, `@in`, .... So is an enum
+    constructor such as `pkg.Enum(1)`, with `function` the enum's full name
+    and `overload_id` `"enum_constructor"`.
+
+    `overload_id` is the overload the checker chose, such as `"add_int64"`.
+    When that depends on types known only when evaluating, it names the
+    dispatch instead, such as `"_+__dyn"` for `dyn_value + 1`.
+    """
     defstruct [:id, :type, :function, :overload_id, :target, args: []]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            function: String.t(),
+            overload_id: String.t(),
+            target: PB.CEL.Expr.t() | nil,
+            args: [PB.CEL.Expr.t()]
+          }
   end
 
   defmodule ListLiteral do
-    @moduledoc false
+    @moduledoc """
+    A list literal, `[a, b, ?c]`.
+
+    `optional_indices` lists, in order, the positions of elements written
+    with `?`, which are added only when their optional value is present.
+    """
     defstruct [:id, :type, elements: [], optional_indices: []]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            elements: [PB.CEL.Expr.t()],
+            optional_indices: [non_neg_integer]
+          }
   end
 
   defmodule MapLiteral do
-    @moduledoc false
+    @moduledoc """
+    A map literal, `{k: v, ?k2: v2}`.
+
+    Each entry has its `key` and `value` nodes; `optional` is true for an
+    entry written with `?`, which is added only when its optional value is
+    present.
+    """
     defstruct [:id, :type, entries: []]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            entries: [PB.CEL.Expr.map_entry()]
+          }
   end
 
   defmodule MessageLiteral do
-    @moduledoc false
+    @moduledoc """
+    A message literal, `pkg.Message{field: value, ?other: maybe}`.
+
+    `message` is the message's full name. Each field has its name and `value`
+    node; `optional` is true for a field written with `?`, which is set only
+    when its optional value is present.
+    """
     defstruct [:id, :type, :message, fields: []]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            message: String.t(),
+            fields: [PB.CEL.Expr.message_field()]
+          }
   end
 
   defmodule MacroCall do
-    @moduledoc false
+    @moduledoc """
+    A macro, as written: `l.all(x, p)`, `l.exists(x, p)`, `l.exists_one(x, p)`,
+    `l.map(x, f)`, `l.map(x, p, f)`, `l.filter(x, p)`, the two-variable forms
+    such as `m.all(k, v, p)`, `cel.bind(v, init, body)`, `o.optMap(v, f)` and
+    `o.optFlatMap(v, f)`.
+
+    `function` is the macro's name and `target` its receiver, or `nil` for
+    `cel.bind`. `args` start with the variables the macro binds, as
+    `PB.CEL.Expr.Ident` nodes with `scope: :local` and their types, followed
+    by the other arguments.
+
+    For a comprehension macro, `expansion` is the `PB.CEL.Expr.Comprehension`
+    it expands to, which evaluation runs; its subexpressions include the
+    nodes in `args`. It is `nil` for `cel.bind`, `optMap` and `optFlatMap`.
+    `has(m.f)` is not a `MacroCall` but a `PB.CEL.Expr.Select` with
+    `test_only: true`.
+    """
     defstruct [:id, :type, :function, :target, :expansion, args: []]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            function: String.t(),
+            target: PB.CEL.Expr.t() | nil,
+            args: [PB.CEL.Expr.t()],
+            expansion: PB.CEL.Expr.Comprehension.t() | nil
+          }
   end
 
   defmodule Comprehension do
-    @moduledoc false
+    @moduledoc """
+    CEL's loop, which comprehension macros expand to. It appears directly in
+    the tree only for a parsed expression that has one without its macro,
+    such as one from another CEL implementation.
+
+    It binds `iter_var` (and `iter_var2`, for two-variable forms) to each
+    element of `iter_range` in turn, and `accu_var` to an accumulator that
+    starts as `accu_init`. While `loop_condition` holds, `loop_step` computes
+    the next accumulator; `result` is evaluated last.
+    """
     defstruct [
       :id,
       :type,
@@ -94,63 +228,43 @@ defmodule PB.CEL.Expr do
       :loop_step,
       :result
     ]
+
+    @type t :: %__MODULE__{
+            id: PB.CEL.Checked.expr_id(),
+            type: PB.CEL.Expr.type(),
+            iter_var: String.t(),
+            iter_var2: String.t() | nil,
+            iter_range: PB.CEL.Expr.t(),
+            accu_var: String.t(),
+            accu_init: PB.CEL.Expr.t(),
+            loop_condition: PB.CEL.Expr.t(),
+            loop_step: PB.CEL.Expr.t(),
+            result: PB.CEL.Expr.t()
+          }
   end
 
+  @typedoc "A node's checked type, or `nil` for a node the checker did not type."
   @type type :: PB.CEL.Type.t() | nil
+
+  @typedoc "Any node."
   @type t ::
-          %Const{id: Checked.expr_id(), type: type, value: PB.CEL.Value.t()}
-          | %Ident{id: Checked.expr_id(), type: type, name: String.t(), scope: scope}
-          | %Select{
-              id: Checked.expr_id(),
-              type: type,
-              operand: t,
-              field: String.t(),
-              test_only: boolean,
-              optional: boolean
-            }
-          | %Call{
-              id: Checked.expr_id(),
-              type: type,
-              function: String.t(),
-              overload_id: String.t() | nil,
-              target: t | nil,
-              args: [t]
-            }
-          | %ListLiteral{
-              id: Checked.expr_id(),
-              type: type,
-              elements: [t],
-              optional_indices: [non_neg_integer]
-            }
-          | %MapLiteral{id: Checked.expr_id(), type: type, entries: [map_entry]}
-          | %MessageLiteral{
-              id: Checked.expr_id(),
-              type: type,
-              message: String.t(),
-              fields: [message_field]
-            }
-          | %MacroCall{
-              id: Checked.expr_id(),
-              type: type,
-              function: String.t(),
-              target: t | nil,
-              args: [t],
-              expansion: t | nil
-            }
-          | %Comprehension{
-              id: Checked.expr_id(),
-              type: type,
-              iter_var: String.t(),
-              iter_var2: String.t() | nil,
-              iter_range: t,
-              accu_var: String.t(),
-              accu_init: t,
-              loop_condition: t,
-              loop_step: t,
-              result: t
-            }
+          Const.t()
+          | Ident.t()
+          | Select.t()
+          | Call.t()
+          | ListLiteral.t()
+          | MapLiteral.t()
+          | MessageLiteral.t()
+          | MacroCall.t()
+          | Comprehension.t()
+
+  @typedoc "What `PB.CEL.Expr.Ident`'s `scope` says a name is."
   @type scope :: :var | :local | :type | :enum
+
+  @typedoc "An entry of a `PB.CEL.Expr.MapLiteral`."
   @type map_entry :: %{key: t, value: t, optional: boolean}
+
+  @typedoc "A field of a `PB.CEL.Expr.MessageLiteral`."
   @type message_field :: %{field: String.t(), value: t, optional: boolean}
 
   @optional_selects [:optional_field, :optional_map_field, :optional_dyn_field]
@@ -314,7 +428,7 @@ defmodule PB.CEL.Expr do
     %Call{
       id: id,
       type: type,
-      function: op.name,
+      function: Map.get(op, :enum, op.name),
       overload_id: op.overload_id,
       target: op.target_id && node(op.target_id, checked),
       args: Enum.map(op.arg_ids, &node(&1, checked))
