@@ -327,7 +327,8 @@ defmodule PB.Validate do
           violation(
             "required",
             Path.field_path(ctx.path, field),
-            ValidateSchema.field_required_rule_path()
+            ValidateSchema.field_required_rule_path(),
+            "value is required"
           )
         ]
 
@@ -881,7 +882,8 @@ defmodule PB.Validate do
 
   defp validate_oneof(ctx, oneof) do
     if get_in(oneof, [:validate, :required]) == true and not Map.has_key?(ctx.data, oneof.name) do
-      [violation("required", ctx.path |> Path.append_oneof(oneof) |> Path.field_path(), nil)]
+      path = ctx.path |> Path.append_oneof(oneof) |> Path.field_path()
+      [violation("required", path, nil, "exactly one field is required in oneof")]
     else
       []
     end
@@ -1015,7 +1017,7 @@ defmodule PB.Validate do
     |> Enum.map(fn {_index, oneof} -> oneof end)
   end
 
-  defp violation(rule_id, field_path, rule_path, message \\ nil) do
+  defp violation(rule_id, field_path, rule_path, message) do
     %Violation{
       rule_id: rule_id,
       field: field_path,

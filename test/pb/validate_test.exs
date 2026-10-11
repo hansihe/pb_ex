@@ -708,6 +708,7 @@ defmodule PB.ValidateTest do
              )
 
     assert violation.rule_id == "required"
+    assert violation.message == "value is required"
 
     assert violation.field.elements == [
              %{field_number: 1, field_name: "required_value", field_type: :TYPE_STRING}
@@ -737,6 +738,7 @@ defmodule PB.ValidateTest do
              )
 
     assert violation.rule_id == "required"
+    assert violation.message == "exactly one field is required in oneof"
     assert violation.field.elements == [%{field_name: "choice"}]
   end
 
