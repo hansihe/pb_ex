@@ -110,7 +110,7 @@ defmodule PB.CEL.ConformanceTest do
   end
 
   defp parse_case(case) do
-    case PB.CEL.parse(case.expr, disable_macros: case.disable_macros) do
+    case PB.CEL.parse(case.expr, macros: not case.disable_macros) do
       {:ok, parsed} when is_map(parsed.expr) and is_map(parsed.source_info) ->
         {:ok, parsed}
 
@@ -156,7 +156,7 @@ defmodule PB.CEL.ConformanceTest do
 
   defp safe_eval(checked, bindings, env) do
     program = PB.CEL.Program.new(checked, env)
-    PB.CEL.eval_program(program, bindings)
+    PB.CEL.Program.eval(program, bindings)
   rescue
     exception -> {:error, exception}
   end

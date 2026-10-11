@@ -698,14 +698,14 @@ defmodule PB.CEL.EvaluatorTest do
   test "compiled programs compile literal patterns once" do
     program = CEL.compile!(~S|value.matches('^a+$')|, env(vars: %{value: :string}))
     assert [%Regex{source: "^a+$"}] = Map.values(program.regexes)
-    assert CEL.eval_program!(program, %{"value" => "aaa"}) == Value.bool(true)
+    assert CEL.Program.eval!(program, %{"value" => "aaa"}) == Value.bool(true)
 
     # An invalid literal pattern is reported when evaluated.
     program = CEL.compile!(~S|value.matches('(')|, env(vars: %{value: :string}))
     assert program.regexes == %{}
 
     assert {:error, %Error{message: "invalid regex" <> _}} =
-             CEL.eval_program(program, %{"value" => "a"})
+             CEL.Program.eval(program, %{"value" => "a"})
   end
 
   test "error messages are strings, with the runtime reason in details" do
@@ -748,7 +748,7 @@ defmodule PB.CEL.EvaluatorTest do
   test "can evaluate a pre-compiled program" do
     program = CEL.compile!("x.startsWith('he')", env(vars: %{x: :string}))
 
-    assert CEL.eval_program!(program, %{x: "hello"}) == Value.bool(true)
+    assert CEL.Program.eval!(program, %{x: "hello"}) == Value.bool(true)
   end
 
   defp env(opts) do

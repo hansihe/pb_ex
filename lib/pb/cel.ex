@@ -92,32 +92,41 @@ defmodule PB.CEL do
   alias PB.CEL.Checker
   alias PB.CEL.Env
   alias PB.CEL.Error
-  alias PB.CEL.Evaluator
   alias PB.CEL.Program
   alias PB.CEL.Proto
   alias PB.CEL.Syntax.MacroExpander
   alias PB.CEL.Syntax.Parser
   alias PB.CEL.Unknown
   alias PB.CEL.Value
+  alias PB.Runtime.Errors, as: RuntimeErrors
+  alias PB.Runtime.Options
+
+  @parse_options [location: {:any, "<input>"}, macros: {:boolean, true}]
 
   @doc """
   Parses CEL source into a `cel.expr.ParsedExpr` map.
 
   ## Options
 
-    * `:location` - source location recorded in `SourceInfo.location`.
-    * `:macros` - expands standard CEL macros into comprehension/select
-      expressions when true. Defaults to `true`.
-    * `:disable_macros` - conformance-suite spelling for `macros: false`.
+    * `:location` - where the source came from, such as a file name. Parse
+      and check errors report it in `PB.CEL.Error`'s `:location`. Defaults to
+      `"<input>"`.
+    * `:macros` - whether to expand the standard macros (`has`, `all`,
+      `exists`, `exists_one`, `map`, `filter`, `cel.bind`, `optMap`,
+      `optFlatMap`). Defaults to `true`.
+
+  Raises `PB.OptionError` for an unknown option or an invalid value.
   """
   @spec parse(String.t(), keyword) :: {:ok, Proto.parsed_expr()} | {:error, Error.t()}
-  def parse(source, opts \\ []) when is_binary(source) and is_list(opts) do
-    with {:ok, parsed} <- Parser.parse(source, opts) do
-      if expand_macros?(opts) do
-        MacroExpander.expand(parsed)
-      else
-        {:ok, parsed}
+  def parse(source, opts \\ []) when is_binary(source) do
+    opts =
+      case Options.validate(opts, @parse_options) do
+        {:ok, opts} -> opts
+        {:error, reason} -> raise RuntimeErrors.to_error(reason)
       end
+
+    with {:ok, parsed} <- Parser.parse(source, location: opts.location) do
+      if opts.macros, do: MacroExpander.expand(parsed), else: {:ok, parsed}
     end
   end
 
@@ -125,7 +134,7 @@ defmodule PB.CEL do
   Parses CEL source into a `cel.expr.ParsedExpr` map, raising on errors.
   """
   @spec parse!(String.t(), keyword) :: Proto.parsed_expr()
-  def parse!(source, opts \\ []) when is_binary(source) and is_list(opts) do
+  def parse!(source, opts \\ []) when is_binary(source) do
     case parse(source, opts) do
       {:ok, parsed} -> parsed
       {:error, %Error{} = error} -> raise error
@@ -202,8 +211,8 @@ defmodule PB.CEL do
   Evaluates CEL source against `env` with the supplied variable bindings.
 
   This is the one-shot convenience that parses, checks, and evaluates `source`
-  in a single call. To pre-compile and reuse, build a `PB.CEL.Program`
-  with `compile/2` and evaluate it with `eval_program/2` or
+  in a single call. To compile once and evaluate many times, build a
+  `PB.CEL.Program` with `compile/2` and evaluate it with
   `PB.CEL.Program.eval/2`.
 
   The evaluator returns tagged `PB.CEL.Value` terms so CEL runtime
@@ -218,8 +227,8 @@ defmodule PB.CEL do
   def eval(source, values \\ %{}, env \\ Env.empty())
 
   def eval(source, values, %Env{} = env) when is_binary(source) do
-    with {:ok, checked} <- check(source, env) do
-      Evaluator.eval(checked, values, evaluator_opts(env))
+    with {:ok, program} <- compile(source, env) do
+      Program.eval(program, values)
     end
   end
 
@@ -230,42 +239,5 @@ defmodule PB.CEL do
   @spec eval!(String.t(), keyword | map, Env.t()) :: Value.t()
   def eval!(source, values \\ %{}, env \\ Env.empty()) do
     source |> eval(values, env) |> Program.unwrap!()
-  end
-
-  @doc """
-  Evaluates a pre-compiled `PB.CEL.Program` with the supplied variable
-  bindings. Delegates to `PB.CEL.Program.eval/2`.
-
-  The program already carries its environment; do not re-supply schema,
-  functions, or container at eval time.
-  """
-  @spec eval_program(Program.t(), keyword | map) ::
-          {:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}
-  def eval_program(%Program{} = program, values \\ %{}) do
-    Program.eval(program, values)
-  end
-
-  @doc """
-  Evaluates a pre-compiled `PB.CEL.Program`, raising on errors and unknown
-  results. Delegates
-  to `PB.CEL.Program.eval!/2`.
-  """
-  @spec eval_program!(Program.t(), keyword | map) :: Value.t()
-  def eval_program!(%Program{} = program, values \\ %{}) do
-    Program.eval!(program, values)
-  end
-
-  defp expand_macros?(opts) do
-    Keyword.get(opts, :macros, true) and not Keyword.get(opts, :disable_macros, false)
-  end
-
-  defp evaluator_opts(%Env{} = env) do
-    opts = [message_schema: env.message_schema, message_runtime: env.message_runtime]
-
-    if is_nil(env.schema) do
-      opts
-    else
-      Keyword.put(opts, :schema, env.schema)
-    end
   end
 end

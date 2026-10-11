@@ -24,10 +24,20 @@ defmodule PB.CEL.ProgramTest do
     assert value == Value.string("hello, alice")
   end
 
-  test "eval_program runs a pre-compiled program" do
+  test "Program.eval runs a compiled program" do
     env = Env.build(vars: %{"n" => :int})
     {:ok, program} = CEL.compile("n + 1", env)
-    assert CEL.eval_program!(program, %{"n" => 4}) == Value.int(5)
+    assert CEL.Program.eval!(program, %{"n" => 4}) == Value.int(5)
+  end
+
+  test "parse validates its options" do
+    assert {:ok, %{source_info: %{macro_calls: calls}}} = PB.CEL.parse("[1].all(x, x > 0)")
+    assert map_size(calls) == 1
+    assert {:ok, %{source_info: %{macro_calls: %{}}}} = PB.CEL.parse("f(x)", macros: false)
+
+    assert_raise PB.OptionError, ~r/unknown option/, fn ->
+      PB.CEL.parse("1", disable_macros: true)
+    end
   end
 
   test "Env.build/1 validates its options" do

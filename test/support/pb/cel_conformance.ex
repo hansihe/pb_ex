@@ -208,7 +208,7 @@ defmodule PB.TestSupport.CELConformance do
     end)
   end
 
-  def parse_opts(case), do: [disable_macros: case.disable_macros]
+  def parse_opts(case), do: [macros: not case.disable_macros]
 
   def check_env(case) do
     with {:ok, binding_vars} <- binding_vars(case.bindings),
@@ -484,7 +484,7 @@ defmodule PB.TestSupport.CELConformance do
 
   defp safe_eval(checked, bindings, env) do
     program = PB.CEL.Program.new(checked, env)
-    PB.CEL.eval_program(program, bindings)
+    PB.CEL.Program.eval(program, bindings)
   rescue
     exception -> {:error, exception}
   end
@@ -545,10 +545,7 @@ defmodule PB.TestSupport.CELConformance do
   end
 
   defp unsupported_calls(case) do
-    case PB.CEL.parse(case.expr,
-           disable_macros: case.disable_macros,
-           macros: not case.disable_macros
-         ) do
+    case PB.CEL.parse(case.expr, macros: not case.disable_macros) do
       {:ok, parsed} ->
         supported_calls = Library.supported_call_names()
         env = call_resolution_env(case)

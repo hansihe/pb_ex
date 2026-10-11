@@ -307,7 +307,7 @@ defmodule PB.CEL.CustomFunctionTest do
       for call <- CEL.Checked.references(checked).calls, do: call.expr_id
     program = CEL.Program.new(checked, env)
 
-    assert CEL.eval_program(program, %{x: 1}) == {:ok, Value.bool(true)}
+    assert CEL.Program.eval(program, %{x: 1}) == {:ok, Value.bool(true)}
 
     assert_received {:called, [int: 1],
                      %{function: "first", overload_id: "first_int", expr_id: ^first_call},

@@ -22,14 +22,14 @@ defmodule PB.CEL.UnknownSoundnessTest do
       {unknown_var, unknown_type} = Enum.random(@vars)
       bindings = concrete_bindings()
 
-      result = CEL.eval_program(program, Map.put(bindings, unknown_var, {:unknown, :reason}))
+      result = CEL.Program.eval(program, Map.put(bindings, unknown_var, {:unknown, :reason}))
 
       case result do
         {:ok, value} ->
           for _sample <- 1..@samples do
             concrete = Map.put(bindings, unknown_var, gen_value(unknown_type))
 
-            assert CEL.eval_program(program, concrete) == {:ok, value},
+            assert CEL.Program.eval(program, concrete) == {:ok, value},
                    "#{source} with #{unknown_var} unknown returned #{inspect(value)}, " <>
                      "but with #{inspect(concrete)}"
           end
