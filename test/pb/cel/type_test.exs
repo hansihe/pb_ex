@@ -37,6 +37,24 @@ defmodule PB.CEL.TypeTest do
     assert {:error, %CEL.Error{}} = CEL.eval("at", %{at: %{bogus: 1}}, env)
   end
 
+  test "enum types are told apart from messages" do
+    env =
+      CEL.Env.build(
+        schema: PB.TestSupport.TestSchema,
+        container: "cel.expr.conformance.proto3",
+        vars: [m: {:message, "cel.expr.conformance.proto3.TestAllTypes"}]
+      )
+
+    enum = "cel.expr.conformance.proto3.TestAllTypes.NestedEnum"
+    assert CEL.Checked.type(CEL.check!("m.standalone_enum", env)) == {:enum, enum}
+    global = "cel.expr.conformance.proto3.GlobalEnum"
+    assert CEL.Checked.type(CEL.check!("GlobalEnum", env)) == {:type, {:enum, global}}
+    assert CEL.Type.format({:enum, enum}) == enum
+
+    env = CEL.Env.build(schema: PB.TestSupport.TestSchema, vars: [e: {:enum, enum}])
+    assert CEL.Checked.type(CEL.check!("e", env)) == {:enum, enum}
+  end
+
   test "an id the checker did not type has no type" do
     checked = CEL.check!("[1].all(x, x > 0)")
     assert CEL.Checked.type(checked, 999_999) == nil

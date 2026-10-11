@@ -96,6 +96,7 @@ defmodule PB.CEL.Checker.Types do
   def from_input(:type), do: type()
   def from_input(:timestamp), do: timestamp()
   def from_input(:duration), do: duration()
+  def from_input({:enum, name}) when is_binary(name), do: message(name)
 
   def from_input({:wrapper, primitive} = type)
       when primitive in [:bool, :int, :uint, :double, :string, :bytes], do: type
@@ -385,6 +386,19 @@ defmodule PB.CEL.Checker.Types do
   def value_type({:optional, :none}), do: optional(dyn())
   def value_type({:optional, {:some, value}}), do: optional(value_type(value))
   def value_type({:type, _type}), do: type()
+
+  @doc """
+  The message names a type mentions.
+  """
+  @spec message_names(t) :: [String.t()]
+  def message_names({:message, name}), do: [name]
+  def message_names({:wrapper, _primitive}), do: []
+  def message_names({:abstract, _name, params}), do: Enum.flat_map(params, &message_names/1)
+
+  def message_names(type) when is_tuple(type),
+    do: type |> Tuple.delete_at(0) |> Tuple.to_list() |> Enum.flat_map(&message_names/1)
+
+  def message_names(_type), do: []
 
   @spec format(t) :: String.t()
   def format(:dyn), do: "dyn"

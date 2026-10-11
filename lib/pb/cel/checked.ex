@@ -1,22 +1,19 @@
 defmodule PB.CEL.Checked do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
-  # PB-native checked CEL representation.
-  #
-  # This is the primary checker output and the input expected by the evaluator.
-  # The standard `cel.expr.CheckedExpr` shape is derived with `to_proto/1` when we
-  # need to serialize or compare against CEL conformance fixtures.
-  #
-  # `types` holds checker-native semantic types (`Checker.Types`) and `ops`
-  # carries the execution plan that evaluator dispatch reads directly — field
-  # refs, message-literal field plans, WKT-unwrap context, MFA targets, etc. —
-  # so the evaluator does not need to re-derive decisions from AST shape plus
-  # schema lookups. Standard CEL `Reference` data is derived from `ops` only for
-  # `to_proto/1` and conformance comparison. Schema reflection stays outside
-  # this struct; ops store stable names/atoms and later phases receive the schema
-  # they need to query.
-  @moduledoc false
+  @moduledoc """
+  A type-checked CEL expression, from `PB.CEL.check/2`.
+
+  The struct is opaque. Inspect it with:
+
+    * `type/1` and `type/2` — the type of the expression, or of one
+      subexpression by id, as a `t:PB.CEL.Type.t/0`.
+    * `expr/1` — the expression as a tree of `PB.CEL.Expr` nodes.
+    * `references/1` — the variable paths it reads and the custom functions it
+      calls, with their arguments when they are constants or variable paths.
+    * `to_proto/1` — the standard `cel.expr.CheckedExpr` map, for exchange with
+      other CEL implementations.
+
+  Evaluate it by bundling it with its environment: `PB.CEL.Program.new/2`.
+  """
 
   alias PB.CEL.Call
   alias PB.CEL.Checked.References
@@ -32,7 +29,8 @@ defmodule PB.CEL.Checked do
     :root_type,
     expr_version: "cel1",
     types: %{},
-    ops: %{}
+    ops: %{},
+    enums: MapSet.new()
   ]
 
   @type expr_id :: non_neg_integer
@@ -178,7 +176,8 @@ defmodule PB.CEL.Checked do
           root_type: CType.t(),
           expr_version: String.t(),
           types: %{expr_id => CType.t()},
-          ops: %{expr_id => op}
+          ops: %{expr_id => op},
+          enums: MapSet.t(String.t())
         }
 
   @spec new(keyword) :: t
@@ -203,9 +202,9 @@ defmodule PB.CEL.Checked do
   not type it (such as a comprehension's variable name).
   """
   @spec type(t, expr_id) :: PB.CEL.Type.t() | nil
-  def type(%__MODULE__{types: types}, id) when is_integer(id) do
+  def type(%__MODULE__{types: types} = checked, id) when is_integer(id) do
     case Map.fetch(types, id) do
-      {:ok, type} -> type |> CType.finalize() |> PB.CEL.Type.from_checker()
+      {:ok, type} -> type |> CType.finalize() |> PB.CEL.Type.from_checker(checked.enums)
       :error -> nil
     end
   end

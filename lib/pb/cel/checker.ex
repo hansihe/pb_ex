@@ -43,12 +43,15 @@ defmodule PB.CEL.Checker do
 
     with {:ok, _type, state} <- infer(expr, state),
          :ok <- Literals.validate(state.ops, state.env.validate_literals) do
+      types = finalize_types(state)
+
       {:ok,
        Checked.new(
          expr: expr,
          source_info: source_info,
-         types: finalize_types(state),
-         ops: state.ops
+         types: types,
+         ops: state.ops,
+         enums: enum_names(types, state.env)
        )}
     else
       {:error, error} -> {:error, locate(error, source_info)}
@@ -1178,6 +1181,16 @@ defmodule PB.CEL.Checker do
 
   defp checker_call_types(nil, args), do: args
   defp checker_call_types(target, args), do: [target | args]
+
+  # The checker types enums as messages of the enum's name; record which
+  # names are enums so the public view can tell them apart.
+  defp enum_names(types, env) do
+    for {_id, type} <- types,
+        name <- CType.message_names(type),
+        env.message_schema.known_enum?(env.schema, name),
+        into: MapSet.new(),
+        do: name
+  end
 
   defp finalize_types(%State{} = state) do
     Map.new(state.types, fn {id, type} -> {id, Solver.finalize_native(state.solver, type)} end)

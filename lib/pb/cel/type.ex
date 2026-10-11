@@ -11,6 +11,7 @@ defmodule PB.CEL.Type do
     * `:null` and `:dyn`
     * `{:list, t}` and `{:map, key, value}`
     * `{:message, "pkg.Message"}` — a protobuf message, by full name
+    * `{:enum, "pkg.Enum"}` — a protobuf enum, by full name
     * `{:wrapper, primitive}` — a wrapper message such as
       `google.protobuf.Int64Value` (`{:wrapper, :int}`)
     * `{:optional, t}` — `optional_type(t)`
@@ -18,7 +19,6 @@ defmodule PB.CEL.Type do
       `{:type, :dyn}` when declaring
     * `{:abstract, name, params}` — any other parameterised type
 
-  An enum-typed expression has type `:int`, as in CEL.
   """
 
   alias PB.CEL.Checker.Types, as: CheckerTypes
@@ -36,6 +36,7 @@ defmodule PB.CEL.Type do
           | {:list, t}
           | {:map, t, t}
           | {:message, String.t()}
+          | {:enum, String.t()}
           | {:optional, t}
           | {:abstract, String.t(), [t]}
 
@@ -54,20 +55,27 @@ defmodule PB.CEL.Type do
   @spec format(t) :: String.t()
   def format(type), do: type |> CheckerTypes.from_input() |> CheckerTypes.format()
 
-  # The checker spells timestamp and duration as their messages and may leave
-  # an unresolved type variable, which is dyn to a reader.
+  # The checker spells timestamp, duration and enums (named in `enums`) as
+  # messages, and may leave an unresolved type variable, which is dyn to a
+  # reader.
   @doc false
-  @spec from_checker(CheckerTypes.t()) :: t
-  def from_checker(@timestamp), do: :timestamp
-  def from_checker(@duration), do: :duration
-  def from_checker({:var, _id}), do: :dyn
-  def from_checker({:type, type}), do: {:type, from_checker(type)}
-  def from_checker({:list, elem}), do: {:list, from_checker(elem)}
-  def from_checker({:map, key, value}), do: {:map, from_checker(key), from_checker(value)}
-  def from_checker({:optional, value}), do: {:optional, from_checker(value)}
+  @spec from_checker(CheckerTypes.t(), MapSet.t(String.t())) :: t
+  def from_checker(type, enums \\ MapSet.new())
+  def from_checker(@timestamp, _enums), do: :timestamp
+  def from_checker(@duration, _enums), do: :duration
+  def from_checker({:var, _id}, _enums), do: :dyn
+  def from_checker({:type, type}, enums), do: {:type, from_checker(type, enums)}
+  def from_checker({:list, elem}, enums), do: {:list, from_checker(elem, enums)}
+  def from_checker({:optional, value}, enums), do: {:optional, from_checker(value, enums)}
 
-  def from_checker({:abstract, name, params}),
-    do: {:abstract, name, Enum.map(params, &from_checker/1)}
+  def from_checker({:map, key, value}, enums),
+    do: {:map, from_checker(key, enums), from_checker(value, enums)}
 
-  def from_checker(type), do: type
+  def from_checker({:abstract, name, params}, enums),
+    do: {:abstract, name, Enum.map(params, &from_checker(&1, enums))}
+
+  def from_checker({:message, name} = type, enums),
+    do: if(MapSet.member?(enums, name), do: {:enum, name}, else: type)
+
+  def from_checker(type, _enums), do: type
 end
