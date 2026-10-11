@@ -1,23 +1,17 @@
 defmodule PB.CEL.Program do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
-  # Pre-compiled CEL expression bundled with its checking environment.
-  #
-  # A `Program` is produced by `PB.CEL.compile/2` and carries both the
-  # checked expression and the `PB.CEL.Env` it was checked against. Eval
-  # callers pass only the runtime variable bindings — schema, function
-  # registry, and container do not need to be re-passed at each call.
-  #
-  #     env =
-  #       PB.CEL.Env.build(
-  #         schema: schema,
-  #         vars: [name: :string]
-  #       )
-  #
-  #     {:ok, program} = PB.CEL.compile(~s|"hello, " + name|, env)
-  #     {:ok, value}   = PB.CEL.Program.eval(program, %{"name" => "world"})
-  @moduledoc false
+  @moduledoc """
+  A checked CEL expression together with the `PB.CEL.Env` it was checked
+  against, ready to evaluate any number of times.
+
+      env = PB.CEL.Env.build(vars: [name: :string])
+
+      {:ok, program} = PB.CEL.compile(~s|"hello, " + name|, env)
+      PB.CEL.Program.eval(program, %{name: "world"})
+      #=> {:ok, {:string, "hello, world"}}
+
+  Get one from `PB.CEL.compile/2`, or with `new/2` from a `PB.CEL.Checked` you
+  already have. Literal regular expressions are compiled once, here.
+  """
 
   alias PB.CEL.Checked
   alias PB.CEL.Env

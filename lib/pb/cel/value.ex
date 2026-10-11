@@ -1,12 +1,26 @@
 defmodule PB.CEL.Value do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
-  # Runtime CEL values.
-  #
-  # Values are tagged to preserve CEL distinctions that plain Elixir terms would
-  # erase, most importantly `int` versus `uint` and `string` versus `bytes`.
-  @moduledoc false
+  @moduledoc """
+  CEL values, as evaluation returns them and as variables can be bound.
+
+  Values are tagged so that CEL's distinctions survive, most importantly `int`
+  versus `uint` and `string` versus `bytes`:
+
+  | CEL | Value |
+  |-----|-------|
+  | `null` | `:null` |
+  | `bool`, `int`, `uint`, `double` | `{:bool, true}`, `{:int, -1}`, `{:uint, 1}`, `{:double, 1.5}` (`:nan`, `:infinity` and `:negative_infinity` for the special doubles) |
+  | `string`, `bytes` | `{:string, "a"}`, `{:bytes, <<1>>}` |
+  | `google.protobuf.Timestamp`, `Duration` | `{:timestamp, unix_nanoseconds}`, `{:duration, nanoseconds}` |
+  | `list`, `map` | `{:list, [value]}`, `{:map, %{value => value}}` |
+  | a protobuf message | `{:message, name, fields}` |
+  | an enum value | `{:enum, "pkg.Enum", number}`, equal to `{:int, number}` |
+  | `optional_type` | `{:optional, :none}`, `{:optional, {:some, value}}` |
+  | a type | `{:type, _}`; compare these, but do not rely on what is inside |
+
+  `to_native/1` turns a value into a plain Elixir term. The constructors
+  (`int/1`, `string/1`, ...) build values, for example in a custom function's
+  result.
+  """
 
   alias PB.CEL.Checker.Types, as: CType
   alias PB.CEL.Proto
@@ -35,7 +49,7 @@ defmodule PB.CEL.Value do
           | {:map, %{t => t}}
           | {:message, String.t() | atom(), %{(String.t() | atom()) => t}}
           | {:optional, :none | {:some, t}}
-          | {:type, ProtoType.t() | CType.t()}
+          | {:type, term}
 
   defguardp is_value(value)
             when value == :null or
@@ -106,6 +120,7 @@ defmodule PB.CEL.Value do
   @spec optional_some(t) :: t
   def optional_some(value), do: {:optional, {:some, value}}
 
+  @doc false
   @spec from_constant(map) :: t
   def from_constant(%{constant_kind: {:null_value, :NULL_VALUE}}), do: null()
   def from_constant(%{constant_kind: {:bool_value, value}}), do: bool(value)
@@ -115,9 +130,11 @@ defmodule PB.CEL.Value do
   def from_constant(%{constant_kind: {:string_value, value}}), do: string(value)
   def from_constant(%{constant_kind: {:bytes_value, value}}), do: bytes(value)
 
+  @doc false
   @spec from_expr_value(Proto.expr_value() | Proto.value()) :: {:ok, t} | {:error, term}
   def from_expr_value(expr_value), do: from_expr_value(expr_value, [])
 
+  @doc false
   @spec from_expr_value(Proto.expr_value() | Proto.value(), keyword) :: {:ok, t} | {:error, term}
   def from_expr_value(expr_value, opts) when is_list(opts) do
     message_schema = Keyword.get(opts, :message_schema, NoMessageSchema)
@@ -197,6 +214,7 @@ defmodule PB.CEL.Value do
   defp do_from_expr_value(%{kind: {kind, _value}}, _schema),
     do: {:error, {:unsupported_value_kind, kind}}
 
+  @doc false
   @spec from_expr_value!(Proto.expr_value() | Proto.value()) :: t
   @spec from_expr_value!(Proto.expr_value() | Proto.value(), keyword) :: t
   def from_expr_value!(expr_value, opts \\ []) do
@@ -247,6 +265,7 @@ defmodule PB.CEL.Value do
     end
   end
 
+  @doc false
   @spec to_expr_value(t) :: {:ok, Proto.expr_value()} | {:error, term}
   def to_expr_value(value) when is_value(value) do
     with {:ok, value} <- to_value(value) do
@@ -254,6 +273,7 @@ defmodule PB.CEL.Value do
     end
   end
 
+  @doc false
   @spec to_expr_value!(t) :: Proto.expr_value()
   def to_expr_value!(value) do
     case to_expr_value(value) do
@@ -262,6 +282,7 @@ defmodule PB.CEL.Value do
     end
   end
 
+  @doc false
   @spec coerce(term, PB.CEL.Type.t() | CType.t() | ProtoType.t()) ::
           {:ok, t} | {:error, String.t()}
   def coerce(value, type) when is_value(value) do
@@ -345,6 +366,7 @@ defmodule PB.CEL.Value do
     end
   end
 
+  @doc false
   @spec infer(term) :: {:ok, t} | {:error, String.t()}
   def infer(value) when is_value(value), do: {:ok, value}
   def infer(nil), do: {:ok, null()}
@@ -378,6 +400,7 @@ defmodule PB.CEL.Value do
 
   def infer(value), do: {:error, "cannot convert #{inspect(value)} to a CEL value"}
 
+  @doc false
   @spec type_of(t) :: CType.t()
   def type_of(value), do: CType.value_type(value)
 

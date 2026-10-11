@@ -1,4 +1,4 @@
-# Writing a custom CEL function
+# Custom CEL functions
 
 PB ships a [CEL](https://cel.dev) implementation used both by protovalidate's
 `cel` rules and as a standalone expression engine. This guide covers the common
@@ -6,22 +6,14 @@ task of **registering your own function** so it can be called from CEL source.
 
 CEL itself is a standard; this guide only covers the PB integration surface. For
 the language, see the [CEL specification](https://github.com/google/cel-spec).
-For evaluating expressions, see `PB.CEL`.
-
-> **Unstable surface.** The function-declaration structs shown below are a
-> low-level registration API that is still being reshaped, and are intentionally
-> not part of the published module reference yet. The shapes here are accurate
-> for the current version but may change before they are committed as stable
-> public API.
+For evaluating expressions, see [Evaluating CEL expressions](cel.md).
 
 ## Declare and register
 
-A function is declared as a Function struct (aliased below) with one or more
-overloads. Each overload carries a checker signature (argument and result types)
-plus an optional
-`:eval` MFA. The MFA must be a `{Module, function}` 2-tuple — closures and
-anonymous functions are rejected at registration so functions stay
-introspectable.
+A function is a `PB.CEL.Function` with one or more `PB.CEL.Function.Overload`s.
+Each overload carries its argument and result types plus an optional `:eval`
+target. The target must be a `{Module, function}` tuple; closures and
+anonymous functions are rejected, so environments stay introspectable.
 
 ```elixir
 alias PB.CEL.Function
@@ -48,6 +40,32 @@ env = PB.CEL.Env.build(functions: [function])
 {:ok, value} = PB.CEL.eval(~s|greet("world")|, %{}, env)
 # => {:ok, {:string, "Hello, world"}}
 ```
+
+## Call styles and generic signatures
+
+`:modes` says how expressions call the function: `:global` (`greet(x)`, the
+default), `:receiver` (`x.greet()`, with `x` as the first argument) or
+`{:namespace, "ns"}` (`ns.greet(x)`). Argument and result types are
+`PB.CEL.Type` shorthand; `{:param, "T"}` is a type parameter that must be the
+same type everywhere it appears:
+
+```elixir
+%Function{
+  name: "first",
+  modes: [:receiver],
+  overloads: [
+    %Overload{
+      id: "first_list",
+      args: [{:list, {:param, "T"}}],
+      result: {:param, "T"},
+      eval: {MyHandlers, :first}
+    }
+  ]
+}
+# [1, 2].first() + 1 type-checks as int
+```
+
+## Results
 
 Results come back as tagged `PB.CEL.Value` terms (so `int`/`uint` and
 `string`/`bytes` stay distinct). Call `PB.CEL.Value.to_native/1` when you just

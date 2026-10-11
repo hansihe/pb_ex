@@ -60,7 +60,9 @@ walkthrough.
   values, and map messages to native Elixir values with adapters.
 - **ProtoJSON** — `PB.JSON`.
 - **Text format** — `PB.TextFormat`.
-- **protovalidate** validation with a built-in CEL engine — `PB.Validate`.
+- **protovalidate** validation — `PB.Validate`.
+- **CEL** expressions over variables and protobuf messages, with custom
+  functions and unknown inputs — `PB.CEL`.
 - **Schema introspection** for messages, enums, services, and extensions —
   `PB.Schema`.
 
@@ -81,6 +83,8 @@ The full documentation is organised along the
 - [Adapters and well-known types](guides/how-to/adapters-and-well-known-types.md)
 - [Encoding and decoding JSON](guides/how-to/json.md)
 - [Validating with protovalidate](guides/how-to/validation.md)
+- [Evaluating CEL expressions](guides/how-to/cel.md)
+- [Custom CEL functions](guides/how-to/custom-cel-functions.md)
 - [Extensions and unknown fields](guides/how-to/extensions-and-unknown-fields.md)
 - [Introspecting a schema](guides/how-to/introspection.md)
 

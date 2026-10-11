@@ -1,7 +1,4 @@
 defmodule PB.CEL.Checked.References do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
   # Derives what a checked expression reads: variable field paths and function
   # calls with their constant arguments, built on the `PB.CEL.Expr` view. Use
   # it through `PB.CEL.Checked.references/1`.
@@ -26,17 +23,7 @@ defmodule PB.CEL.Checked.References do
   alias PB.CEL.Expr.MacroCall
   alias PB.CEL.Expr.Select
 
-  @type expr_id :: Checked.expr_id()
-  @type var_read :: %{name: String.t(), path: [String.t()], expr_id: expr_id}
-  @type arg :: {:const, PB.CEL.Value.t()} | {:var, String.t(), [String.t()]} | :dynamic
-  @type call :: %{
-          function: String.t(),
-          overload_id: String.t(),
-          expr_id: expr_id,
-          target: arg | nil,
-          args: [arg]
-        }
-  @type t :: %{vars: [var_read], calls: [call]}
+  @type t :: Checked.references()
 
   @spec collect(Checked.t()) :: t
   def collect(%Checked{} = checked) do

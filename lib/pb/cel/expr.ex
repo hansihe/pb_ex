@@ -1,38 +1,42 @@
 defmodule PB.CEL.Expr do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
-  # A read-only view of a checked CEL expression, in the spirit of cel-go's
-  # `common/ast`. Get one with `PB.CEL.Checked.expr/1`.
-  #
-  # The view is a tree of node structs, each with the expression `id` and its
-  # checked `type`:
-  #
-  #   * `Const` — a literal value.
-  #   * `Ident` — a name; `scope` is `:var` for a declared variable, `:local`
-  #     for a comprehension or `cel.bind` variable, `:type` for a type name and
-  #     `:enum` for an enum value.
-  #   * `Select` — `operand.field`; `test_only` for `has(...)`, `optional` for
-  #     `operand.?field`.
-  #   * `Call` — a function call, including operators (`_==_`, `_&&_`,
-  #     `_?_:_`, `@in`, ...), `cel.bind(var, init, body)` and
-  #     `target.optMap(var, body)`.
-  #   * `ListLiteral`, `MapLiteral` and `MessageLiteral`.
-  #   * `Comprehension` — the expansion of a macro such as `exists` or `map`.
-  #
-  # Types use the same shorthand as `PB.CEL.Env.build/1` variables (`:int`,
-  # `{:list, :string}`, `{:message, name}`, ...), plus `{:wrapper, primitive}`,
-  # `{:type, type}` and `{:abstract, name, params}`. A node the checker did not
-  # type, such as a bound variable name, has type `nil`.
-  #
-  # Match on the structs to inspect the tree, and use `reduce/3` or `filter/2`
-  # to search it:
-  #
-  #     checked |> PB.CEL.Checked.expr() |> PB.CEL.Expr.filter(&match?(%Call{function: "default"}, &1))
-  #
-  # The view is derived from the checked expression; evaluation does not read
-  # it, so it stays stable as the evaluator changes.
-  @moduledoc false
+  @moduledoc """
+  A read-only view of a checked CEL expression, in the spirit of cel-go's
+  `common/ast`. Get one with `PB.CEL.Checked.expr/1`.
+
+  The view is a tree of node structs, each with the expression `id` and its
+  checked `type` (a `t:PB.CEL.Type.t/0`, or `nil` for a node the checker did not
+  type):
+
+    * `Const` — a literal value, as a `t:PB.CEL.Value.t/0`.
+    * `Ident` — a name; `scope` is `:var` for a declared variable, `:local`
+      for a variable a macro binds, `:type` for a type name and `:enum` for an
+      enum value.
+    * `Select` — `operand.field`; `test_only` for `has(...)`, `optional` for
+      `operand.?field`.
+    * `Call` — a function call, including operators (`_==_`, `_&&_`,
+      `_?_:_`, `@in`, ...), with the `overload_id` the checker chose.
+    * `MacroCall` — a macro as written: `l.exists(x, p)`, `l.map(x, f)`,
+      `cel.bind(v, init, body)`, `o.optMap(v, f)`, .... `args` start with the
+      variables the macro binds, as `:local` `Ident`s. For a comprehension
+      macro, `expansion` holds the `Comprehension` it expands to; it is `nil`
+      for `cel.bind`, `optMap` and `optFlatMap`.
+    * `ListLiteral`, `MapLiteral` and `MessageLiteral`.
+    * `Comprehension` — a comprehension that was not written as a macro, which
+      only happens in a parsed expression from elsewhere.
+
+  Match on the structs to inspect the tree, and use `reduce/3`, `filter/2` or
+  `children/1` to walk it. They visit what the author wrote: a `MacroCall`'s
+  target and arguments, not its expansion.
+
+      alias PB.CEL.Expr.Call
+
+      checked
+      |> PB.CEL.Checked.expr()
+      |> PB.CEL.Expr.filter(&match?(%Call{function: "lookup"}, &1))
+
+  The view is derived from the checked expression; evaluation does not read
+  it, so it stays stable as the evaluator changes.
+  """
 
   alias PB.CEL.Checked
 
@@ -151,9 +155,7 @@ defmodule PB.CEL.Expr do
 
   @optional_selects [:optional_field, :optional_map_field, :optional_dyn_field]
 
-  @doc """
-  Builds the view of a checked expression.
-  """
+  @doc false
   @spec from_checked(Checked.t()) :: t
   def from_checked(%Checked{expr: expr} = checked), do: node(expr.id, checked)
 

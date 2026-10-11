@@ -1,13 +1,13 @@
 defmodule PB.CEL.Env do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
-  # Static CEL checker environment.
-  #
-  # The environment carries identifier declarations plus the function declarations
-  # active for checking. Built-in functions are registered from the standard CEL
-  # library; custom functions are appended to the same checker signature path.
-  @moduledoc false
+  @moduledoc """
+  What a CEL expression may use: its variables and their types, custom
+  functions, and the protobuf schema its messages and enums come from. The
+  standard CEL functions and macros are always available.
+
+  Build one with `build/1` and pass it to `PB.CEL.check/2`, `PB.CEL.compile/2`
+  or `PB.CEL.eval/3`. A `PB.CEL.Program` keeps the environment it was compiled
+  with, so evaluation does not take one.
+  """
 
   alias PB.CEL.Checker.Literals
   alias PB.CEL.Library
@@ -33,15 +33,8 @@ defmodule PB.CEL.Env do
             message_runtime: NoMessageRuntime,
             validate_literals: []
 
-  @type t :: %__MODULE__{
-          vars: %{String.t() => CType.t()},
-          functions: [Function.t()],
-          container: String.t(),
-          schema: term(),
-          message_schema: module(),
-          message_runtime: module(),
-          validate_literals: [PB.CEL.Checker.Literals.kind()]
-        }
+  @typedoc "An environment; build one with `build/1`."
+  @type t :: %__MODULE__{}
 
   @build_options [
     schema: {:any, nil},

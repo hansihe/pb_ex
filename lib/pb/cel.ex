@@ -1,105 +1,66 @@
 defmodule PB.CEL do
-  # Internal. Not part of the published API yet; may be exposed in a
-  # later release. Original module doc retained below as reference.
-  #
-  # Common Expression Language support for PB.
-  #
-  # CEL source text can be parsed into the standard `cel.expr.ParsedExpr`
-  # protobuf shape and checked into `PB.CEL.Checked`. Later phases consume
-  # this PB-native checked representation for runtime evaluation. Convert to
-  # standard `cel.expr.CheckedExpr` explicitly with
-  # `PB.CEL.Checked.to_proto/1` when needed.
-  #
-  # ## Environments
-  #
-  # Checker configuration — variable declarations, function registry, container,
-  # and schema — is carried in a `PB.CEL.Env` struct. Build one with
-  # `PB.CEL.Env.build/1` and pass it positionally to `check/2`, `compile/2`,
-  # and `eval/3`:
-  #
-  #     env =
-  #       PB.CEL.Env.build(
-  #         schema: schema,
-  #         container: "my.pkg",
-  #         vars: [name: :string, ids: {:list, :int}],
-  #         functions: [greet_fn]
-  #       )
-  #
-  #     # one-shot — `eval/3` takes source only and parses + checks + evaluates
-  #     {:ok, value} = PB.CEL.eval(source, %{"name" => "alice"}, env)
-  #
-  #     # pre-compile once, run many — `compile/2` returns a `Program` and
-  #     # `eval_program/2` evaluates it; `PB.CEL.Program.eval/2` works too
-  #     {:ok, program} = PB.CEL.compile(source, env)
-  #     {:ok, value}   = PB.CEL.eval_program(program, %{"name" => "alice"})
-  #
-  # A compiled `PB.CEL.Program` carries its env so re-passing schema or
-  # functions at eval time is not needed. `PB.CEL.Checked` values represent
-  # the check-phase output and are not direct inputs to evaluation: bundle one
-  # with its env into a `Program` (`PB.CEL.Program.new/2`) to evaluate it.
-  #
-  # ## Custom functions
-  #
-  # Custom functions are registered in the `PB.CEL.Env` passed to `check/2`,
-  # `compile/2`, and `eval/3`. Each function is declared with a function struct
-  # whose overloads carry checker signatures plus an optional executable `:eval`
-  # MFA — see the "Writing a custom CEL function" guide for the shape. The MFA
-  # must be a 2-tuple of
-  # `{Module, function_atom}`; closures and anonymous functions are rejected at
-  # registration time so registered functions remain introspectable.
-  # Registration validates only the MFA shape (`Mod` and `Fun` must be atoms); it
-  # does not check module/function existence, so a missing `Mod.Fun/arity` at
-  # dispatch time raises `:undef` to the caller.
-  #
-  # The eval target receives the list of evaluated `PB.CEL.Value` arguments.
-  # For receiver-mode calls the target value is prepended to that list. The
-  # target must return `{:ok, value} | {:unknown, reason} | {:error, reason}`.
-  # It is not called with error or unknown arguments unless the overload sets
-  # `strict: false`, in which case they arrive as `{:error, %PB.CEL.Error{}}`
-  # and `{:unknown, %PB.CEL.Unknown{}}`.
-  # An overload's `:eval_context` appends extra arguments; `:vars` passes the
-  # variable bindings given to eval, keyed by string name, and `:call` passes
-  # `%{function: name, overload_id: id, expr_id: id}` for the call being
-  # evaluated.
-  #
-  #     alias PB.CEL.Function
-  #     alias PB.CEL.Function.Overload
-  #
-  #     defmodule MyHandlers do
-  #       def greet([{:string, name}]), do: {:ok, {:string, "Hello, " <> name}}
-  #     end
-  #
-  #     function = %Function{
-  #       name: "greet",
-  #       overloads: [
-  #         %Overload{
-  #           id: "greet_string",
-  #           args: [:string],
-  #           result: :string,
-  #           eval: {MyHandlers, :greet}
-  #         }
-  #       ]
-  #     }
-  #
-  #     env = PB.CEL.Env.build(functions: [function])
-  #     {:ok, value} = PB.CEL.eval(~s|greet("world")|, %{}, env)
-  #
-  # Overloads without an `:eval` MFA are accepted as check-only declarations; an
-  # attempt to evaluate such a call raises an evaluator error.
-  @moduledoc false
+  @moduledoc """
+  Common Expression Language (CEL) for PB: parse, type-check and evaluate CEL
+  expressions against variables and protobuf messages.
+
+      env = PB.CEL.Env.build(vars: [age: :int, tags: {:list, :string}])
+
+      PB.CEL.eval("age >= 18 && 'vip' in tags", %{age: 30, tags: ["vip"]}, env)
+      #=> {:ok, {:bool, true}}
+
+  An expression goes through three steps, each also available on its own:
+
+    * `parse/2` turns source text into a `cel.expr.ParsedExpr` map.
+    * `check/2` type-checks it against a `PB.CEL.Env` (the variables, functions
+      and protobuf schema it may use) into a `PB.CEL.Checked`, which can be
+      inspected with `PB.CEL.Checked.expr/1` and
+      `PB.CEL.Checked.references/1`.
+    * `compile/2` bundles a checked expression with its environment into a
+      `PB.CEL.Program`, which `PB.CEL.Program.eval/2` evaluates as many times
+      as needed.
+
+  `eval/3` does all three for a one-off evaluation.
+
+  ## Values
+
+  Variables are bound by name (atom or string keys) to plain Elixir terms, which
+  are converted using the variable's declared type: integers, floats, strings,
+  booleans, lists and maps, `DateTime` for `:timestamp`, and PB's decoded maps
+  for messages. Results are `t:PB.CEL.Value.t/0` terms, tagged so that CEL's
+  distinctions survive: `{:int, 1}` and `{:uint, 1}`, `{:string, "a"}` and
+  `{:bytes, "a"}`. `PB.CEL.Value.to_native/1` turns one back into a plain term.
+
+  ## Results
+
+  Evaluation returns `{:ok, value}`, `{:error, %PB.CEL.Error{}}`, or
+  `{:unknown, %PB.CEL.Unknown{}}` when the result depends on a variable bound
+  to `{:unknown, reason}` or on a custom function that returned one; see
+  `PB.CEL.Unknown`. Parse and check errors are `PB.CEL.Error`s too, with the
+  offset of the problem in the source.
+
+  ## Custom functions
+
+  Register `PB.CEL.Function` structs with `PB.CEL.Env.build/1`'s `:functions`
+  option. See the "Custom CEL functions" guide.
+  """
 
   alias PB.CEL.Checked
   alias PB.CEL.Checker
   alias PB.CEL.Env
   alias PB.CEL.Error
   alias PB.CEL.Program
-  alias PB.CEL.Proto
   alias PB.CEL.Syntax.MacroExpander
   alias PB.CEL.Syntax.Parser
   alias PB.CEL.Unknown
   alias PB.CEL.Value
   alias PB.Runtime.Errors, as: RuntimeErrors
   alias PB.Runtime.Options
+
+  @typedoc """
+  A parsed expression: a `cel.expr.ParsedExpr` map with `:expr` and
+  `:source_info`, as `parse/2` returns.
+  """
+  @type parsed :: %{expr: map, source_info: map}
 
   @parse_options [location: {:any, "<input>"}, macros: {:boolean, true}]
 
@@ -117,7 +78,7 @@ defmodule PB.CEL do
 
   Raises `PB.OptionError` for an unknown option or an invalid value.
   """
-  @spec parse(String.t(), keyword) :: {:ok, Proto.parsed_expr()} | {:error, Error.t()}
+  @spec parse(String.t(), keyword) :: {:ok, parsed()} | {:error, Error.t()}
   def parse(source, opts \\ []) when is_binary(source) do
     opts =
       case Options.validate(opts, @parse_options) do
@@ -133,7 +94,7 @@ defmodule PB.CEL do
   @doc """
   Parses CEL source into a `cel.expr.ParsedExpr` map, raising on errors.
   """
-  @spec parse!(String.t(), keyword) :: Proto.parsed_expr()
+  @spec parse!(String.t(), keyword) :: parsed()
   def parse!(source, opts \\ []) when is_binary(source) do
     case parse(source, opts) do
       {:ok, parsed} -> parsed
@@ -149,11 +110,8 @@ defmodule PB.CEL do
   Passing a pre-parsed expression skips parser resource limits and assumes the
   AST came from `parse/2` or another trusted producer.
 
-  Variable declaration values may be checker-native types, generated
-  `cel.expr.Type` maps (see `PB.CEL.ProtoType`), or shorthand atoms/tuples such as
-  `:int`, `{:list, :string}`, or `{:map, :string, :dyn}`.
   """
-  @spec check(String.t() | Proto.parsed_expr(), Env.t()) ::
+  @spec check(String.t() | parsed(), Env.t()) ::
           {:ok, Checked.t()} | {:error, Error.t()}
   def check(source_or_parsed, env \\ Env.empty())
 
@@ -170,7 +128,7 @@ defmodule PB.CEL do
   @doc """
   Checks CEL source or a parsed expression, raising on parse or check errors.
   """
-  @spec check!(String.t() | Proto.parsed_expr(), Env.t()) :: Checked.t()
+  @spec check!(String.t() | parsed(), Env.t()) :: Checked.t()
   def check!(source_or_parsed, env \\ Env.empty()) do
     case check(source_or_parsed, env) do
       {:ok, checked} -> checked
@@ -185,7 +143,7 @@ defmodule PB.CEL do
   Programs carry their environment so eval callers do not have to re-pass
   schema or function declarations on every call. See `PB.CEL.Program`.
   """
-  @spec compile(String.t() | Proto.parsed_expr(), Env.t()) ::
+  @spec compile(String.t() | parsed(), Env.t()) ::
           {:ok, Program.t()} | {:error, Error.t()}
   def compile(source_or_parsed, env \\ Env.empty())
 
@@ -199,7 +157,7 @@ defmodule PB.CEL do
   Checks CEL source or a parsed expression and bundles it with `env`, raising
   on parse or check errors.
   """
-  @spec compile!(String.t() | Proto.parsed_expr(), Env.t()) :: Program.t()
+  @spec compile!(String.t() | parsed(), Env.t()) :: Program.t()
   def compile!(source_or_parsed, env \\ Env.empty()) do
     case compile(source_or_parsed, env) do
       {:ok, program} -> program
