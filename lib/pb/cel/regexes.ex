@@ -66,38 +66,30 @@ defmodule PB.CEL.Regexes do
   defp static_match_pattern(%{arg_ids: []}, _ops, _vars), do: :dynamic
 
   defp static_match_pattern(%{arg_ids: arg_ids}, ops, vars) do
-    case static_value(List.last(arg_ids), ops, vars, MapSet.new()) do
+    case static_value(List.last(arg_ids), ops, vars) do
       {:ok, value} when is_binary(value) -> {:ok, value}
       _other -> :dynamic
     end
   end
 
-  defp static_value(id, ops, vars, seen) when is_integer(id) do
-    if MapSet.member?(seen, id) do
-      :dynamic
-    else
-      seen = MapSet.put(seen, id)
+  defp static_value(id, ops, vars) do
+    case Map.get(ops, id) do
+      {:const, %{value: {:string, value}}} ->
+        {:ok, value}
 
-      case Map.get(ops, id) do
-        {:const, %{value: {:string, value}}} ->
-          {:ok, value}
+      {:ident, %{kind: :var, name: name}} ->
+        Map.fetch(vars, name)
 
-        {:ident, %{kind: :var, name: name}} ->
-          Map.fetch(vars, name)
+      {:select, %{receiver_id: receiver_id} = select} ->
+        case static_value(receiver_id, ops, vars) do
+          {:ok, receiver} -> static_select(receiver, select)
+          _dynamic -> :dynamic
+        end
 
-        {:select, %{receiver_id: receiver_id} = select} ->
-          case static_value(receiver_id, ops, vars, seen) do
-            {:ok, receiver} -> static_select(receiver, select)
-            _dynamic -> :dynamic
-          end
-
-        _other ->
-          :dynamic
-      end
+      _other ->
+        :dynamic
     end
   end
-
-  defp static_value(_id, _ops, _vars, _seen), do: :dynamic
 
   defp static_select(value, select) when is_map(value) and not is_struct(value) do
     select

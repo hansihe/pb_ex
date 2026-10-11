@@ -7,12 +7,6 @@ defmodule PB.CEL.Checker.Signatures.Matcher do
   alias PB.CEL.Function
   alias PB.CEL.Function.Overload
 
-  @type resolved :: %{
-          required(:type) => CType.t(),
-          required(:overload_id) => String.t(),
-          required(:eval) => Function.eval()
-        }
-
   @spec overload_applicable?(Overload.t(), [CType.t()], boolean, Solver.t()) :: boolean
   def overload_applicable?(%Overload{args: args}, types, true, solver) do
     match?({:ok, _args}, TypePattern.expand_args(args, types)) and
@@ -24,7 +18,7 @@ defmodule PB.CEL.Checker.Signatures.Matcher do
   end
 
   @spec match(Overload.t(), [CType.t()], Solver.t()) ::
-          {:ok, resolved, Solver.t()} | :unknown
+          {:ok, PB.CEL.Checker.Signatures.resolved(), Solver.t()} | :unknown
   def match(%Overload{} = overload, types, solver) do
     cond do
       fallback_on_dyn?(overload, types, solver) ->
@@ -547,11 +541,13 @@ defmodule PB.CEL.Checker.Signatures.Matcher do
   end
 
   defp common_params(constraints, solver) do
-    Enum.reduce_while(constraints, {:ok, %{}, solver}, fn {name, types}, {:ok, params, solver} ->
-      case Solver.common(solver, Enum.reverse(types)) do
-        {:ok, type, solver} -> {:cont, {:ok, Map.put(params, name, type), solver}}
-      end
-    end)
+    {params, solver} =
+      Enum.reduce(constraints, {%{}, solver}, fn {name, types}, {params, solver} ->
+        {type, solver} = Solver.common(solver, Enum.reverse(types))
+        {Map.put(params, name, type), solver}
+      end)
+
+    {:ok, params, solver}
   end
 
   defp instantiate({:param, name}, params, solver) do

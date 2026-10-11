@@ -273,7 +273,6 @@ defmodule PB.Runtime.Decoder.Scan do
       acc = Enum.reduce(unknowns, acc, &UnknownField.append(&2, &1))
       {:ok, acc, rest}
     else
-      {:error, %{__exception__: true} = error} -> {:error, error}
       {:error, reason} -> decode_error_at(reason, field_path)
     end
   end
@@ -305,7 +304,6 @@ defmodule PB.Runtime.Decoder.Scan do
           {:error, error}
       end
     else
-      {:error, %{__exception__: true} = error} -> {:error, error}
       {:error, reason} -> decode_error_at(reason, value_path)
     end
   end
@@ -329,14 +327,10 @@ defmodule PB.Runtime.Decoder.Scan do
         {:ok, value} ->
           {:ok, store_decoded_value(schema, acc, msg, field, value, storage), rest}
 
-        {:error, %{__exception__: true} = error} ->
-          {:error, error}
-
         {:error, reason} ->
           decode_error_at(reason, value_path)
       end
     else
-      {:error, %{__exception__: true} = error} -> {:error, error}
       {:error, reason} -> decode_error_at(reason, value_path)
     end
   end
@@ -351,14 +345,10 @@ defmodule PB.Runtime.Decoder.Scan do
           unknown = UnknownField.from_raw(field.number, wtype, raw_body)
           {:ok, UnknownField.append(acc, unknown), rest}
 
-        {:error, %{__exception__: true} = error} ->
-          {:error, error}
-
         {:error, reason} ->
           decode_error_at(reason, decode_value_path(acc, field, path, storage))
       end
     else
-      {:error, %{__exception__: true} = error} -> {:error, error}
       {:error, reason} -> decode_error_at(reason, decode_value_path(acc, field, path, storage))
     end
   end
@@ -557,7 +547,6 @@ defmodule PB.Runtime.Decoder.Scan do
                {:ok, fields, <<>>} <- fields(schema, ref, raw, depth + 1, opts, path) do
             {:ok, fields}
           else
-            {:error, %{__exception__: true} = error} -> {:error, error}
             {:error, reason} -> decode_error_at(reason, path)
           end
         end
@@ -591,15 +580,9 @@ defmodule PB.Runtime.Decoder.Scan do
             unknown = UnknownField.from_raw(field.number, 0, Wire.encode_varint(raw))
             decode_packed_values(field, rest, path, index + 1, values, [unknown | unknowns])
 
-          {:error, %{__exception__: true} = error} ->
-            {:error, error}
-
           {:error, reason} ->
             decode_error_at(reason, path ++ [{:index, index}])
         end
-
-      {:error, %{__exception__: true} = error} ->
-        {:error, error}
 
       {:error, reason} ->
         decode_error_at(reason, path ++ [{:index, index}])
@@ -616,10 +599,6 @@ defmodule PB.Runtime.Decoder.Scan do
   end
 
   defp decode_error_at(%{__exception__: true} = error, _path), do: {:error, error}
-
-  defp decode_error_at({:adapter_error, _fqn, _direction, _adapter_path, _reason} = reason, _path) do
-    {:error, Errors.to_error(reason, :decode)}
-  end
 
   defp decode_error_at(reason, path) do
     {:error, reason |> Errors.to_error(:decode) |> PB.Error.prepend_path(resolve_path(path))}

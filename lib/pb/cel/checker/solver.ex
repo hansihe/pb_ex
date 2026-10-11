@@ -28,16 +28,13 @@ defmodule PB.CEL.Checker.Solver do
   @spec finalize_native(t, Types.t()) :: Types.t()
   def finalize_native(%__MODULE__{} = solver, type), do: Types.finalize(type, solver.bindings)
 
-  @spec common(t, [Types.t()]) :: {:ok, Types.t(), t}
-  def common(%__MODULE__{} = solver, []), do: {:ok, Types.dyn(), solver}
+  @spec common(t, [Types.t()]) :: {Types.t(), t}
+  def common(%__MODULE__{} = solver, []), do: {Types.dyn(), solver}
 
   def common(%__MODULE__{} = solver, [type | rest]) do
-    {common, solver} =
-      Enum.reduce(rest, {type, solver}, fn next, {acc, solver} ->
-        common_pair(solver, acc, next)
-      end)
-
-    {:ok, common, solver}
+    Enum.reduce(rest, {type, solver}, fn next, {acc, solver} ->
+      common_pair(solver, acc, next)
+    end)
   end
 
   @spec assignable(t, Types.t(), Types.t()) :: {:ok, t} | :error

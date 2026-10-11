@@ -13,6 +13,7 @@ defmodule PB.JSON.Errors do
     * `:details` — a map of extra typed fields (`:expected`, `:got`, `:min`,
       `:max`, …) merged onto the struct.
   """
+  @spec raise!(atom, term) :: no_return
   @spec raise!(atom, term, keyword) :: no_return
   def raise!(kind, reason, opts \\ []) do
     raise build(kind, reason, opts)

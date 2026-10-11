@@ -123,10 +123,9 @@ defmodule PB.CEL.Checker do
           if MapSet.member?(optional_indices, index), do: CType.unwrap_optional(type), else: type
         end)
 
-      with {:ok, elem_type, state} <- common_or_fresh(elem_types, state) do
-        state = put_list_op(state, expr, list)
-        ok(expr, CType.list(elem_type), state)
-      end
+      {elem_type, state} = common_or_fresh(elem_types, state)
+      state = put_list_op(state, expr, list)
+      ok(expr, CType.list(elem_type), state)
     end
   end
 
@@ -142,15 +141,14 @@ defmodule PB.CEL.Checker do
           state = put_map_op(state, expr, entries)
           ok(expr, CType.map(key_type, value_type), state)
         else
-          with {:ok, key_type, state} <- common_types(key_types, state),
-               true <- Enum.all?(key_types, &CType.map_key?/1),
-               true <- CType.map_key?(key_type),
-               {:ok, value_type, state} <- common_types(value_types, state) do
+          {key_type, state} = common_types(key_types, state)
+          {value_type, state} = common_types(value_types, state)
+
+          if map_keys?(key_types, key_type) do
             state = put_map_op(state, expr, entries)
             ok(expr, CType.map(key_type, value_type), state)
           else
-            false -> error(expr, "map keys must be int, uint, bool, or string")
-            :error -> error(expr, "map entries have incompatible types")
+            error(expr, "map keys must be int, uint, bool, or string")
           end
         end
       else
@@ -521,14 +519,13 @@ defmodule PB.CEL.Checker do
         state = put_map_op(state, expr, Map.get(struct, :entries, []))
         ok(expr, CType.map(CType.dyn(), CType.dyn()), state)
       else
-        with {:ok, key_type, state} <- common_types(key_types, state),
-             true <- Enum.all?(key_types, &CType.map_key?/1),
-             true <- CType.map_key?(key_type) do
+        {key_type, state} = common_types(key_types, state)
+
+        if map_keys?(key_types, key_type) do
           state = put_map_op(state, expr, Map.get(struct, :entries, []))
           ok(expr, CType.map(key_type, CType.dyn()), state)
         else
-          false -> error(expr, "map keys must be int, uint, bool, or string")
-          :error -> error(expr, "map keys have incompatible types")
+          error(expr, "map keys must be int, uint, bool, or string")
         end
       end
     end
@@ -1009,12 +1006,6 @@ defmodule PB.CEL.Checker do
 
   defp put_local(%State{} = state, "", _type), do: state
 
-  defp put_local(%State{scopes: []} = state, name, type) do
-    state
-    |> push_scope()
-    |> put_local(name, type)
-  end
-
   defp put_local(%State{scopes: [scope | scopes]} = state, name, type) do
     %{state | scopes: [Map.put(scope, name, checker_type(type)) | scopes]}
   end
@@ -1022,16 +1013,16 @@ defmodule PB.CEL.Checker do
   defp put_second_iter_var(state, "", _type), do: state
   defp put_second_iter_var(state, name, type), do: put_local(state, name, type)
 
-  defp common_or_fresh([], state),
-    do: fresh_type(state) |> then(fn {type, state} -> {:ok, type, state} end)
-
+  defp common_or_fresh([], state), do: fresh_type(state)
   defp common_or_fresh(types, state), do: common_types(types, state)
 
   defp common_types(types, state) do
-    case Solver.common(state.solver, types) do
-      {:ok, type, solver} -> {:ok, type, %{state | solver: solver}}
-    end
+    {type, solver} = Solver.common(state.solver, types)
+    {type, %{state | solver: solver}}
   end
+
+  defp map_keys?(key_types, key_type),
+    do: Enum.all?(key_types, &CType.map_key?/1) and CType.map_key?(key_type)
 
   defp fresh_type(state) do
     {type, solver} = Solver.fresh(state.solver)

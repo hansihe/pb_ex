@@ -19,8 +19,8 @@ defmodule PB.CEL.Function do
   @type t :: %__MODULE__{
           name: String.t(),
           modes: [mode],
-          overloads: [Overload.t()],
-          dynamic_overloads: [Overload.t()]
+          overloads: [PB.CEL.Function.Overload.t()],
+          dynamic_overloads: [PB.CEL.Function.Overload.t()]
         }
 
   defmodule Overload do

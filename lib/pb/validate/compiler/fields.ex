@@ -231,8 +231,6 @@ defmodule PB.Validate.Compiler.Fields do
     end
   end
 
-  defp nested_field_rules(_rules, _name), do: :error
-
   defp normalize_field_rules({@field_rules_message, rules}) when is_map(rules), do: rules
   defp normalize_field_rules({_message_name, rules}) when is_map(rules), do: rules
   defp normalize_field_rules(rules) when is_map(rules), do: rules

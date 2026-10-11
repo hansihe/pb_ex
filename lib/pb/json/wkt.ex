@@ -664,6 +664,7 @@ defmodule PB.JSON.WKT do
     end
   end
 
+  @spec invalid_any_type_url!(binary) :: no_return
   defp invalid_any_type_url!(url) do
     Errors.raise!(
       :invalid_value,
@@ -701,6 +702,7 @@ defmodule PB.JSON.WKT do
   # surface. `label` is "Timestamp" or "Duration". Range failures are
   # `:value_out_of_range` (carrying the offending field's value + bounds);
   # everything else is `:invalid_value`.
+  @spec raise_time_error!(term, String.t(), term, term) :: no_return
   defp raise_time_error!({:non_integer, :seconds}, label, seconds, _nanos) do
     Errors.raise!(:invalid_value, "#{label} seconds must be an integer", details: %{got: seconds})
   end

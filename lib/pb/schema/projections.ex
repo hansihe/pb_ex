@@ -323,12 +323,6 @@ defmodule PB.Schema.Projections do
     end
   end
 
-  defp normalize_message_spec(fqn, spec) do
-    raise ArgumentError,
-          "expected PB projection for #{inspect(fqn)} to be a keyword list, got: " <>
-            inspect(spec)
-  end
-
   defp normalize_struct_module!(_fqn, module) when is_atom(module), do: module
 
   defp normalize_struct_module!(fqn, module) when is_binary(module) do

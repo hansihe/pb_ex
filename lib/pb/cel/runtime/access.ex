@@ -16,7 +16,8 @@ defmodule PB.CEL.Runtime.Access do
             | :presence_test,
           required(:field) => String.t(),
           required(:test_only) => boolean(),
-          optional(:field_ref) => Schema.field_ref()
+          optional(:field_ref) => Schema.field_ref(),
+          optional(atom) => term
         }
 
   @type result :: {:ok, Value.t()} | {:error, term}

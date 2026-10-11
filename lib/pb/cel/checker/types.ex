@@ -333,16 +333,11 @@ defmodule PB.CEL.Checker.Types do
       assignable_scalar?(expected, actual) or assignable_composite?(expected, actual)
   end
 
-  @spec common([t | Type.t()]) :: {:ok, t} | :error
-  def common([]), do: {:ok, dyn()}
+  @spec common([t | Type.t()]) :: t
+  def common([]), do: dyn()
 
   def common([type | rest]) do
-    type = from_input(type)
-
-    Enum.reduce_while(rest, {:ok, type}, fn next, {:ok, acc} ->
-      {:ok, type} = common_pair(acc, from_input(next))
-      {:cont, {:ok, type}}
-    end)
+    Enum.reduce(rest, from_input(type), &common_pair(&2, from_input(&1)))
   end
 
   @spec well_known_assignable?(t | Type.t(), t | Type.t()) :: boolean
@@ -374,23 +369,13 @@ defmodule PB.CEL.Checker.Types do
   def value_type({:enum, type, _value}), do: message(type)
   def value_type({:object, type_url, _value}), do: message(WellKnownTypes.type_url_name(type_url))
 
-  def value_type({:list, values}) do
-    values
-    |> Enum.map(&value_type/1)
-    |> common()
-    |> case do
-      {:ok, elem_type} -> list(elem_type)
-      :error -> list(dyn())
-    end
-  end
+  def value_type({:list, values}), do: list(values |> Enum.map(&value_type/1) |> common())
 
   def value_type({:map, values}) do
-    with {:ok, key_type} <- values |> Map.keys() |> Enum.map(&value_type/1) |> common(),
-         {:ok, value_type} <- values |> Map.values() |> Enum.map(&value_type/1) |> common() do
-      map(key_type, value_type)
-    else
-      :error -> map(dyn(), dyn())
-    end
+    map(
+      values |> Map.keys() |> Enum.map(&value_type/1) |> common(),
+      values |> Map.values() |> Enum.map(&value_type/1) |> common()
+    )
   end
 
   def value_type({:message, name, _fields}) when is_atom(name), do: message(Atom.to_string(name))
@@ -459,103 +444,52 @@ defmodule PB.CEL.Checker.Types do
     primitive_kind(expected) != nil and primitive_kind(expected) == primitive_kind(actual)
   end
 
-  defp common_pair(type, type), do: {:ok, type}
+  defp common_pair(type, type), do: type
 
   defp common_pair(left, right) do
     cond do
-      contains_var?(left) or contains_var?(right) ->
-        solver_common([left, right])
-
-      wrapper_primitive_pair?(left, right) ->
-        {:ok, wrapper(common_wrapper_primitive(left))}
-
-      dyn?(left) ->
-        {:ok, left}
-
-      dyn?(right) ->
-        {:ok, right}
-
-      null?(left) and nullable?(right) ->
-        {:ok, right}
-
-      null?(right) and nullable?(left) ->
-        {:ok, left}
-
-      true ->
-        case common_composite(left, right) do
-          {:ok, type} -> {:ok, type}
-          :error -> {:ok, dyn()}
-        end
+      contains_var?(left) or contains_var?(right) -> solver_common([left, right])
+      wrapper_primitive_pair?(left, right) -> wrapper(common_wrapper_primitive(left))
+      dyn?(left) -> left
+      dyn?(right) -> right
+      null?(left) and nullable?(right) -> right
+      null?(right) and nullable?(left) -> left
+      true -> common_composite(left, right)
     end
   end
 
-  defp common_composite({:list, left}, {:list, right}) do
-    with {:ok, elem_type} <- common_flexible_param(left, right) do
-      {:ok, list(elem_type)}
-    end
+  defp common_composite({:list, left}, {:list, right}),
+    do: list(common_flexible_param(left, right))
+
+  defp common_composite({:map, left_key, left_value}, {:map, right_key, right_value}) do
+    map(common_flexible_param(left_key, right_key), common_flexible_param(left_value, right_value))
   end
 
-  defp common_composite(
-         {:map, left_key, left_value},
-         {:map, right_key, right_value}
-       ) do
-    with {:ok, key_type} <- common_flexible_param(left_key, right_key),
-         {:ok, value_type} <- common_flexible_param(left_value, right_value) do
-      {:ok, map(key_type, value_type)}
-    end
-  end
+  defp common_composite({:optional, left}, {:optional, right}),
+    do: optional(common_abstract_param(left, right))
 
-  defp common_composite({:optional, left}, {:optional, right}) do
-    with {:ok, value_type} <- common_abstract_param(left, right) do
-      {:ok, optional(value_type)}
-    end
-  end
+  defp common_composite({:abstract, name, left_params}, {:abstract, name, right_params})
+       when length(left_params) == length(right_params),
+       do: {:abstract, name, Enum.zip_with(left_params, right_params, &common_abstract_param/2)}
 
-  defp common_composite(
-         {:abstract, name, left_params},
-         {:abstract, name, right_params}
-       ) do
-    with true <- length(left_params) == length(right_params),
-         {:ok, params} <- common_param_lists(left_params, right_params) do
-      {:ok, {:abstract, name, params}}
-    else
-      _other -> :error
-    end
-  end
-
-  defp common_composite(_left, _right), do: :error
-
-  defp common_param_lists(left_params, right_params) do
-    left_params
-    |> Enum.zip(right_params)
-    |> Enum.reduce_while({:ok, []}, fn {left, right}, {:ok, acc} ->
-      case common_abstract_param(left, right) do
-        {:ok, type} -> {:cont, {:ok, [type | acc]}}
-        :error -> {:halt, :error}
-      end
-    end)
-    |> case do
-      {:ok, params} -> {:ok, Enum.reverse(params)}
-      :error -> :error
-    end
-  end
+  defp common_composite(_left, _right), do: dyn()
 
   defp common_flexible_param(left, right) do
     cond do
-      dyn?(left) -> {:ok, right}
-      dyn?(right) -> {:ok, left}
-      null?(left) -> {:ok, right}
-      null?(right) -> {:ok, left}
+      dyn?(left) -> right
+      dyn?(right) -> left
+      null?(left) -> right
+      null?(right) -> left
       true -> common_pair(left, right)
     end
   end
 
   defp common_abstract_param(left, right) do
     cond do
-      dyn?(left) -> {:ok, left}
-      dyn?(right) -> {:ok, right}
-      null?(left) -> {:ok, right}
-      null?(right) -> {:ok, left}
+      dyn?(left) -> left
+      dyn?(right) -> right
+      null?(left) -> right
+      null?(right) -> left
       true -> common_pair(left, right)
     end
   end
@@ -570,9 +504,8 @@ defmodule PB.CEL.Checker.Types do
   end
 
   defp solver_common(types) do
-    case PB.CEL.Checker.Solver.common(PB.CEL.Checker.Solver.new(), types) do
-      {:ok, type, _solver} -> {:ok, type}
-    end
+    {type, _solver} = PB.CEL.Checker.Solver.common(PB.CEL.Checker.Solver.new(), types)
+    type
   end
 
   defp contains_var?({:var, _id}), do: true

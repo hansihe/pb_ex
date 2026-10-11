@@ -109,6 +109,9 @@ fetched with `scripts/fetch_cel_conformance.sh`.
 Current results and intentional deviations are documented in
 [Conformance status](guides/reference/conformance.md).
 
+`mix dialyzer` should report no warnings; it catches broken typespecs that
+would otherwise only show up in a consumer's Dialyzer run.
+
 ## License
 
 MIT
