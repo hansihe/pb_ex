@@ -303,6 +303,21 @@ defmodule PB.SchemaTest do
     assert mod.schema() == PB.compile(Fixtures.descriptor_set())
   end
 
+  test "returns the same schema term on every call, also when it holds regexes" do
+    mod = unique_module("WithRegexes")
+
+    [{^mod, _bin}] =
+      Code.compile_quoted(
+        quote do
+          defmodule unquote(mod) do
+            use PB.Schema, descriptor: "test/fixtures/schema/validate_predefined.binpb"
+          end
+        end
+      )
+
+    assert :erts_debug.same(mod.schema(), mod.schema())
+  end
+
   test "descriptor file path may come from a module attribute" do
     path = write_descriptor_file!()
     mod = unique_module("FromModuleAttribute")

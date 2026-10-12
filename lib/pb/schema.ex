@@ -86,6 +86,9 @@ defmodule PB.Schema do
   The top-level `PB`, `PB.Validate`, `PB.JSON`, and `PB.TextFormat` entry
   points accept the schema module directly in place of a compiled schema map.
 
+  The schema is built once when the module is loaded and kept in
+  `:persistent_term`, so a schema module cannot declare its own `@on_load`.
+
   ## Introspection
 
   This module also exposes lookup helpers that return public `PB.Schema.Info`
@@ -121,9 +124,18 @@ defmodule PB.Schema do
 
       @schema unquote(schema_ast)
 
+      # A schema holding compiled regexes can't be a BEAM literal, so `@schema`
+      # compiles to code that rebuilds it. Build it once, when the module is
+      # loaded, and share it through `:persistent_term`.
+      @on_load :__pb_schema_load__
+
+      defp __pb_schema_load__ do
+        :persistent_term.put({PB.Schema, __MODULE__}, @schema)
+      end
+
       @impl PB.Schema
       @spec __pb_schema__() :: PB.schema()
-      def __pb_schema__, do: @schema
+      def __pb_schema__, do: :persistent_term.get({PB.Schema, __MODULE__})
 
       @doc "Returns the compiled PB schema embedded in this module."
       @spec schema() :: PB.schema()
