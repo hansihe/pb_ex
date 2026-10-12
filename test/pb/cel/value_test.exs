@@ -1,6 +1,8 @@
 defmodule PB.CEL.ValueTest do
   use ExUnit.Case, async: true
 
+  doctest PB.CEL.Value
+
   alias PB.CEL.ProtoType
   alias PB.CEL.Value
   alias PB.Validate.CEL.MessageRuntime
@@ -181,7 +183,63 @@ defmodule PB.CEL.ValueTest do
       assert Value.to_native(Value.object("type.googleapis.com/x", <<>>)) ==
                {:object, "type.googleapis.com/x", <<>>}
 
-      assert Value.to_native({:type, ProtoType.null()}) == {:type, ProtoType.null()}
+    end
+
+    test "turns a type value into its name" do
+      assert Value.to_native({:type, ProtoType.null()}) == "null_type"
+      assert Value.to_native(PB.CEL.eval!("[type(1), type(optional.of(1))]")) ==
+               ["int", "optional_type"]
+    end
+  end
+
+  describe "type_name/1" do
+    test "gives CEL's runtime type names, without parameters" do
+      for {source, name} <- [
+            {"type(1)", "int"},
+            {"type(1u)", "uint"},
+            {"type(1.5)", "double"},
+            {"type(true)", "bool"},
+            {"type('a')", "string"},
+            {"type(b'a')", "bytes"},
+            {"type(null)", "null_type"},
+            {"type([1])", "list"},
+            {"type({'a': 1})", "map"},
+            {"type(int)", "type"},
+            {"type(optional.of(1))", "optional_type"},
+            {"type(timestamp(0))", "google.protobuf.Timestamp"},
+            {"type(duration('1s'))", "google.protobuf.Duration"}
+          ] do
+        assert source |> PB.CEL.eval!() |> Value.type_name() == name, source
+      end
+    end
+
+    test "gives a message's or enum's full name" do
+      env =
+        PB.CEL.Env.build(
+          schema: PB.TestSupport.TestSchema,
+          container: "cel.expr.conformance.proto3"
+        )
+
+      for {source, name} <- [
+            {"type(TestAllTypes{})", "cel.expr.conformance.proto3.TestAllTypes"},
+            {"type(GlobalEnum.GAZ)", "cel.expr.conformance.proto3.GlobalEnum"}
+          ] do
+        assert source |> PB.CEL.eval!(%{}, env) |> Value.type_name() == name
+      end
+    end
+
+    test "type values are equal when their names are, as in cel-go" do
+      for source <- [
+            "type(optional.of(1)) == optional_type",
+            "type(optional.none()) == optional_type",
+            "type([1]) == list",
+            "type({1: 'a'}) == map",
+            "[type(optional.of('a'))].exists(t, t == optional_type)"
+          ] do
+        assert PB.CEL.eval!(source) == {:bool, true}, source
+      end
+
+      assert PB.CEL.eval!("type(1) == type(1u)") == {:bool, false}
     end
   end
 end

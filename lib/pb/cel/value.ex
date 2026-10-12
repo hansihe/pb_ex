@@ -15,7 +15,7 @@ defmodule PB.CEL.Value do
   | a protobuf message | `{:message, name, fields}` |
   | an enum value | `{:enum, "pkg.Enum", number}`, equal to `{:int, number}` |
   | `optional_type` | `{:optional, :none}`, `{:optional, {:some, value}}` |
-  | a type | `{:type, _}`; compare these, but do not rely on what is inside |
+  | a type | `{:type, _}`; `type_name/1` gives its name, such as `"int"` |
 
   `to_native/1` turns a value into a plain Elixir term. The constructors
   (`int/1`, `string/1`, ...) build values, for example in a custom function's
@@ -405,6 +405,22 @@ defmodule PB.CEL.Value do
   def type_of(value), do: CType.value_type(value)
 
   @doc """
+  The name of a type value, such as `type(x)` returns: `"int"`, `"string"`,
+  `"null_type"`, `"list"`, `"map"`, `"type"`, `"optional_type"`,
+  `"google.protobuf.Timestamp"`, or a message's or enum's full name.
+
+  These are CEL's runtime type names, as in cel-go and cel-cpp: they have no
+  parameters, so the type of `[1]` is `"list"`. Type values are equal when
+  their names are.
+
+      iex> {:ok, type} = PB.CEL.eval("type([1])")
+      iex> PB.CEL.Value.type_name(type)
+      "list"
+  """
+  @spec type_name(t) :: String.t()
+  def type_name({:type, type}), do: type_value_name(type)
+
+  @doc """
   Converts a CEL value into a plain Elixir term, discarding the type tags.
 
   CEL entry points (`PB.CEL.Program.eval/2`, `eval/3`) return tagged values of
@@ -418,14 +434,15 @@ defmodule PB.CEL.Value do
     * `int` and `uint` both become a plain `t:integer/0`.
     * `string` and `bytes` both become a plain `t:binary/0`.
     * an `enum` becomes its integer value.
+    * a `type` becomes its name, as `type_name/1` gives it.
     * `null` and an empty `optional` both become `nil`.
     * a non-finite `double` stays the atom `:nan`/`:infinity`/`:negative_infinity`,
       since Elixir floats cannot represent those.
 
   Values that have no native Elixir form pass through unchanged in their
   `t:t/0` shape: `timestamp`/`duration` (already the native well-known-type
-  representation — see `PB.WellKnownTypes`), an un-decoded `object` (an `Any`
-  that was not resolved against a schema), and a `type` value.
+  representation — see `PB.WellKnownTypes`) and an un-decoded `object` (an
+  `Any` that was not resolved against a schema).
 
   ## Examples
 
@@ -460,7 +477,7 @@ defmodule PB.CEL.Value do
   def to_native({:timestamp, _ns} = value), do: value
   def to_native({:duration, _ns} = value), do: value
   def to_native({:object, _type_url, _value} = value), do: value
-  def to_native({:type, _type} = value), do: value
+  def to_native({:type, _type} = value), do: type_name(value)
 
   defp coerce_list(values, elem_type) do
     with {:ok, values} <- map_while_ok(values, &coerce(&1, elem_type)) do
@@ -551,7 +568,7 @@ defmodule PB.CEL.Value do
     end
   end
 
-  defp to_value({:type, type}), do: {:ok, %{kind: {:type_value, type_value_name(type)}}}
+  defp to_value({:type, _type} = value), do: {:ok, %{kind: {:type_value, type_name(value)}}}
   defp to_value({:message, _name, _fields}), do: {:error, :message_value_encoding_not_supported}
   defp to_value({:optional, _optional}), do: {:error, :optional_value_encoding_not_supported}
 
@@ -561,7 +578,11 @@ defmodule PB.CEL.Value do
   defp type_value_name(%{type_kind: {:primitive, _primitive}} = type),
     do: type |> CType.from_cel() |> CType.format()
 
+  defp type_value_name(%{type_kind: {:wrapper, primitive}}),
+    do: type_value_name(%{type_kind: {:primitive, primitive}})
+
   defp type_value_name(%{type_kind: {:type, _type}}), do: "type"
+  defp type_value_name(%{type_kind: {:abstract_type, %{name: name}}}), do: name
   defp type_value_name(%{type_kind: {:list_type, _list}}), do: "list"
   defp type_value_name(%{type_kind: {:map_type, _map}}), do: "map"
   defp type_value_name(%{type_kind: {:message_type, name}}), do: name
@@ -571,5 +592,7 @@ defmodule PB.CEL.Value do
   defp type_value_name({:list, _elem_type}), do: "list"
   defp type_value_name({:map, _key_type, _value_type}), do: "map"
   defp type_value_name({:message, name}), do: name
+  defp type_value_name({:optional, _value_type}), do: "optional_type"
+  defp type_value_name({:abstract, name, _params}), do: name
   defp type_value_name(type), do: type |> CType.from_input() |> CType.format()
 end

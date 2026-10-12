@@ -377,6 +377,11 @@ defmodule PB.CEL.Runtime.Core do
     end
   end
 
+  # Type values are equal when their names are, as in cel-go: the type of
+  # `optional.of(1)` is `optional_type`.
+  defp equal_non_numeric?({:type, _left} = left, {:type, _right} = right, _schema, _mr),
+    do: Value.type_name(left) == Value.type_name(right)
+
   defp equal_non_numeric?(left, right, _schema, _message_runtime), do: left == right
 
   defp message_equal?(nil, _schema, _left, _right), do: :not_applicable
