@@ -71,7 +71,8 @@ defmodule PB.Schema.Compiled do
           required(:by_name) => %{optional(atom()) => integer()},
           required(:by_number) => %{optional(integer()) => atom()},
           required(:default) => atom() | integer(),
-          required(:features) => map()
+          required(:features) => map(),
+          optional(:package) => atom() | nil
         }
 
   @typedoc "Compiled protobuf oneof metadata."
@@ -133,6 +134,7 @@ defmodule PB.Schema.Compiled do
           required(:edition) => atom() | nil,
           required(:source) => map(),
           required(:features) => map(),
+          optional(:package) => atom() | nil,
           optional(:reserved_names) => [binary()],
           optional(:reserved_ranges) => [extension_range()],
           optional(:projection) => PB.Schema.Projection.t(),
@@ -149,6 +151,7 @@ defmodule PB.Schema.Compiled do
 
   @typedoc "Compiled protobuf service metadata."
   @type service :: %{
-          required(:methods) => %{optional(atom()) => service_method()}
+          required(:methods) => %{optional(atom()) => service_method()},
+          optional(:package) => atom() | nil
         }
 end

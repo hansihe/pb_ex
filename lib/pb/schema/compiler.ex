@@ -81,8 +81,8 @@ defmodule PB.Schema.Compiler do
       features = Features.file_context(syntax, edition, file[:options])
       source = Features.source(syntax, edition)
 
-      acc = compile_messages(file[:message_type] || [], package, source, features, acc)
-      acc = compile_enums(file[:enum_type] || [], package, features, acc)
+      acc = compile_messages(file[:message_type] || [], package, package, source, features, acc)
+      acc = compile_enums(file[:enum_type] || [], package, package, features, acc)
       acc = compile_extensions(file[:extension] || [], package, source, features, acc)
       compile_services(file[:service] || [], package, acc)
     end)
@@ -90,18 +90,21 @@ defmodule PB.Schema.Compiler do
     |> resolve_map_fields()
   end
 
-  defp compile_messages(messages, parent, source, features, acc) do
+  defp compile_messages(messages, package, parent, source, features, acc) do
     Enum.reduce(messages, acc, fn msg, acc ->
       fqn = make_fqn(parent, to_atom(msg[:name]))
       message_features = Features.message_context(features, msg[:options])
-      acc = compile_one_message(msg, fqn, source, message_features, acc)
-      acc = compile_messages(msg[:nested_type] || [], fqn, source, message_features, acc)
-      acc = compile_enums(msg[:enum_type] || [], fqn, message_features, acc)
+      acc = compile_one_message(msg, fqn, package, source, message_features, acc)
+
+      acc =
+        compile_messages(msg[:nested_type] || [], package, fqn, source, message_features, acc)
+
+      acc = compile_enums(msg[:enum_type] || [], package, fqn, message_features, acc)
       compile_extensions(msg[:extension] || [], fqn, source, message_features, acc)
     end)
   end
 
-  defp compile_one_message(msg, fqn, source, features, acc) do
+  defp compile_one_message(msg, fqn, package, source, features, acc) do
     fields = msg[:field] || []
     oneofs = compile_oneofs(msg[:oneof_decl] || [], fields)
     map_entry = get_in(msg, [:options, :map_entry]) == true
@@ -113,6 +116,7 @@ defmodule PB.Schema.Compiler do
     message_info =
       %{
         kind: :message,
+        package: package,
         fields_by_name: by_name,
         oneofs: oneofs,
         map_entry: map_entry,
@@ -150,7 +154,7 @@ defmodule PB.Schema.Compiler do
     |> Map.new()
   end
 
-  defp compile_enums(enums, parent, features, acc) do
+  defp compile_enums(enums, package, parent, features, acc) do
     Enum.reduce(enums, acc, fn e, acc ->
       fqn = make_fqn(parent, to_atom(e[:name]))
       vals = e[:value] || []
@@ -160,6 +164,7 @@ defmodule PB.Schema.Compiler do
       enum_features = Features.enum_features(features, e[:options])
 
       put_in(acc, [:enums, fqn], %{
+        package: package,
         by_name: by_name,
         by_number: by_number,
         default: enum_default(vals),
@@ -188,7 +193,7 @@ defmodule PB.Schema.Compiler do
            }}
         end)
 
-      put_in(acc, [:services, fqn], %{methods: methods})
+      put_in(acc, [:services, fqn], %{package: package, methods: methods})
     end)
   end
 

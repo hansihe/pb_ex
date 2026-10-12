@@ -184,6 +184,41 @@ defmodule PB.SchemaInfoTest do
     end
   end
 
+  describe "package" do
+    test "is the declaring file's package, also for nested types" do
+      schema =
+        PB.compile(%{
+          file: [
+            %{
+              name: "a/b/outer.proto",
+              package: :"a.b",
+              syntax: :proto3,
+              message_type: [
+                %{
+                  name: :Outer,
+                  nested_type: [%{name: :Inner}],
+                  enum_type: [%{name: :Kind, value: [%{name: :KIND_UNSPECIFIED, number: 0}]}]
+                }
+              ],
+              service: [
+                %{
+                  name: :Lookup,
+                  method: [%{name: :Get, input_type: ".a.b.Outer", output_type: ".a.b.Outer"}]
+                }
+              ]
+            },
+            %{name: "bare.proto", syntax: :proto3, message_type: [%{name: :Bare}]}
+          ]
+        })
+
+      assert Schema.message!(schema, :"a.b.Outer").package == :"a.b"
+      assert Schema.message!(schema, :"a.b.Outer.Inner").package == :"a.b"
+      assert Schema.enum!(schema, :"a.b.Outer.Kind").package == :"a.b"
+      assert Schema.service!(schema, :"a.b.Lookup").package == :"a.b"
+      assert Schema.message!(schema, :Bare).package == nil
+    end
+  end
+
   describe "fetch_service/2 + service!/2" do
     test "returns method info" do
       %{schema: schema} = Fixtures.grpc_schema_fixture()

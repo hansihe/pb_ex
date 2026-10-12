@@ -77,6 +77,7 @@ defmodule PB.Schema.Info.Message do
   @enforce_keys [:name, :fields, :oneofs, :map_entry?, :syntax]
   defstruct [
     :name,
+    :package,
     :fields,
     :oneofs,
     :map_entry?,
@@ -89,6 +90,7 @@ defmodule PB.Schema.Info.Message do
 
   @type t :: %__MODULE__{
           name: PB.message_name(),
+          package: atom() | nil,
           fields: [PB.Schema.Info.Field.t()],
           oneofs: [PB.Schema.Info.Oneof.t()],
           map_entry?: boolean(),
@@ -113,10 +115,11 @@ defmodule PB.Schema.Info.Enum do
   @moduledoc "Public projection of a compiled protobuf enum."
 
   @enforce_keys [:name, :values]
-  defstruct [:name, :values]
+  defstruct [:name, :package, :values]
 
   @type t :: %__MODULE__{
           name: PB.enum_name(),
+          package: atom() | nil,
           values: [PB.Schema.Info.EnumValue.t()]
         }
 end
@@ -140,10 +143,11 @@ defmodule PB.Schema.Info.Service do
   @moduledoc "Public projection of a compiled protobuf service."
 
   @enforce_keys [:name, :methods]
-  defstruct [:name, :methods]
+  defstruct [:name, :package, :methods]
 
   @type t :: %__MODULE__{
           name: PB.service_name(),
+          package: atom() | nil,
           methods: [PB.Schema.Info.Method.t()]
         }
 end
@@ -157,6 +161,13 @@ defmodule PB.Schema.Info do
   compiled schema. Callers should branch off the public structs rather than
   reading `schema.messages` directly: the internal compiled representation may
   grow new fields or change shape as the runtime evolves.
+
+  ## Packages
+
+  `package` on `Message`, `Enum` and `Service` is the proto package of the
+  file declaring the type, or `nil` for a file without one. Nested types share
+  their file's package, so `a.b.Outer.Inner` declared in package `a.b` has
+  `package: :"a.b"`.
 
   ## Field types
 
@@ -231,6 +242,7 @@ defmodule PB.Schema.Info do
 
     %Message{
       name: name,
+      package: Map.get(message, :package),
       fields: fields,
       oneofs: oneofs,
       map_entry?: Map.get(message, :map_entry, false),
@@ -257,7 +269,7 @@ defmodule PB.Schema.Info do
       |> Elixir.Enum.map(fn {vname, number} -> %EnumValue{name: vname, number: number} end)
       |> Elixir.Enum.sort_by(fn %EnumValue{number: n, name: vname} -> {n, vname} end)
 
-    %Enum{name: name, values: values}
+    %Enum{name: name, package: Map.get(enum, :package), values: values}
   end
 
   @doc false
@@ -276,7 +288,7 @@ defmodule PB.Schema.Info do
         }
       end)
 
-    %Service{name: name, methods: methods}
+    %Service{name: name, package: Map.get(service, :package), methods: methods}
   end
 
   defp build_field(field, message) do
