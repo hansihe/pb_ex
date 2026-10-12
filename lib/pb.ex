@@ -260,9 +260,6 @@ defmodule PB do
     # Compile all public term projections into the same draft schema shape
     # regardless of whether they came from proto options or caller overrides.
     |> PB.Schema.Projections.apply(opts.projections)
-    # Finalize the draft by removing descriptor-only options after all
-    # annotators have consumed them.
-    |> PB.Schema.Compiler.finalize()
     # Prepare exactly once at the end so runtime encode/decode receive
     # indexes, tags, enum refs, adapter refs, and other hot-path metadata as
     # part of the schema contract.

@@ -54,6 +54,5 @@ defmodule PB.Schema.MainTest do
 
     assert %{validate: %{predefined: %Predefined{cel: rules}}} = email
     assert [%CELSource{id: "string.email"}, %CELSource{id: "string.email_empty"}] = rules
-    refute Map.has_key?(email, :options)
   end
 end

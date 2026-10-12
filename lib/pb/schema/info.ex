@@ -11,7 +11,8 @@ defmodule PB.Schema.Info.Field do
     :oneof,
     :json_name,
     :default,
-    :extendee
+    :extendee,
+    options: %{}
   ]
 
   @type scalar ::
@@ -46,7 +47,8 @@ defmodule PB.Schema.Info.Field do
           oneof: PB.field_name() | nil,
           json_name: String.t() | nil,
           default: term() | :none,
-          extendee: PB.message_name() | nil
+          extendee: PB.message_name() | nil,
+          options: map()
         }
 end
 
@@ -85,7 +87,8 @@ defmodule PB.Schema.Info.Message do
     :edition,
     :extensions,
     :extension_ranges,
-    :projection
+    :projection,
+    options: %{}
   ]
 
   @type t :: %__MODULE__{
@@ -98,7 +101,8 @@ defmodule PB.Schema.Info.Message do
           edition: atom() | nil,
           extensions: [PB.Schema.Info.Field.t()],
           extension_ranges: [PB.Schema.Info.ExtensionRange.t()],
-          projection: PB.Schema.Projection.t() | nil
+          projection: PB.Schema.Projection.t() | nil,
+          options: map()
         }
 end
 
@@ -168,6 +172,21 @@ defmodule PB.Schema.Info do
   file declaring the type, or `nil` for a file without one. Nested types share
   their file's package, so `a.b.Outer.Inner` declared in package `a.b` has
   `package: :"a.b"`.
+
+  ## Options
+
+  `options` on `Field` and `Message` is the declaration's
+  `google.protobuf.FieldOptions` or `google.protobuf.MessageOptions`, decoded
+  like any other message: standard options under their field names and custom
+  options under `:__extensions__`, keyed by the extension's full name. It is
+  `%{}` when the declaration has no options. Custom options whose extension
+  isn't in the descriptor set stay undecoded under `:__unknown_fields__`.
+
+      field.options[:deprecated]
+      #=> true
+
+      PB.Schema.option(field, :"acme.v1.sensitive")
+      #=> true
 
   ## Field types
 
@@ -250,7 +269,8 @@ defmodule PB.Schema.Info do
       edition: Map.get(message, :edition),
       extensions: extensions,
       extension_ranges: extension_ranges,
-      projection: Map.get(message, :projection)
+      projection: Map.get(message, :projection),
+      options: Map.get(message, :options, %{})
     }
   end
 
@@ -316,7 +336,8 @@ defmodule PB.Schema.Info do
       oneof: oneof_name,
       json_name: Map.get(field, :json_name),
       default: Map.get(field, :default, :none),
-      extendee: Map.get(field, :extendee)
+      extendee: Map.get(field, :extendee),
+      options: Map.get(field, :options, %{})
     }
   end
 

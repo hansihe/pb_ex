@@ -219,6 +219,73 @@ defmodule PB.SchemaInfoTest do
     end
   end
 
+  describe "options" do
+    setup do
+      sensitive = PB.UnknownField.from_raw(50_000, 0, <<1>>)
+      category = PB.UnknownField.from_raw(50_001, 2, <<4, "risk">>)
+
+      schema =
+        PB.compile(%{
+          file: [
+            %{
+              name: "opts.proto",
+              package: :opts,
+              syntax: :proto3,
+              message_type: [
+                %{
+                  name: :Event,
+                  options: %{PB.UnknownField.key() => [category]},
+                  field: [
+                    %{
+                      name: :email,
+                      number: 1,
+                      label: :LABEL_OPTIONAL,
+                      type: :TYPE_STRING,
+                      options: %{PB.UnknownField.key() => [sensitive], deprecated: true}
+                    },
+                    %{name: :count, number: 2, label: :LABEL_OPTIONAL, type: :TYPE_INT32}
+                  ]
+                }
+              ],
+              extension: [
+                %{
+                  name: :sensitive,
+                  number: 50_000,
+                  label: :LABEL_OPTIONAL,
+                  type: :TYPE_BOOL,
+                  extendee: ".google.protobuf.FieldOptions"
+                },
+                %{
+                  name: :category,
+                  number: 50_001,
+                  label: :LABEL_OPTIONAL,
+                  type: :TYPE_STRING,
+                  extendee: ".google.protobuf.MessageOptions"
+                }
+              ]
+            }
+          ]
+        })
+
+      %{message: Schema.message!(schema, :"opts.Event")}
+    end
+
+    test "fields carry standard and custom options", %{message: message} do
+      [email, count] = message.fields
+
+      assert email.options == %{deprecated: true, __extensions__: %{"opts.sensitive": true}}
+      assert Schema.option(email, :"opts.sensitive") == true
+
+      assert count.options == %{}
+      assert Schema.option(count, :"opts.sensitive") == nil
+    end
+
+    test "messages carry custom options", %{message: message} do
+      assert message.options == %{__extensions__: %{"opts.category": "risk"}}
+      assert Schema.option(message, :"opts.category") == "risk"
+    end
+  end
+
   describe "fetch_service/2 + service!/2" do
     test "returns method info" do
       %{schema: schema} = Fixtures.grpc_schema_fixture()

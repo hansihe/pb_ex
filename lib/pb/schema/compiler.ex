@@ -8,10 +8,11 @@ defmodule PB.Schema.Compiler do
   # map lowering are resolved here. The result of `compile/1` is still a draft
   # schema, not something runtime encode/decode should consume directly.
   #
-  # Draft schemas intentionally keep descriptor options so downstream annotators
-  # can compile validation rules. Draft schemas intentionally do not contain
-  # runtime-only metadata such as numeric field indexes, encoded tags, enum refs,
-  # adapter refs, required/default field lists, or oneof lookup maps.
+  # Descriptor options are kept, so annotators can compile validation rules and
+  # projections from them and `PB.Schema.Info` can expose them. Draft schemas
+  # intentionally do not contain runtime-only metadata such as numeric field
+  # indexes, encoded tags, enum refs, adapter refs, required/default field
+  # lists, or oneof lookup maps.
   # `PB.Schema.Prepare.prepare/1` is the only phase that writes those values.
 
   alias PB.Schema.Features
@@ -30,46 +31,6 @@ defmodule PB.Schema.Compiler do
     |> do_compile()
     |> ExtensionMaterializer.materialize()
   end
-
-  @doc """
-  Strips intermediate descriptor metadata from a draft schema.
-
-  Finalization runs after annotators have consumed materialized descriptor
-  options and before adapters, slicing, or runtime preparation. It does not
-  write runtime metadata.
-  """
-  def finalize(schema) when is_map(schema) do
-    schema
-    |> Map.update!(:messages, fn messages ->
-      Map.new(messages, fn {fqn, msg} -> {fqn, finalize_message(msg)} end)
-    end)
-    |> Map.update!(:extensions_by_name, fn extensions ->
-      Map.new(extensions, fn {name, field} -> {name, finalize_field(field)} end)
-    end)
-  end
-
-  defp finalize_message(msg) do
-    fields_by_name =
-      msg.fields_by_name
-      |> Map.new(fn {name, field} -> {name, finalize_field(field)} end)
-
-    extensions_by_name =
-      msg.extensions_by_name
-      |> Map.new(fn {name, field} -> {name, finalize_field(field)} end)
-
-    msg
-    |> Map.delete(:options)
-    |> Map.put(:fields_by_name, fields_by_name)
-    |> Map.put(:extensions_by_name, extensions_by_name)
-    |> Map.update!(:oneofs, fn oneofs ->
-      Map.new(oneofs, fn {idx, oneof} -> {idx, Map.delete(oneof, :options)} end)
-    end)
-    |> Map.update!(:extension_ranges, fn ranges ->
-      Enum.map(ranges, &Map.delete(&1, :options))
-    end)
-  end
-
-  defp finalize_field(field), do: Map.delete(field, :options)
 
   defp do_compile(descriptor_set) do
     (descriptor_set[:file] || [])

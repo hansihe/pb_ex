@@ -27,8 +27,7 @@ defmodule PB.Validate.Compiler do
   @doc """
   Annotates a compiled schema with precompiled protovalidate validation ops.
 
-  Runs on the draft schema after descriptor options have been materialized and
-  before `PB.Schema.Compiler.finalize/1` strips those options.
+  Runs on the draft schema after descriptor options have been materialized.
   """
   @spec annotate(PB.schema()) :: PB.schema()
   def annotate(schema) when is_map(schema) do

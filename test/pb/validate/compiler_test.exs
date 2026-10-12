@@ -61,7 +61,6 @@ defmodule PB.Validate.CompilerTest do
 
     assert op.proto_rule_path == nil
     assert %Checked{} = op.checked
-    refute Map.has_key?(message, :options)
   end
 
   test "PB.compile/1 annotates field-level user CEL", %{valid_binpb: binpb} do
@@ -92,7 +91,6 @@ defmodule PB.Validate.CompilerTest do
     assert op.proto_rule_path == op.rule_path
     assert %Checked{} = op.checked
     assert message.fields_by_number[1].validate == field.validate
-    refute Map.has_key?(field, :options)
   end
 
   test "PB.compile/1 annotates message-level cel_expression shorthand", %{
@@ -383,7 +381,6 @@ defmodule PB.Validate.CompilerTest do
 
     assert %{validate: %{predefined: %{cel: [source]}}} = extension
     assert source.id == "string.not_bad"
-    refute Map.has_key?(extension, :options)
 
     value = message.fields_by_name.value
     assert %{validate: %{cel: [%CELOp{} = value_rule]}} = value
@@ -495,7 +492,6 @@ defmodule PB.Validate.CompilerTest do
         roots: [:"validate_custom_predefined.CustomPredefinedRules"]
       )
       |> PB.Validate.Compiler.annotate()
-      |> PB.Schema.Compiler.finalize()
       |> PB.Schema.Prepare.prepare()
 
     assert Map.has_key?(
@@ -566,8 +562,6 @@ defmodule PB.Validate.CompilerTest do
 
     assert message.fields_by_name.ignored_always.validate == %{ignore: :IGNORE_ALWAYS}
     assert message.fields_by_name.ignored_zero.validate == %{ignore: :IGNORE_IF_ZERO_VALUE}
-
-    refute Map.has_key?(message.fields_by_name.required_value, :options)
   end
 
   test "PB.compile/1 annotates structural oneof rules", %{structural_binpb: binpb} do
@@ -577,7 +571,6 @@ defmodule PB.Validate.CompilerTest do
     message = schema.messages[:"validate_structural.StructuralRules"]
 
     assert message.oneofs[0].validate == %{required: true}
-    refute Map.has_key?(message.oneofs[0], :options)
   end
 
   test "PB.compile/1 rejects empty message oneof rules", %{

@@ -79,13 +79,15 @@ defmodule PB.Schema.Compiled do
   @type oneof :: %{
           required(:name) => field_name(),
           required(:fields) => [field_name()],
-          optional(:term_by_struct) => %{optional(module()) => field_name()}
+          optional(:term_by_struct) => %{optional(module()) => field_name()},
+          optional(:options) => map()
         }
 
   @typedoc "Compiled extension range metadata."
   @type extension_range :: %{
           required(:start) => integer(),
-          required(:end) => integer()
+          required(:end) => integer(),
+          optional(:options) => map()
         }
 
   @typedoc "Compiled protobuf field metadata."
@@ -113,7 +115,8 @@ defmodule PB.Schema.Compiled do
           optional(:adapter) => PB.Adapter.t(),
           optional(:enum) => enum(),
           optional(:packed_tag) => iodata(),
-          optional(:validate) => term()
+          optional(:validate) => term(),
+          optional(:options) => map()
         }
 
   @typedoc "Compiled protobuf message metadata."
@@ -138,7 +141,8 @@ defmodule PB.Schema.Compiled do
           optional(:reserved_names) => [binary()],
           optional(:reserved_ranges) => [extension_range()],
           optional(:projection) => PB.Schema.Projection.t(),
-          optional(:validate) => term()
+          optional(:validate) => term(),
+          optional(:options) => map()
         }
 
   @typedoc "Compiled protobuf service method metadata."

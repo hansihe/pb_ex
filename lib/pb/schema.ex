@@ -101,6 +101,9 @@ defmodule PB.Schema do
   `operation: :introspect`) on miss; the `fetch_*` variants return
   `{:ok, info} | :error`. The returned Info structs are the public stable
   surface — the compiled-schema internals may change without notice.
+
+  Fields and messages carry their declared options; `option/2` reads a custom
+  option from one.
   """
 
   @callback __pb_schema__() :: PB.schema()
@@ -428,6 +431,22 @@ defmodule PB.Schema do
       {:ok, info} -> info
       :error -> raise unknown(:unknown_extension, name)
     end
+  end
+
+  @doc """
+  Returns the value of the custom option `extension_name` declared on a field
+  or message, or `nil` if it isn't set.
+
+      PB.Schema.option(field, :"acme.v1.sensitive")
+      #=> true
+
+  Standard options are plain keys of `options`, such as
+  `field.options[:deprecated]`.
+  """
+  @spec option(Info.Field.t() | Info.Message.t(), PB.extension_name()) :: term()
+  def option(%struct{options: options}, extension_name)
+      when struct in [Info.Field, Info.Message] and is_atom(extension_name) do
+    options |> Map.get(:__extensions__, %{}) |> Map.get(extension_name)
   end
 
   defp unknown(:unknown_enum = kind, name) do

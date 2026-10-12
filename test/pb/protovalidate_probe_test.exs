@@ -69,7 +69,7 @@ defmodule PB.ProtovalidateProbeTest do
              field.options[@extensions][@field_extension]
   end
 
-  test "PB.compile/1 strips raw :options from the final field entry",
+  test "PB.compile/1 keeps materialized :options on the final field entry",
        %{binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
@@ -77,7 +77,6 @@ defmodule PB.ProtovalidateProbeTest do
     msg = compiled.messages[:"protovalidate_probe.Probe"]
     field = msg.fields_by_number[1]
 
-    refute Map.has_key?(field, :options),
-           "Phase 3 should strip raw :options after validator-compile"
+    assert %{type: {:string, %{min_len: 3}}} = field.options[@extensions][@field_extension]
   end
 end
