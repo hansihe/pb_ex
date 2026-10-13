@@ -79,7 +79,7 @@ are atoms like `:"mypackage.Person"`:
 ```
 
 That is the whole round trip. Fields that were not set are simply absent from the
-decoded map (see [Data representation](data-representation.md) for the details on
+decoded map (see [Data representation](../reference/data-representation.md) for the details on
 presence, defaults, enums, oneofs, and maps).
 
 ## 7. Recommended: embed the schema at compile time
@@ -103,13 +103,13 @@ end
 ```
 
 This is the path most applications should reach for. See
-[Schema modules](schema-modules.md) for the full surface.
+[Schema modules](../how-to/schema-modules.md) for the full surface.
 
 ## Where to go next
 
 - To make decoded data look like your domain (structs instead of maps, native
   `DateTime` for timestamps), see
-  [Decoding into structs](structs-and-representation.md) and
-  [Adapters and well-known types](adapters-and-well-known-types.md).
+  [Decoding into structs](../how-to/structs-and-representation.md) and
+  [Adapters and well-known types](../how-to/adapters-and-well-known-types.md).
 - For the full set of representation rules, read the
-  [Data representation reference](data-representation.md).
+  [Data representation reference](../reference/data-representation.md).
