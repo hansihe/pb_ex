@@ -9,7 +9,7 @@ defmodule CEL.Function do
       `{:namespace, "ns"}` (`ns.f(x)`). A function may list several.
     * `:overloads` — one `CEL.Function.Overload` per signature.
 
-  Other fields are used by PB's built-in functions and may change.
+  Other fields are used by CEL's built-in functions and may change.
   """
 
   alias CEL.Call
@@ -22,7 +22,7 @@ defmodule CEL.Function do
 
   @typedoc """
   An argument or result type: a `t:CEL.Type.t/0`, or `{:param, name}` for a
-  type parameter. PB's built-in functions use further forms.
+  type parameter. CEL's built-in functions use further forms.
   """
   @type pattern :: CEL.Type.t() | {:param, String.t()} | builtin_pattern
 
@@ -32,14 +32,14 @@ defmodule CEL.Function do
   @type args :: [pattern]
   @type result :: pattern
 
-  @typedoc "Used by PB's built-in functions."
+  @typedoc "Used by CEL's built-in functions."
   @type combine :: :assignable | :common
-  @typedoc "Used by PB's built-in functions."
+  @typedoc "Used by CEL's built-in functions."
   @type on_dyn :: :match | :fallback
   @typedoc false
   @type mfa_target :: {module, atom}
 
-  @typedoc "`{Module, function}`; the other forms are PB's own."
+  @typedoc "`{Module, function}`; the other forms are CEL's own."
   @type eval :: nil | :intrinsic | {:mfa, mfa_target} | mfa_target
 
   @typedoc "Extra arguments an overload's `:eval` receives; see `CEL.Function.Overload`."
@@ -76,7 +76,7 @@ defmodule CEL.Function do
         unknown arguments, as `{:error, %CEL.Error{}}` and
         `{:unknown, %CEL.Unknown{}}`. Defaults to `true`.
 
-    Other fields are used by PB's built-in functions and may change.
+    Other fields are used by CEL's built-in functions and may change.
     """
 
     defstruct [

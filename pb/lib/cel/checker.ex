@@ -4,7 +4,7 @@ defmodule CEL.Checker do
   #
   # CEL static checker.
   #
-  # The checker returns `CEL.Checked`, PB's native checked
+  # The checker returns `CEL.Checked`, CEL's native checked
   # representation. Standard `cel.expr.CheckedExpr` output is derived from that
   # representation only when explicitly requested.
   @moduledoc false

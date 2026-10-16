@@ -3,7 +3,7 @@ defmodule CEL.Regexes do
 
   # Regular expressions for CEL `matches()` and protovalidate `string.pattern`.
   #
-  # CEL specifies RE2. PB uses PCRE, configured to stay close where it is
+  # CEL specifies RE2. This implementation uses PCRE, configured to stay close where it is
   # cheap: patterns are Unicode-aware (`.` matches a code point, as in RE2)
   # without Unicode classes (`\w`, `\d` and `\s` stay ASCII, as in RE2), and a
   # match gives up with an error after a bounded number of steps, since PCRE

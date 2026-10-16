@@ -12,8 +12,8 @@ defmodule CEL.Value do
   | `string`, `bytes` | `{:string, "a"}`, `{:bytes, <<1>>}` |
   | `google.protobuf.Timestamp`, `Duration` | `{:timestamp, unix_nanoseconds}`, `{:duration, nanoseconds}` |
   | `list`, `map` | `{:list, [value]}`, `{:map, %{value => value}}` |
-  | a protobuf message | `{:message, name, fields}` |
-  | an enum value | `{:enum, "pkg.Enum", number}`, equal to `{:int, number}` |
+  | a message | `{:message, name, payload}`, its `CEL.TypeProvider`'s name and payload |
+  | an enum value | `{:enum, name, number}`, equal to `{:int, number}` |
   | `optional_type` | `{:optional, :none}`, `{:optional, {:some, value}}` |
   | a type | `{:type, _}`; `type_name/1` gives its name, such as `"int"` |
 

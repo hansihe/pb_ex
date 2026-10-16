@@ -1,7 +1,7 @@
 defmodule CEL do
   @moduledoc """
-  Common Expression Language (CEL) for PB: parse, type-check and evaluate CEL
-  expressions against variables and protobuf messages.
+  The Common Expression Language (CEL): parse, type-check and evaluate CEL
+  expressions against variables and messages.
 
       env = CEL.Env.build(vars: [age: :int, tags: {:list, :string}])
 
@@ -12,7 +12,7 @@ defmodule CEL do
 
     * `parse/2` turns source text into a `cel.expr.ParsedExpr` map.
     * `check/2` type-checks it against a `CEL.Env` (the variables, functions
-      and protobuf schema it may use) into a `CEL.Checked`, which can be
+      and message types it may use) into a `CEL.Checked`, which can be
       inspected with `CEL.Checked.expr/1` and
       `CEL.Checked.references/1`.
     * `compile/2` bundles a checked expression with its environment into a
@@ -21,18 +21,38 @@ defmodule CEL do
 
   `eval/3` does all three for a one-off evaluation.
 
+  ## Messages
+
+  CEL's own types are always there, including the protobuf well-known types
+  it builds in: `google.protobuf.Timestamp` and `Duration`, the wrappers,
+  `Any`, `Value`, `ListValue` and `Struct`. Message and enum types come from a
+  `CEL.TypeProvider`, given to `CEL.Env.build/1` as `:types`. For protobuf
+  messages, `PB.CEL.types/1` is one:
+
+      env =
+        CEL.Env.build(
+          types: PB.CEL.types(MyApp.Schema),
+          container: "my.pkg",
+          vars: [user: {:message, "my.pkg.User"}]
+        )
+
+      CEL.eval("user.age >= 18", %{user: %{age: 30}}, env)
+      #=> {:ok, {:bool, true}}
+
   ## Values
 
   Variables are bound by name (atom or string keys) to plain Elixir terms, which
   are converted using the variable's declared type: integers, floats, strings,
-  booleans, lists and maps, `DateTime` for `:timestamp`, and PB's decoded maps
-  for messages. Enums are bound as PB decodes them, a value's name as an atom
-  or its number, and `nil` binds a wrapper variable to `null`.
+  booleans, lists and maps, and `DateTime` for `:timestamp`. A variable of a
+  message or enum type takes what its provider converts, for `PB.CEL.types/1`
+  a message as `PB.decode/4` returns it and an enum value's name as an atom or
+  its number. `nil` binds a wrapper variable to `null`.
 
   Results are `t:CEL.Value.t/0` terms, tagged so that CEL's distinctions
   survive: `{:int, 1}` and `{:uint, 1}`, `{:string, "a"}` and `{:bytes, "a"}`,
-  `{:enum, "pkg.Enum", 2}`. `CEL.Value.to_native/1` turns one back into a
-  plain term.
+  `{:enum, :"pkg.Enum", 2}`, with message and enum types named as their
+  provider names them. `CEL.Value.to_native/1` turns one back into a plain
+  term.
 
   ## Results
 
@@ -150,7 +170,7 @@ defmodule CEL do
   supplied environment as a `CEL.Program`.
 
   Programs carry their environment so eval callers do not have to re-pass
-  schema or function declarations on every call. See `CEL.Program`.
+  types or function declarations on every call. See `CEL.Program`.
   """
   @spec compile(String.t() | parsed(), Env.t()) ::
           {:ok, Program.t()} | {:error, Error.t()}

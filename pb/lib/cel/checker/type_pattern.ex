@@ -12,7 +12,7 @@ defmodule CEL.Checker.TypePattern do
   #
   #   * `{:list, elem_type}` — homogeneous list
   #   * `{:map, key_type, value_type}` — map
-  #   * `{:message, name}` — protobuf message type
+  #   * `{:message, name}` — message type, by its provider's name
   #   * `{:optional, value_type}` — optional wrapper
   #   * `{:abstract, name, params}` — abstract/parameterised type
   #

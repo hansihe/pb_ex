@@ -1,8 +1,9 @@
 defmodule CEL.Env do
   @moduledoc """
   What a CEL expression may use: its variables and their types, custom
-  functions, and the protobuf schema its messages and enums come from. The
-  standard CEL functions and macros are always available.
+  functions, and the message and enum types of its `CEL.TypeProvider`. The
+  standard CEL functions and macros, and CEL's own types, are always
+  available.
 
   Build one with `build/1` and pass it to `CEL.check/2`, `CEL.compile/2`
   or `CEL.eval/3`. A `CEL.Program` keeps the environment it was compiled
@@ -64,9 +65,9 @@ defmodule CEL.Env do
       protobuf schema. Without it there are none. Message and enum names in
       `:vars` and `:functions` may be atoms or strings; each is resolved
       through the provider, and an unknown one raises.
-    * `:container` — the protobuf package names are resolved in, as with
-      `container` in other CEL implementations: with `"my.pkg"`, `User`
-      resolves to `my.pkg.User`.
+    * `:container` — the package names are resolved in, as with `container`
+      in other CEL implementations: with `"my.pkg"`, `User` resolves to
+      `my.pkg.User`.
     * `:abbreviations` — fully qualified names expressions may refer to by
       their last segment, as with `Abbrevs` in cel-go: with
       `["my.pkg.Decision"]`, `Decision.REMOVED` means

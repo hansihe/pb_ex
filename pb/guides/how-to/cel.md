@@ -7,21 +7,30 @@ rules and is usable on its own through `CEL`.
 ## Declare an environment
 
 An environment says what an expression may use: variables and their types,
-custom functions, and the protobuf schema its messages come from.
+custom functions, and the message and enum types it knows. `PB.CEL.types/1`
+gives it the messages and enums of a PB schema:
 
 ```elixir
 env =
   CEL.Env.build(
-    schema: MyApp.Schema,
+    types: PB.CEL.types(MyApp.Schema),
     container: "my.app",
     vars: [user: {:message, "my.app.User"}, now: :timestamp, tags: {:list, :string}]
   )
 ```
 
+`:types` takes any `CEL.TypeProvider`; without it, expressions can use CEL's
+own types only, which include timestamps, durations and the other protobuf
+well-known types.
+
 Types are `CEL.Type` shorthand: `:int`, `:string`, `:timestamp`,
 `{:list, :string}`, `{:map, :string, :int}`, `{:message, "pkg.Message"}`,
-`{:enum, "pkg.Enum"}` and so on. `:container` is the package names resolve in,
-so `User{name: "a"}` means `my.app.User{name: "a"}`.
+`{:enum, "pkg.Enum"}` and so on. A message or enum name may be an atom or a
+string; building the environment resolves it, and raises for one the schema
+does not have. Types and values CEL returns name messages and enums as PB
+does, by atom: `{:message, :"my.app.User"}`, `{:enum, :"my.app.Role", 2}`.
+`:container` is the package names resolve in, so `User{name: "a"}` means
+`my.app.User{name: "a"}`.
 
 `:abbreviations` lets expressions use the last segment of names from other
 packages: with `abbreviations: ["other.pkg.Decision"]`, `Decision.REMOVED`

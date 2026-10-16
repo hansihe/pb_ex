@@ -84,8 +84,9 @@ CEL.Value.to_native(value)
 - It must return `{:ok, value} | {:unknown, reason} | {:error, reason}`, with
   `value` a `CEL.Value` of the declared result type. Nothing checks the
   value against that type, so build it with the constructors: an `{:enum,
-  "pkg.Enum"}` result is `CEL.Value.enum("pkg.Enum", number)`, which is
-  also how enum arguments arrive.
+  "pkg.Enum"}` result is `CEL.Value.enum(:"pkg.Enum", number)`, named as the
+  environment's `CEL.TypeProvider` names it (by atom, for `PB.CEL.types/1`),
+  which is also how enum arguments arrive.
   `{:unknown, reason}` makes the call's result unknown; `reason` is any term and
   is reported in the `CEL.Unknown` entry `{{:call, name, expr_id}, reason}`.
 - The function is not called when an argument is an error or unknown; the call
@@ -147,6 +148,21 @@ CEL.Value.to_native(value)
         }
       ]
     }
+  end
+  ```
+- `:types` passes the environment's `CEL.TypeProvider`, `{module, state}`, so
+  a function can read the fields of a message argument:
+
+  ```elixir
+  defmodule Fields do
+    def field([{:message, message, payload}, {:string, name}], {types, state}) do
+      with {:ok, field} <- types.find_field(state, message, name),
+           {:ok, value} <- types.get_field(state, payload, field) do
+        {:ok, value}
+      else
+        _error -> {:error, "no such field #{name}"}
+      end
+    end
   end
   ```
 - Registration validates only the MFA *shape* (both elements must be atoms). It

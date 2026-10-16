@@ -136,8 +136,11 @@ defmodule PB.MixProject do
         CEL.Function,
         CEL.Function.Overload,
         CEL.Type,
+        CEL.TypeProvider,
+        CEL.Field,
         CEL.Value,
-        CEL.Unknown
+        CEL.Unknown,
+        PB.CEL
       ],
       "CEL expression view": [
         CEL.Expr.Const,
