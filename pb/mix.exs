@@ -29,12 +29,8 @@ defmodule PB.MixProject do
 
   defp deps do
     [
-      # PB's CEL binding and protovalidate use CEL internals, so pb will pin
-      # cel_ex to an exact version (`== x.y.z`) when published.
-      {:cel_ex, path: "../cel_ex"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: :dev, runtime: false},
-      {:tzdata, "~> 1.1", only: :test}
+      {:dialyxir, "~> 1.4", only: :dev, runtime: false}
     ]
   end
 
