@@ -29,6 +29,9 @@ defmodule PB.MixProject do
 
   defp deps do
     [
+      # PB's CEL binding and protovalidate use CEL internals, so pb will pin
+      # cel_ex to an exact version (`== x.y.z`) when published.
+      {:cel_ex, path: "../cel_ex"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
       {:tzdata, "~> 1.1", only: :test}
@@ -64,7 +67,6 @@ defmodule PB.MixProject do
       nest_modules_by_prefix: [
         PB.Schema,
         PB.WellKnownTypes,
-        CEL,
         PB.Validate
       ]
     ]
@@ -128,30 +130,7 @@ defmodule PB.MixProject do
         PB.WellKnownTypes
       ],
       CEL: [
-        CEL,
-        CEL.Env,
-        CEL.Program,
-        CEL.Checked,
-        CEL.Expr,
-        CEL.Function,
-        CEL.Function.Overload,
-        CEL.Type,
-        CEL.TypeProvider,
-        CEL.Field,
-        CEL.Value,
-        CEL.Unknown,
         PB.CEL
-      ],
-      "CEL expression view": [
-        CEL.Expr.Const,
-        CEL.Expr.Ident,
-        CEL.Expr.Select,
-        CEL.Expr.Call,
-        CEL.Expr.MacroCall,
-        CEL.Expr.ListLiteral,
-        CEL.Expr.MapLiteral,
-        CEL.Expr.MessageLiteral,
-        CEL.Expr.Comprehension
       ],
       Validation: [
         PB.Validate,
@@ -165,8 +144,6 @@ defmodule PB.MixProject do
         PB.DecodeError,
         PB.OptionError,
         PB.AdapterError,
-        CEL.Error,
-        CEL.OptionError,
         PB.Validate.CompileError
       ]
     ]

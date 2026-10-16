@@ -1,9 +1,9 @@
 # PB
 
 Data-driven protobuf toolkit for Elixir. Runtime usage needs no code generation,
-no build step, and zero dependencies: PB reads standard `protoc` descriptor sets
-as data. For stable schemas, PB can also embed the compiled schema in a BEAM
-module at Elixir compile time.
+no build step, and no dependencies beyond [`cel_ex`](https://hexdocs.pm/cel_ex):
+PB reads standard `protoc` descriptor sets as data. For stable schemas, PB can
+also embed the compiled schema in a BEAM module at Elixir compile time.
 
 ## Installation
 
@@ -61,8 +61,8 @@ walkthrough.
 - **ProtoJSON** — `PB.JSON`.
 - **Text format** — `PB.TextFormat`.
 - **protovalidate** validation — `PB.Validate`.
-- **CEL** expressions over variables and protobuf messages, with custom
-  functions and unknown inputs — `CEL`.
+- **CEL** expressions over protobuf messages — `PB.CEL`, a type provider for
+  [`cel_ex`](https://hexdocs.pm/cel_ex)'s `CEL`.
 - **Schema introspection** for messages, enums, services, and extensions —
   `PB.Schema`.
 
