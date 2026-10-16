@@ -1,12 +1,11 @@
 # Custom CEL functions
 
-PB ships a [CEL](https://cel.dev) implementation used both by protovalidate's
-`cel` rules and as a standalone expression engine. This guide covers the common
-task of **registering your own function** so it can be called from CEL source.
+This guide covers the common task of **registering your own function** so it
+can be called from CEL source.
 
-CEL itself is a standard; this guide only covers the PB integration surface. For
+CEL itself is a standard; this guide only covers how `cel_ex` exposes it. For
 the language, see the [CEL specification](https://github.com/google/cel-spec).
-For evaluating expressions, see [Evaluating CEL expressions](cel.md).
+For evaluating expressions, see [Evaluating CEL expressions](evaluating-expressions.md).
 
 ## Declare and register
 
@@ -170,10 +169,3 @@ CEL.Value.to_native(value)
   dispatch time raises `:undef` to the caller.
 - An overload with no `:eval` MFA is a check-only declaration; evaluating such a
   call raises an evaluator error.
-
-## Using the function in validation
-
-The same `CEL.Env` mechanism backs protovalidate `cel` rules. Register your
-functions on the environment PB uses to evaluate validation expressions, then
-reference them by name in your `(buf.validate.field).cel` expressions. See
-[Validating with protovalidate](validation.md).

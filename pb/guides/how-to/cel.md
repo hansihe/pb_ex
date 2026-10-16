@@ -1,105 +1,49 @@
-# Evaluating CEL expressions
+# CEL over protobuf messages
 
-PB includes a [CEL](https://cel.dev) implementation: a small, safe expression
-language for rules, filters and policies. It backs protovalidate's `cel`
-rules and is usable on its own through `CEL`.
-
-## Declare an environment
-
-An environment says what an expression may use: variables and their types,
-custom functions, and the message and enum types it knows. `PB.CEL.types/1`
-gives it the messages and enums of a PB schema:
+PB evaluates [CEL](https://cel.dev) expressions with
+[`cel_ex`](https://hexdocs.pm/cel_ex), which knows nothing of protobuf itself.
+`PB.CEL.types/1` connects the two: it is the `CEL.TypeProvider` that makes the
+messages and enums of a PB schema the types of a `CEL.Env`.
 
 ```elixir
 env =
   CEL.Env.build(
     types: PB.CEL.types(MyApp.Schema),
     container: "my.app",
-    vars: [user: {:message, "my.app.User"}, now: :timestamp, tags: {:list, :string}]
+    vars: [user: {:message, "my.app.User"}]
   )
-```
 
-`:types` takes any `CEL.TypeProvider`; without it, expressions can use CEL's
-own types only, which include timestamps, durations and the other protobuf
-well-known types.
+{:ok, program} = CEL.compile("user.age >= 18 && user.role == Role.ADMIN", env)
 
-Types are `CEL.Type` shorthand: `:int`, `:string`, `:timestamp`,
-`{:list, :string}`, `{:map, :string, :int}`, `{:message, "pkg.Message"}`,
-`{:enum, "pkg.Enum"}` and so on. A message or enum name may be an atom or a
-string; building the environment resolves it, and raises for one the schema
-does not have. Types and values CEL returns name messages and enums as PB
-does, by atom: `{:message, :"my.app.User"}`, `{:enum, :"my.app.Role", 2}`.
-`:container` is the package names resolve in, so `User{name: "a"}` means
-`my.app.User{name: "a"}`.
-
-`:abbreviations` lets expressions use the last segment of names from other
-packages: with `abbreviations: ["other.pkg.Decision"]`, `Decision.REMOVED`
-means `other.pkg.Decision.REMOVED`, even when the container also has a
-`Decision`. Checked expressions carry the full names.
-
-## Compile once, evaluate many times
-
-```elixir
-{:ok, program} = CEL.compile("user.age >= 18 && 'beta' in tags", env)
-
-CEL.Program.eval(program, %{user: %{age: 30}, now: DateTime.utc_now(), tags: ["beta"]})
+{:ok, user} = MyApp.Schema.decode(binary, :"my.app.User")
+CEL.Program.eval(program, %{user: user})
 #=> {:ok, {:bool, true}}
 ```
 
-`CEL.compile/2` parses and type-checks; type errors are reported here, with
-the line and column of the offending expression, rather than when evaluating.
-`CEL.eval/3` does both steps and evaluates, for a one-off.
+`PB.CEL.types/1` takes a module that `use PB.Schema` or a schema compiled with
+`PB.compile/2`.
 
-Variables are bound by atom or string name to plain Elixir terms, converted
-using the declared type: a message variable takes the map `PB.decode/4`
-returns, a `:timestamp` takes a `DateTime`. Results are tagged
-`CEL.Value` terms; `CEL.Value.to_native/1` turns one back into a plain
-term.
+## Names and values
 
-## Missing inputs
+- Message and enum types are named by PB's atoms. A declaration may name one
+  by atom or string, `{:message, "my.app.User"}`, but the types and values CEL
+  returns carry the atom: `{:message, :"my.app.User", fields}`,
+  `{:enum, :"my.app.Role", 2}`.
+- A message variable binds to the message as `PB.decode/4` returns it, and an
+  enum variable to a value's name as an atom or its number.
+- The well-known types are the CEL types they stand for: a
+  `google.protobuf.Timestamp` field reads as a timestamp, an `Int64Value` one
+  as an int or `null`.
 
-Bind a variable to `{:unknown, reason}` when its value is not available, for
-example because a lookup timed out. If the result depends on it, evaluation
-returns `{:unknown, %CEL.Unknown{}}` listing the inputs it was waiting for;
-if not (`false && x`), it returns the result.
+## Validation
 
-```elixir
-CEL.Program.eval(program, %{user: {:unknown, :timeout}, now: DateTime.utc_now(), tags: []})
-#=> {:ok, {:bool, false}}
-```
+protovalidate's `cel` rules are evaluated with CEL over the same types; see
+[Validating with protovalidate](validation.md).
 
-Custom functions can return `{:unknown, reason}` too; see
-[Custom CEL functions](custom-cel-functions.md).
+## More
 
-## Inspect an expression
+The language, environments, unknown inputs, inspecting expressions and custom
+functions are covered by `cel_ex`'s guides:
 
-`CEL.check/2` returns a `CEL.Checked`, which can be inspected before
-evaluating anything:
-
-  * `CEL.Checked.references/1` lists the variable paths an expression reads
-    (`user.age`) and the custom functions it calls, with arguments that are
-    constants or variable paths. Use it to fetch only the data a rule needs.
-  * `CEL.Checked.expr/1` returns the expression as a tree of `CEL.Expr`
-    nodes, for allowlists and linting. Macros such as `exists` appear as
-    written.
-  * `CEL.Checked.type/1` is the expression's result type.
-  * `CEL.Checked.position/2` is where a node is in the source, to point at
-    it in a message.
-
-`CEL.select/4` reads one of those variable paths from the bindings the way
-evaluation would, but returns `:absent` when a field along it is not set:
-
-```elixir
-CEL.select(env, %{user: %{}}, "user", ["nickname"])
-#=> :absent
-```
-
-## Catch bad literals early
-
-By default, `duration('30d')` type-checks and fails only when evaluated, as CEL
-specifies. To reject such literals when compiling, list them in the
-environment:
-
-```elixir
-CEL.Env.build(validate_literals: [:duration, :timestamp, :regex])
-```
+- [Evaluating CEL expressions](https://hexdocs.pm/cel_ex/evaluating-expressions.html)
+- [Custom CEL functions](https://hexdocs.pm/cel_ex/custom-functions.html)

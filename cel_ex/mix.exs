@@ -58,6 +58,7 @@ defmodule CELEx.MixProject do
       # The project lives in the cel_ex/ subdirectory of the repository.
       source_url_pattern: "#{@source_url}/blob/v#{@version}/cel_ex/%{path}#L%{line}",
       extras: extras(),
+      groups_for_extras: [Guides: ~r"guides/.*"],
       groups_for_modules: groups_for_modules(),
       nest_modules_by_prefix: [
         CEL
@@ -67,7 +68,9 @@ defmodule CELEx.MixProject do
 
   defp extras do
     [
-      "README.md"
+      "README.md",
+      "guides/evaluating-expressions.md",
+      "guides/custom-functions.md"
     ]
   end
 

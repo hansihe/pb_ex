@@ -83,10 +83,11 @@ The full documentation is organised along the
 - [Adapters and well-known types](guides/how-to/adapters-and-well-known-types.md)
 - [Encoding and decoding JSON](guides/how-to/json.md)
 - [Validating with protovalidate](guides/how-to/validation.md)
-- [Evaluating CEL expressions](guides/how-to/cel.md)
-- [Custom CEL functions](guides/how-to/custom-cel-functions.md)
+- [CEL over protobuf messages](guides/how-to/cel.md)
 - [Extensions and unknown fields](guides/how-to/extensions-and-unknown-fields.md)
 - [Introspecting a schema](guides/how-to/introspection.md)
+
+For CEL itself, see [`cel_ex`'s documentation](https://hexdocs.pm/cel_ex).
 
 **Reference**
 

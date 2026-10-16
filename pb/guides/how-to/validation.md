@@ -61,7 +61,8 @@ See [Conformance status](../reference/conformance.md).
 
 ## CEL expression rules
 
-protovalidate's `cel` rules are evaluated by PB's built-in CEL engine against
-proto-shaped values. Registering your own functions callable from those
-expressions is supported, but that API is still being reshaped and is not part
-of the published interface yet; it is planned for a later release.
+protovalidate's `cel` rules are evaluated with
+[`cel_ex`](https://hexdocs.pm/cel_ex)'s CEL against proto-shaped values.
+Registering your own functions callable from those expressions is supported,
+but that API is still being reshaped and is not part of the published
+interface yet; it is planned for a later release.

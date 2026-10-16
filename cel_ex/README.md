@@ -55,6 +55,11 @@ tagged `CEL.Value` terms, so `{:int, 1}` and `{:uint, 1}` stay distinct;
   and functions they reference, their type and their tree — `CEL.Checked`,
   `CEL.Expr`.
 
+## Documentation
+
+- [Evaluating CEL expressions](guides/evaluating-expressions.md)
+- [Custom CEL functions](guides/custom-functions.md)
+
 ## Message types
 
 An environment's message and enum types come from a `CEL.TypeProvider`,

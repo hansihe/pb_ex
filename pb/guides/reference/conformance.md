@@ -33,8 +33,10 @@ Intentional deviations:
 
 ## CEL
 
-PB's CEL implementation runs the upstream simple conformance suite through
-parser, checker, and evaluator harnesses. Intentionally unsupported areas are
+PB's CEL implementation, [`cel_ex`](https://hexdocs.pm/cel_ex), runs the
+upstream simple conformance suite through parser, checker, and evaluator
+harnesses. The runner lives in pb because the fixtures are protobuf messages,
+and evaluates them with `PB.CEL.types/1`. Intentionally unsupported areas are
 tracked as named buckets in `test/pb/cel/conformance_test.exs`:
 
 - The proto2 extension `proto.getExt`/`proto.hasExt` macro form (the

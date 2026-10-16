@@ -88,7 +88,6 @@ defmodule PB.MixProject do
       "guides/how-to/json.md",
       "guides/how-to/validation.md",
       "guides/how-to/cel.md",
-      "guides/how-to/custom-cel-functions.md",
       "guides/how-to/extensions-and-unknown-fields.md",
       "guides/how-to/introspection.md",
       # Reference
