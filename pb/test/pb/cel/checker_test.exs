@@ -22,15 +22,15 @@ defmodule PB.CEL.CheckerTest do
 
     defdelegate known_message?(schema, name), to: MessageSchema
     defdelegate known_enum?(schema, name), to: MessageSchema
-    defdelegate fetch_message(schema, name), to: MessageSchema
-    defdelegate fetch_enum(schema, name), to: MessageSchema
     defdelegate resolve_message(schema, name), to: MessageSchema
     defdelegate resolve_enum(schema, name), to: MessageSchema
     defdelegate enum_value(schema, name), to: MessageSchema
+    defdelegate enum_number(schema, enum, name), to: MessageSchema
     defdelegate field(schema, message, field), to: MessageSchema
     defdelegate extension(schema, message, name), to: MessageSchema
-    defdelegate field_info_ref(schema, field_ref), to: MessageSchema
     defdelegate field_type(schema, field), to: MessageSchema
+    defdelegate literal_field(schema, message, field), to: MessageSchema
+    defdelegate required_fields(schema, message), to: MessageSchema
   end
 
   test "checks variables and records references" do

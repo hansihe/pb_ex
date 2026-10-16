@@ -26,11 +26,10 @@ defmodule PB.CEL.Runtime.Enum do
   end
 
   defp do_construct(message_schema, schema, enum, {:string, value}) do
-    with {:ok, info} <- message_schema.fetch_enum(schema, enum),
-         {:ok, atom} <- existing_atom(value),
-         {:ok, number} <- enum_number(info, atom) do
-      {:ok, Value.enum(Atom.to_string(enum), number)}
-    else
+    case message_schema.enum_number(schema, enum, value) do
+      {:ok, number} ->
+        {:ok, Value.enum(Atom.to_string(enum), number)}
+
       :error ->
         {:error, "unknown enum value #{inspect(value)} for #{inspect(Atom.to_string(enum))}"}
     end
@@ -38,19 +37,6 @@ defmodule PB.CEL.Runtime.Enum do
 
   defp do_construct(_message_schema, _schema, enum, value) do
     {:error, "cannot construct #{Atom.to_string(enum)} from #{value_kind(value)}"}
-  end
-
-  defp enum_number(%{by_name: by_name}, atom) do
-    case Map.fetch(by_name, atom) do
-      {:ok, number} -> {:ok, number}
-      :error -> :error
-    end
-  end
-
-  defp existing_atom(name) when is_binary(name) do
-    {:ok, String.to_existing_atom(name)}
-  rescue
-    ArgumentError -> :error
   end
 
   defp value_kind({kind, _value}) when is_atom(kind), do: Atom.to_string(kind)

@@ -14,6 +14,8 @@ defmodule PB.CEL.MessageSchema do
   alias PB.CEL.Schema.Field
   alias PB.CEL.ProtoType
 
+  require Field
+
   @behaviour PB.CEL.Message.Schema
 
   @type schema :: PB.schema() | nil
@@ -135,6 +137,14 @@ defmodule PB.CEL.MessageSchema do
     end
   end
 
+  @spec enum_number(schema, enum_ref, String.t()) :: {:ok, integer} | :error
+  def enum_number(schema, enum, name) when is_atom(enum) and is_binary(name) do
+    with {:ok, info} <- fetch_enum_info(schema, enum),
+         {:ok, value} <- existing_atom(name) do
+      Map.fetch(info.by_name, value)
+    end
+  end
+
   @spec field(schema, atom | String.t(), atom | String.t()) ::
           {:ok,
            %{
@@ -206,6 +216,39 @@ defmodule PB.CEL.MessageSchema do
   @spec field_type(schema, PB.Schema.Compiled.field()) ::
           {:ok, ProtoType.t()} | {:error, String.t()}
   def field_type(schema, field), do: Field.cel_type(schema, field)
+
+  @spec literal_field(schema, message_ref, PB.Schema.Compiled.field()) ::
+          PB.CEL.Message.Schema.literal_field()
+  def literal_field(schema, message, info) do
+    %{
+      cardinality: if(info.presence == :oneof, do: :oneof, else: info.cardinality),
+      oneof_name: oneof_name(schema, message, info),
+      enum?: info.type == :TYPE_ENUM,
+      message_type: message_type(info)
+    }
+  end
+
+  @spec required_fields(schema, message_ref) :: [PB.Schema.Compiled.field_name()]
+  def required_fields(schema, message) do
+    {:ok, msg} = fetch_message_info(schema, message)
+    for {field, %{presence: :required}} <- msg.fields_by_name, do: field
+  end
+
+  defp oneof_name(schema, message, %{presence: :oneof, oneof_index: index}) do
+    {:ok, msg} = fetch_message_info(schema, message)
+
+    case msg.oneofs[index] do
+      %{name: name} -> name
+      _other -> nil
+    end
+  end
+
+  defp oneof_name(_schema, _message, _info), do: nil
+
+  defp message_type(%{type: type, type_name: type_name}) when Field.message_type?(type),
+    do: Atom.to_string(type_name)
+
+  defp message_type(_info), do: nil
 
   defp fetch_message_info(%{messages: messages}, message), do: Map.fetch(messages, message)
   defp fetch_enum_info(%{enums: enums}, enum), do: Map.fetch(enums, enum)

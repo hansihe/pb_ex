@@ -31,12 +31,6 @@ defmodule PB.CEL.Runtime.NoMessageSchema do
   def known_enum?(_provider, _name), do: false
 
   @impl true
-  def fetch_message(_provider, _name), do: :error
-
-  @impl true
-  def fetch_enum(_provider, _name), do: :error
-
-  @impl true
   def resolve_message(_provider, _name), do: :error
 
   @impl true
@@ -46,14 +40,22 @@ defmodule PB.CEL.Runtime.NoMessageSchema do
   def enum_value(_provider, _name), do: :unknown_enum
 
   @impl true
+  def enum_number(_provider, _enum, _name), do: :error
+
+  @impl true
   def field(_provider, _message, _field), do: :unknown_message
 
   @impl true
   def extension(_provider, _message, _extension), do: :unknown_message
 
   @impl true
-  def field_info_ref(_provider, _field_ref), do: :error
+  def field_type(_provider, _field), do: {:error, "no schema provider configured"}
+
+  # Unreachable: with no messages there are no fields to describe.
+  @impl true
+  def literal_field(_provider, _message, _field),
+    do: %{cardinality: :singular, oneof_name: nil, enum?: false, message_type: nil}
 
   @impl true
-  def field_type(_provider, _field), do: {:error, "no schema provider configured"}
+  def required_fields(_provider, _message), do: []
 end

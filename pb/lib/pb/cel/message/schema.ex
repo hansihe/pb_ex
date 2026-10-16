@@ -14,11 +14,19 @@ defmodule PB.CEL.Message.Schema do
           %{required(:message) => atom(), required(:field) => atom()}
           | %{required(:message) => atom(), required(:extension) => atom()}
 
+  # What checking a message literal needs to know about one of its fields:
+  # whether it is singular, repeated, a map or in a oneof (and which), whether it
+  # holds an enum, and the full name of the message it holds, if any.
+  @type literal_field :: %{
+          required(:cardinality) => :singular | :repeated | :map | :oneof,
+          required(:oneof_name) => atom() | nil,
+          required(:enum?) => boolean(),
+          required(:message_type) => String.t() | nil
+        }
+
   @callback normalize(term()) :: provider()
   @callback known_message?(provider(), atom() | String.t()) :: boolean()
   @callback known_enum?(provider(), atom() | String.t()) :: boolean()
-  @callback fetch_message(provider(), atom() | String.t()) :: {:ok, map()} | :error
-  @callback fetch_enum(provider(), atom() | String.t()) :: {:ok, map()} | :error
   @callback resolve_message(provider(), atom() | String.t()) :: {:ok, atom()} | :error
   @callback resolve_enum(provider(), atom() | String.t()) :: {:ok, atom()} | :error
   @callback enum_value(provider(), String.t()) ::
@@ -30,6 +38,7 @@ defmodule PB.CEL.Message.Schema do
                }}
               | :unknown_enum
               | :unknown_value
+  @callback enum_number(provider(), atom(), String.t()) :: {:ok, integer()} | :error
   @callback field(provider(), atom() | String.t(), atom() | String.t()) ::
               {:ok,
                %{
@@ -48,6 +57,9 @@ defmodule PB.CEL.Message.Schema do
                }}
               | :unknown_message
               | :unknown_extension
-  @callback field_info_ref(provider(), field_ref()) :: {:ok, map()} | :error
+  # `field/3` and `extension/3` return a field's `:info` for the provider's
+  # own use; CEL reads it only through the provider.
   @callback field_type(provider(), map()) :: {:ok, PB.CEL.ProtoType.t()} | {:error, String.t()}
+  @callback literal_field(provider(), atom(), map()) :: literal_field()
+  @callback required_fields(provider(), atom()) :: [atom()]
 end

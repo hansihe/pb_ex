@@ -21,12 +21,9 @@ defmodule PB.CEL.Checker do
   alias PB.CEL.Proto
   alias PB.CEL.Runtime.Convert, as: RuntimeConvert
   alias PB.CEL.Runtime.Core, as: RuntimeCore
-  alias PB.CEL.Schema.Field
   alias PB.CEL.Syntax.Source
   alias PB.CEL.Value
   alias PB.CEL.WellKnownTypes
-
-  require Field
 
   defmodule State do
     @moduledoc false
@@ -736,18 +733,21 @@ defmodule PB.CEL.Checker do
 
     case message_schema.resolve_message(state.env.schema, message_name) do
       {:ok, message} ->
-        with {:ok, msg} <- message_schema.fetch_message(state.env.schema, message),
-             {:ok, fields, state} <-
+        with {:ok, fields, state} <-
                checked_message_literal_fields(
                  message_schema,
                  state.env.schema,
                  message,
-                 msg,
                  entries,
                  value_types,
                  state
                ),
-             :ok <- validate_required_literal_fields(expr, msg, fields) do
+             :ok <-
+               validate_required_literal_fields(
+                 expr,
+                 message_schema.required_fields(state.env.schema, message),
+                 fields
+               ) do
           {:ok, {:message_literal, %{message: message, wkt_unwrap?: true, fields: fields}}, state}
         end
 
@@ -766,7 +766,6 @@ defmodule PB.CEL.Checker do
          message_schema,
          schema,
          message,
-         msg,
          entries,
          value_types,
          state
@@ -778,10 +777,12 @@ defmodule PB.CEL.Checker do
       {:ok, fields, state} ->
         case message_schema.field(schema, message, field) do
           {:ok, %{message: message, field: field_ref_name, info: info}} ->
+            literal = message_schema.literal_field(schema, message, info)
+
             with {:ok, field_type} <- message_schema.field_type(schema, info),
                  {:ok, state} <-
                    expect_message_literal_field_assignable(
-                     info,
+                     literal,
                      CType.from_cel(field_type),
                      type,
                      state,
@@ -794,12 +795,12 @@ defmodule PB.CEL.Checker do
                   field_ref: %{message: message, field: field_ref_name},
                   value_id: value_id,
                   optional?: Map.get(entry, :optional_entry, false),
-                  assignment: message_field_assignment(info, entry, value),
-                  cardinality: message_literal_field_cardinality(info)
+                  assignment: message_field_assignment(literal, entry, value),
+                  cardinality: literal.cardinality
                 }
-                |> maybe_put_oneof_name(msg, info)
+                |> maybe_put_oneof_name(literal)
 
-              state = maybe_preserve_message_literal_identity(state, info, value)
+              state = maybe_preserve_message_literal_identity(state, literal, value)
 
               {:cont, {:ok, [field | fields], state}}
             else
@@ -826,8 +827,8 @@ defmodule PB.CEL.Checker do
     end
   end
 
-  defp expect_message_literal_field_assignable(info, expected, actual, state, expr, field) do
-    case message_literal_enum_int_assignable(info, expected, actual, state) do
+  defp expect_message_literal_field_assignable(literal, expected, actual, state, expr, field) do
+    case message_literal_enum_int_assignable(literal, expected, actual, state) do
       {:ok, state} ->
         {:ok, state}
 
@@ -842,11 +843,11 @@ defmodule PB.CEL.Checker do
     end
   end
 
-  defp message_literal_enum_int_assignable(%{type: :TYPE_ENUM}, _expected, :int, state) do
+  defp message_literal_enum_int_assignable(%{enum?: true}, _expected, :int, state) do
     {:ok, state}
   end
 
-  defp message_literal_enum_int_assignable(_info, _expected, _actual, _state), do: :error
+  defp message_literal_enum_int_assignable(_literal, _expected, _actual, _state), do: :error
 
   defp unchecked_message_literal_fields(entries) do
     entries
@@ -866,10 +867,10 @@ defmodule PB.CEL.Checker do
     end)
   end
 
-  defp message_field_assignment(info, entry, value) do
+  defp message_field_assignment(literal, entry, value) do
     if not Map.get(entry, :optional_entry, false) and
          message_literal_expr?(value) and
-         any_field?(info) do
+         any_field?(literal) do
       :raw_message_literal
     else
       :eval
@@ -882,27 +883,21 @@ defmodule PB.CEL.Checker do
 
   defp message_literal_expr?(_expr), do: false
 
-  defp maybe_preserve_message_literal_identity(state, info, value) do
-    if message_literal_expr?(value) and preserve_message_identity_field?(state.env, info, value) do
+  defp maybe_preserve_message_literal_identity(state, literal, value) do
+    if message_literal_expr?(value) and
+         preserve_message_identity_field?(state.env, literal, value) do
       put_message_literal_wkt_unwrap(state, value.id, false)
     else
       state
     end
   end
 
-  defp preserve_message_identity_field?(
-         env,
-         %{type: type, type_name: type_name},
-         value
-       )
-       when Field.message_type?(type) do
-    source_name = message_literal_name(value, env)
+  defp preserve_message_identity_field?(_env, %{message_type: nil}, _value), do: false
 
-    type_name in [:"google.protobuf.Any", :"google.protobuf.Value"] or
-      source_name == Atom.to_string(type_name)
+  defp preserve_message_identity_field?(env, %{message_type: message_type}, value) do
+    message_type in ["google.protobuf.Any", "google.protobuf.Value"] or
+      message_literal_name(value, env) == message_type
   end
-
-  defp preserve_message_identity_field?(_env, _info, _value), do: false
 
   defp message_literal_name(
          %{expr_kind: {:struct_expr, %{message_name: message_name}}},
@@ -927,34 +922,20 @@ defmodule PB.CEL.Checker do
     end
   end
 
-  defp any_field?(%{cardinality: :singular, type: type, type_name: :"google.protobuf.Any"}) do
-    Field.message_type?(type)
-  end
+  defp any_field?(%{cardinality: cardinality, message_type: "google.protobuf.Any"}),
+    do: cardinality in [:singular, :oneof]
 
-  defp any_field?(_info), do: false
+  defp any_field?(_literal), do: false
 
-  defp message_literal_field_cardinality(%{presence: :oneof}), do: :oneof
-  defp message_literal_field_cardinality(%{cardinality: cardinality}), do: cardinality
+  defp maybe_put_oneof_name(field, %{oneof_name: nil}), do: field
+  defp maybe_put_oneof_name(field, %{oneof_name: name}), do: Map.put(field, :oneof_name, name)
 
-  defp maybe_put_oneof_name(field, msg, %{presence: :oneof, oneof_index: index}) do
-    case msg.oneofs[index] do
-      %{name: name} -> Map.put(field, :oneof_name, name)
-      _other -> field
-    end
-  end
-
-  defp maybe_put_oneof_name(field, _msg, _info), do: field
-
-  defp validate_required_literal_fields(expr, msg, fields) do
+  defp validate_required_literal_fields(expr, required, fields) do
     present = MapSet.new(fields, & &1.field)
 
-    msg.fields_by_name
-    |> Enum.find(fn {field, info} ->
-      info.presence == :required and not MapSet.member?(present, field)
-    end)
-    |> case do
+    case Enum.find(required, &(not MapSet.member?(present, &1))) do
       nil -> :ok
-      {field, _info} -> error(expr, "missing required field #{inspect(Atom.to_string(field))}")
+      field -> error(expr, "missing required field #{inspect(Atom.to_string(field))}")
     end
   end
 
