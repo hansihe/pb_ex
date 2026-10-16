@@ -21,10 +21,10 @@ defmodule PB.CEL.ProtoCodec do
     value: :"cel.expr.Value"
   ]
 
-  # Reference the bundled main schema directly (it already contains the
-  # cel.expr.* closure) instead of embedding a sliced copy. `PB.encode/decode`
-  # resolve the module to its embedded compiled schema (O(1)).
-  @schema PB.Schema.Main
+  # Reference the bundled schema of the cel.expr.* protos directly instead of
+  # embedding a sliced copy. `PB.encode/decode` resolve the module to its
+  # embedded compiled schema (O(1)).
+  @schema PB.CEL.BundledSchema
 
   for {name, root} <- @roots do
     encode = :"encode_#{name}"

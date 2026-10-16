@@ -275,8 +275,9 @@ defmodule PB.Validate.Schema do
   compiled for validation.
 
   The data holds the merged standard-rule schema (`with_standard_rule_schema/1`),
-  a pure function of the compiled schema that merges all of `PB.Schema.Main` and
-  re-runs `PB.Schema.Prepare.prepare/1` over the result. Predefined-rule CEL
+  a pure function of the compiled schema that merges all of
+  `PB.Validate.BundledSchema` and re-runs `PB.Schema.Prepare.prepare/1` over the
+  result. Predefined-rule CEL
   evaluation needs it on every op, so without precomputation `PB.Validate`
   rebuilds the whole schema per CEL op (scaling with schema size, not message
   size). It is only built when the schema has CEL ops that bind extra variables
@@ -353,32 +354,34 @@ defmodule PB.Validate.Schema do
 
   defp any_vars_op?(ops), do: Enum.any?(ops, fn op -> map_size(op.vars) > 0 end)
 
-  # Merges PB.Schema.Main (buf.validate + descriptor.proto + well-known types)
-  # into the user schema so predefined-rule CEL can type-check, then prepares the
-  # result. The compiler builds this once per pass via `PB.Validate.Compiler.Context`
-  # and `PB.Validate.compile/2` caches it on the schema (see
-  # `attach_standard_rule_schema/1`), so this is no longer recomputed per rule.
+  # Merges PB.Validate.BundledSchema (buf.validate + descriptor.proto +
+  # well-known types) into the user schema so predefined-rule CEL can
+  # type-check, then prepares the result. The compiler builds this once per pass
+  # via `PB.Validate.Compiler.Context` and `PB.Validate.compile/2` caches it on
+  # the schema (see `attach_standard_rule_schema/1`), so this is no longer
+  # recomputed per rule.
   defp with_standard_rule_schema(schema) when is_map(schema) do
-    main = PB.Schema.Main.schema()
-    main = Map.put(main, :messages, standard_messages(main.messages))
+    bundled = PB.Validate.BundledSchema.schema()
+    bundled = Map.put(bundled, :messages, standard_messages(bundled.messages))
 
     extensions_by_name =
       Map.merge(
         Map.fetch!(schema, :extensions_by_name),
-        Map.fetch!(main, :extensions_by_name)
+        Map.fetch!(bundled, :extensions_by_name)
       )
 
     schema
-    |> Map.put(:messages, merge_standard_messages(schema.messages, main.messages))
-    |> Map.put(:enums, Map.merge(schema.enums, main.enums))
+    |> Map.put(:messages, merge_standard_messages(schema.messages, bundled.messages))
+    |> Map.put(:enums, Map.merge(schema.enums, bundled.enums))
     |> Map.put(:extensions_by_name, extensions_by_name)
     |> attach_extensions_to_messages(extensions_by_name)
     |> Prepare.prepare()
   end
 
-  # PB.Schema.Main is compiled without plugins, so the canonical CEL of its
-  # standard rule fields (`buf.validate.predefined` on, say, `StringRules.email`)
-  # is read from their options here, as the compiler does for user fields.
+  # PB.Validate.BundledSchema is compiled without plugins, so the canonical CEL
+  # of its standard rule fields (`buf.validate.predefined` on, say,
+  # `StringRules.email`) is read from their options here, as the compiler does
+  # for user fields.
   defp standard_messages(messages) do
     Map.new(messages, fn {fqn, message} ->
       fields_by_name =

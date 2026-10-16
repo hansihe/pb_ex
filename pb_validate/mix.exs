@@ -46,7 +46,7 @@ defmodule PBValidate.MixProject do
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README*"],
+      files: ["lib", "priv", "mix.exs", "README*"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
     ]

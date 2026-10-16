@@ -21,32 +21,29 @@ defmodule PB.ProtovalidateProbeTest do
     {file, msg, field}
   end
 
-  test "decode_descriptor_set/1 materializes buf.validate.field as an extension",
+  test "decode_descriptor_set/1 leaves buf.validate.field an unknown field",
        %{binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
     {_file, _msg, field} = locate_probe_field(descriptor_set)
     options = field.options
 
-    assert is_map(options[@extensions]),
-           "expected extension map on FieldOptions for the default decode path"
+    refute Map.has_key?(options, @extensions),
+           "pb's bundled schema should know no buf.validate extensions"
 
-    assert field_rules = options[@extensions][@field_extension],
-           "expected buf.validate.field to be decoded into the extension map"
-
-    assert %{type: {:string, %{min_len: 3}}} = field_rules
+    assert [%PB.UnknownField{number: 1159}] = options[PB.UnknownField.key()]
   end
 
-  test "bootstrap-descriptor decode path materializes bundled extensions",
+  test "the bundled validate schema decodes buf.validate.field as an extension",
        %{binpb: binpb} do
     {:ok, descriptor_set} =
-      PB.__decode_descriptor_set_with_schema__(binpb, PB.Bootstrap.descriptor_schema())
+      PB.__decode_descriptor_set_with_schema__(binpb, PB.Validate.BundledSchema)
 
     {_file, _msg, field} = locate_probe_field(descriptor_set)
     options = field.options
 
     assert is_map(options[@extensions]),
-           "expected extension map on FieldOptions for the bootstrap decode path"
+           "expected extension map on FieldOptions for the bundled schema decode path"
 
     assert field_rules = options[@extensions][@field_extension],
            "expected buf.validate.field to be decoded into the extension map"

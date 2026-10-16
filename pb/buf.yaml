@@ -3,6 +3,4 @@ modules:
   - path: .
 deps:
   - buf.build/protocolbuffers/wellknowntypes
-  - buf.build/bufbuild/protovalidate
-  - buf.build/bufbuild/protovalidate-testing
   - buf.build/google/cel-spec

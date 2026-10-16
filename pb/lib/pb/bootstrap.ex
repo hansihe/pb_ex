@@ -7,9 +7,9 @@ defmodule PB.Bootstrap do
   #
   # At compile time we use this to decode priv/bootstrap.binpb, then compile
   # that into a richer decode schema. We decode bootstrap.binpb once more with
-  # the richer schema so bundled extensions such as buf.validate.* are visible
-  # to the schema embedded as a module attribute. That schema can then decode
-  # normal FileDescriptorSet values with typed bundled extensions.
+  # the richer schema so any bundled extensions are visible to the schema
+  # embedded as a module attribute. That schema can then decode normal
+  # FileDescriptorSet values with typed bundled extensions.
 
   @minimal_schema (
                     f = fn fields, opts ->

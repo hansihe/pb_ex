@@ -163,12 +163,12 @@ defmodule PB do
   Decodes a binary `FileDescriptorSet` (as produced by `protoc --descriptor_set_out`)
   and returns a decoded descriptor set suitable for `compile/1`.
 
-  Uses PB's bundled main schema, which knows about the well-known types, the CEL
-  `cel.expr` descriptors, and the `buf.validate` extensions. Extensions defined
-  in those protos (notably `buf.validate.field`, `buf.validate.message`,
-  `buf.validate.oneof`) are therefore materialized into the decoded options
-  under the `:__extensions__` map key rather than dropped to unknown-field
-  bytes.
+  Uses PB's bundled main schema, which knows `descriptor.proto` and the
+  well-known types. Custom options, which are extensions of the descriptor
+  options messages, stay unknown fields in the decoded options; `compile/2`
+  decodes those whose extensions the descriptor set defines, such as the
+  `buf.validate` rules of a set built with `--include_imports`, into the
+  options' `:__extensions__` map.
   """
   @spec decode_descriptor_set(binary) :: {:ok, descriptor_set} | {:error, error}
   def decode_descriptor_set(binary) do

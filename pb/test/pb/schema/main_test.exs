@@ -3,9 +3,6 @@ defmodule PB.Schema.MainTest do
 
   alias PB.Schema.Main
 
-  @extensions :__extensions__
-  @predefined :"buf.validate.predefined"
-
   test "embeds the bundled main descriptor set as a normal schema provider" do
     schema = Main.schema()
 
@@ -14,8 +11,8 @@ defmodule PB.Schema.MainTest do
     assert Map.has_key?(schema.messages, :"google.protobuf.Value")
     assert Map.has_key?(schema.messages, :"google.protobuf.ListValue")
     assert Map.has_key?(schema.messages, :"google.protobuf.Struct")
-    assert Map.has_key?(schema.messages, :"buf.validate.FieldRules")
-    assert Map.has_key?(schema.enums, :"buf.validate.KnownRegex")
+    assert Map.has_key?(schema.messages, :"google.protobuf.Timestamp")
+    assert Map.has_key?(schema.messages, :"google.protobuf.Duration")
   end
 
   test "decodes the bundled main descriptor set through its schema wrapper" do
@@ -28,30 +25,7 @@ defmodule PB.Schema.MainTest do
     assert MapSet.member?(file_names, "google/protobuf/descriptor.proto")
     assert MapSet.member?(file_names, "google/protobuf/struct.proto")
     assert MapSet.member?(file_names, "google/protobuf/wrappers.proto")
-    assert MapSet.member?(file_names, "buf/validate/validate.proto")
+    assert MapSet.member?(file_names, "google/protobuf/timestamp.proto")
     assert MapSet.member?(file_names, "proto/main.proto")
-  end
-
-  test "bootstrap descriptor schema decodes bundled validate predefined rules" do
-    descriptor_set =
-      "priv/main.binpb"
-      |> File.read!()
-      |> PB.__decode_descriptor_set_with_schema__!(PB.Bootstrap.descriptor_schema())
-
-    validate_file = Enum.find(descriptor_set.file, &(&1.name == "buf/validate/validate.proto"))
-    string_rules = Enum.find(validate_file.message_type, &(&1.name == "StringRules"))
-    email = Enum.find(string_rules.field, &(&1.name == "email"))
-
-    assert predefined = email.options[@extensions][@predefined]
-    assert Enum.map(predefined.cel, & &1.id) == ["string.email", "string.email_empty"]
-  end
-
-  test "compiled main schema keeps the predefined rule options and runs no plugins" do
-    schema = Main.schema()
-    email = get_in(schema, [:messages, :"buf.validate.StringRules", :fields_by_name, :email])
-
-    assert schema.plugins == []
-    assert %{cel: [%{id: "string.email"}, %{id: "string.email_empty"}]} =
-             email.options[@extensions][@predefined]
   end
 end

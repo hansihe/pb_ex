@@ -9,8 +9,6 @@ import "cel/expr/conformance/proto2/test_all_types_extensions.proto";
 import "cel/expr/conformance/proto3/test_all_types.proto";
 import "cel/expr/conformance/test/simple.proto";
 import "cel/expr/conformance/test/suite.proto";
-import "buf/validate/conformance/harness/harness.proto";
-import "buf/validate/conformance/harness/results.proto";
 import "test/fixtures/protobuf_conformance/proto/conformance/conformance.proto";
 import "test/fixtures/protobuf_conformance/proto/google/protobuf/test_messages_edition2023.proto";
 import "test/fixtures/protobuf_conformance/proto/google/protobuf/test_messages_proto2.proto";
