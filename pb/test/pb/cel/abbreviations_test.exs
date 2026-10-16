@@ -9,7 +9,8 @@ defmodule CEL.AbbreviationsTest do
 
   @proto3 "cel.expr.conformance.proto3"
 
-  defp env(opts), do: Env.build(Keyword.put_new(opts, :schema, PB.TestSupport.TestSchema))
+  defp env(opts),
+    do: Env.build(Keyword.put_new(opts, :types, PB.CEL.types(PB.TestSupport.TestSchema)))
 
   defp resolved_name(source, env) do
     %Ident{name: name} = source |> CEL.check!(env) |> Checked.expr()
@@ -96,8 +97,8 @@ defmodule CEL.AbbreviationsTest do
 
         checked = CEL.check!("GlobalEnum.GAZ", env)
         assert %Ident{scope: :enum, name: "#{@proto3}.GlobalEnum.GAZ"} = Checked.expr(checked)
-        assert Checked.type(checked) == {:enum, "#{@proto3}.GlobalEnum"}
-        assert CEL.eval!("GlobalEnum.GAZ", %{}, env) == {:enum, "#{@proto3}.GlobalEnum", 2}
+        assert Checked.type(checked) == {:enum, :"#{@proto3}.GlobalEnum"}
+        assert CEL.eval!("GlobalEnum.GAZ", %{}, env) == {:enum, :"#{@proto3}.GlobalEnum", 2}
 
         assert resolved_name("GlobalEnum", env) == "#{@proto3}.GlobalEnum"
         assert CEL.eval!("GlobalEnum(2) == GlobalEnum.GAZ", %{}, env) == {:bool, true}
@@ -116,13 +117,13 @@ defmodule CEL.AbbreviationsTest do
                {:int, 3}
 
       assert CEL.eval!("proto3.TestAllTypes.NestedEnum.BAR", %{}, env) ==
-               {:enum, "#{@proto3}.TestAllTypes.NestedEnum", 1}
+               {:enum, :"#{@proto3}.TestAllTypes.NestedEnum", 1}
     end
 
     test "an abbreviated message literal" do
       env = env(abbreviations: ["#{@proto3}.TestAllTypes"])
 
-      assert %CEL.Expr.MessageLiteral{message: "#{@proto3}.TestAllTypes"} =
+      assert %CEL.Expr.MessageLiteral{message: :"cel.expr.conformance.proto3.TestAllTypes"} =
                "TestAllTypes{}" |> CEL.check!(env) |> Checked.expr()
     end
   end

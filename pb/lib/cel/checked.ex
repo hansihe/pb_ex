@@ -97,8 +97,8 @@ defmodule CEL.Checked do
              required(:receiver_id) => expr_id,
              required(:test_only) => boolean(),
              optional(:name) => String.t(),
-             optional(:message) => atom | String.t(),
-             optional(:field_ref) => CEL.Message.Schema.field_ref(),
+             optional(:message) => CEL.TypeProvider.name(),
+             optional(:cel_field) => CEL.Field.t(),
              optional(:overload_id) => String.t()
            }}
 
@@ -125,7 +125,7 @@ defmodule CEL.Checked do
              optional(:eval_context) => [Function.eval_context()],
              optional(:var) => String.t(),
              optional(:var_id) => expr_id,
-             optional(:enum) => String.t()
+             optional(:enum) => CEL.TypeProvider.name()
            }}
 
   @typedoc false
@@ -156,22 +156,18 @@ defmodule CEL.Checked do
            }}
 
   @typedoc false
-  @type message_literal_field_cardinality :: :singular | :repeated | :map | :oneof
-  @typedoc false
   @type message_literal_field :: %{
-          required(:field) => atom() | String.t(),
+          required(:field) => String.t(),
           required(:value_id) => expr_id,
           required(:optional?) => boolean(),
-          optional(:field_ref) => CEL.Message.Schema.field_ref(),
-          optional(:cardinality) => message_literal_field_cardinality(),
-          optional(:oneof_name) => atom()
+          optional(:cel_field) => CEL.Field.t()
         }
 
   @typedoc false
   @type message_literal_op ::
           {:message_literal,
            %{
-             required(:message) => atom() | String.t(),
+             required(:message) => CEL.TypeProvider.name(),
              required(:fields) => [message_literal_field()]
            }}
 
@@ -278,7 +274,7 @@ defmodule CEL.Checked do
   def proto_type(%__MODULE__{} = checked, %{id: id}), do: proto_type(checked, id)
 
   def proto_type(%__MODULE__{types: types}, id) when is_integer(id),
-    do: types |> Map.fetch!(id) |> CType.to_cel()
+    do: types |> Map.fetch!(id) |> CType.to_cel() |> ProtoType.to_proto()
 
   @doc false
   @spec ref(t, Proto.expr() | expr_id) :: ref | nil
@@ -348,7 +344,7 @@ defmodule CEL.Checked do
   end
 
   defp proto_types(types) do
-    Map.new(types, fn {id, type} -> {id, CType.to_cel(type)} end)
+    Map.new(types, fn {id, type} -> {id, type |> CType.to_cel() |> ProtoType.to_proto()} end)
   end
 
   defp reference({:ident, %{name: name} = op}) do
@@ -365,7 +361,7 @@ defmodule CEL.Checked do
   end
 
   defp reference({:special, %{kind: :enum_constructor, enum: enum, overload_id: overload_id}}) do
-    %{name: enum, overload_id: List.wrap(overload_id)}
+    %{name: to_string(enum), overload_id: List.wrap(overload_id)}
   end
 
   defp reference({:special, %{name: name, overload_id: overload_id}}) do
@@ -376,19 +372,17 @@ defmodule CEL.Checked do
     %{name: field, overload_id: List.wrap(overload_id)}
   end
 
-  defp reference({:message_literal, %{message: message}}) when is_atom(message) do
-    %{name: Atom.to_string(message), overload_id: []}
-  end
-
   defp reference({:message_literal, %{message: message}}) do
-    %{name: message, overload_id: []}
+    %{name: to_string(message), overload_id: []}
   end
 
   defp reference(_op), do: nil
 
   # The value an enum or type name stands for, as a `cel.expr.Value`.
-  defp maybe_put_value(reference, %{kind: :enum_value, value: {:enum, type, number}}),
-    do: Map.put(reference, :value, %{kind: {:enum_value, %{type: type, value: number}}})
+  defp maybe_put_value(reference, %{kind: :enum_value, value: {:enum, type, number}}) do
+    value = %{kind: {:enum_value, %{type: to_string(type), value: number}}}
+    Map.put(reference, :value, value)
+  end
 
   defp maybe_put_value(reference, %{kind: :type, denotation: denotation}),
     do: Map.put(reference, :value, %{kind: {:type_value, Value.type_name({:type, denotation})}})

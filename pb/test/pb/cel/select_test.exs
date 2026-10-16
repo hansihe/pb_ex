@@ -5,7 +5,7 @@ defmodule CEL.SelectTest do
 
   defp env do
     CEL.Env.build(
-      schema: PB.TestSupport.TestSchema,
+      types: PB.CEL.types(PB.TestSupport.TestSchema),
       vars: [msg: {:message, @msg}, req: {:map, :string, :dyn}]
     )
   end

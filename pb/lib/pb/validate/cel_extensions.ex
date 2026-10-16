@@ -100,7 +100,7 @@ defmodule PB.Validate.CELExtensions do
           args: [:message, :string],
           result: :dyn,
           eval: {:mfa, {Rules, :get_field}},
-          eval_context: [:schema]
+          eval_context: [:types]
         }
       ],
       dynamic_overloads: [
@@ -109,7 +109,7 @@ defmodule PB.Validate.CELExtensions do
           args: [:any, :any],
           result: :dyn,
           eval: {:mfa, {Rules, :get_field}},
-          eval_context: [:schema]
+          eval_context: [:types]
         }
       ]
     }
@@ -125,7 +125,7 @@ defmodule PB.Validate.CELExtensions do
           args: [:list],
           result: :bool,
           eval: {:mfa, {Rules, :unique}},
-          eval_context: [:schema]
+          eval_context: [:types]
         }
       ],
       dynamic_overloads: [
@@ -134,7 +134,7 @@ defmodule PB.Validate.CELExtensions do
           args: [:any],
           result: :bool,
           eval: {:mfa, {Rules, :unique}},
-          eval_context: [:schema]
+          eval_context: [:types]
         }
       ]
     }

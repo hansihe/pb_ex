@@ -167,14 +167,13 @@ defmodule CEL.ValueTest do
       assert Value.to_native(Value.double(:negative_infinity)) == :negative_infinity
     end
 
-    test "recurses into lists, maps, and messages" do
+    test "recurses into lists and maps, and gives a message's payload" do
       assert Value.to_native(Value.list([Value.int(1), Value.string("a")])) == [1, "a"]
 
       assert Value.to_native(Value.map(%{Value.string("k") => Value.bool(true)})) ==
                %{"k" => true}
 
-      assert Value.to_native({:message, "my.Msg", %{a: Value.int(1), b: Value.string("x")}}) ==
-               %{a: 1, b: "x"}
+      assert Value.to_native({:message, :"my.Msg", %{a: 1, b: "x"}}) == %{a: 1, b: "x"}
     end
 
     test "unwraps optionals" do
@@ -221,7 +220,7 @@ defmodule CEL.ValueTest do
     test "gives a message's or enum's full name" do
       env =
         CEL.Env.build(
-          schema: PB.TestSupport.TestSchema,
+          types: PB.CEL.types(PB.TestSupport.TestSchema),
           container: "cel.expr.conformance.proto3"
         )
 

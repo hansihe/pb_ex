@@ -1,16 +1,12 @@
 defmodule PB.Validate.CELExtensions.Rules do
   @moduledoc false
 
-  alias PB.CEL.FieldReader
-  alias PB.CEL.MessageSchema, as: Schema
-
   @type result :: {:ok, CEL.Value.t()} | {:error, String.t()}
 
-  @spec get_field([CEL.Value.t()], PB.schema()) :: result
-  def get_field([{:message, message, fields}, {:string, field}], schema) do
-    with {:ok, msg} <- Schema.fetch_message(schema, message),
-         {:ok, field_name, info} <- fetch_field(msg, field),
-         {:ok, value} <- FieldReader.read(schema, msg, fields, field_name, info) do
+  @spec get_field([CEL.Value.t()], CEL.TypeProvider.t()) :: result
+  def get_field([{:message, message, payload}, {:string, field}], {types, state}) do
+    with {:ok, field} <- types.find_field(state, message, field),
+         {:ok, value} <- types.get_field(state, payload, field) do
       {:ok, value}
     else
       :error -> {:error, "no such field #{inspect(field)}"}
@@ -18,29 +14,23 @@ defmodule PB.Validate.CELExtensions.Rules do
     end
   end
 
-  def get_field(_values, _schema), do: {:error, "no such overload"}
+  def get_field(_values, _types), do: {:error, "no such overload"}
 
-  @spec unique([CEL.Value.t()], PB.schema()) :: result
-  def unique([{:list, values}], schema) do
-    {:ok, CEL.Value.bool(unique_values?(values, schema))}
+  @spec unique([CEL.Value.t()], CEL.TypeProvider.t()) :: result
+  def unique([{:list, values}], types) do
+    {:ok, CEL.Value.bool(unique_values?(values, types))}
   end
 
-  def unique(_values, _schema), do: {:error, "no such overload"}
+  def unique(_values, _types), do: {:error, "no such overload"}
 
-  defp fetch_field(%{fields_by_name: fields}, field) do
-    Enum.find_value(fields, :error, fn {name, info} ->
-      if Atom.to_string(name) == field, do: {:ok, name, info}
-    end)
-  end
+  defp unique_values?([], _types), do: true
 
-  defp unique_values?([], _schema), do: true
+  defp unique_values?([value | rest], types),
+    do: unique_value?(value, rest, types) and unique_values?(rest, types)
 
-  defp unique_values?([value | rest], schema),
-    do: unique_value?(value, rest, schema) and unique_values?(rest, schema)
-
-  defp unique_value?(value, rest, schema) do
+  defp unique_value?(value, rest, types) do
     Enum.all?(rest, fn candidate ->
-      not CEL.Runtime.Core.equal?(value, candidate, schema)
+      not CEL.Runtime.Core.equal?(value, candidate, types)
     end)
   end
 end

@@ -50,14 +50,14 @@ defmodule CEL.Library.Intrinsics do
                                args: [:dyn, :any],
                                result: :bool,
                                eval: {:mfa, {RuntimeCore, runtime}},
-                               eval_context: [:schema, :message_runtime]
+                               eval_context: [:types]
                              },
                              %Overload{
                                id: id <> "_dyn",
                                args: [:any, :dyn],
                                result: :bool,
                                eval: {:mfa, {RuntimeCore, runtime}},
-                               eval_context: [:schema, :message_runtime]
+                               eval_context: [:types]
                              }
                            ],
                            overloads: [
@@ -66,35 +66,35 @@ defmodule CEL.Library.Intrinsics do
                                args: [:null, :any],
                                result: :bool,
                                eval: {:mfa, {RuntimeCore, runtime}},
-                               eval_context: [:schema, :message_runtime]
+                               eval_context: [:types]
                              },
                              %Overload{
                                id: id,
                                args: [:any, :null],
                                result: :bool,
                                eval: {:mfa, {RuntimeCore, runtime}},
-                               eval_context: [:schema, :message_runtime]
+                               eval_context: [:types]
                              },
                              %Overload{
                                id: id,
                                args: [{:type, :any}, {:type, :any}],
                                result: :bool,
                                eval: {:mfa, {RuntimeCore, runtime}},
-                               eval_context: [:schema, :message_runtime]
+                               eval_context: [:types]
                              },
                              %Overload{
                                id: id,
                                args: [optional(:any), optional(:any)],
                                result: :bool,
                                eval: {:mfa, {RuntimeCore, runtime}},
-                               eval_context: [:schema, :message_runtime]
+                               eval_context: [:types]
                              },
                              %Overload{
                                id: id,
                                args: [@a, @a],
                                result: :bool,
                                eval: {:mfa, {RuntimeCore, runtime}},
-                               eval_context: [:schema, :message_runtime],
+                               eval_context: [:types],
                                on_dyn: :fallback
                              }
                            ]

@@ -21,7 +21,7 @@ defmodule CEL.ProtoType do
           | :type
           | {:list, input}
           | {:map, input, input}
-          | {:message, String.t()}
+          | {:message, CEL.TypeProvider.name()}
           | {:optional, input}
 
   @primitive_types %{
@@ -33,8 +33,11 @@ defmodule CEL.ProtoType do
     bytes: :BYTES
   }
 
-  @type_names Map.keys(@primitive_types) ++
-                [:dyn, :null, :null_type, :type, :list, :map, :optional_type]
+  @type_names Map.new(
+                Map.keys(@primitive_types) ++
+                  [:dyn, :null, :null_type, :type, :list, :map, :optional_type],
+                &{Atom.to_string(&1), &1}
+              )
 
   @spec dyn() :: t
   def dyn, do: oneof(:dyn, %{})
@@ -88,8 +91,9 @@ defmodule CEL.ProtoType do
     oneof(:map_type, %{key_type: key_type, value_type: value_type})
   end
 
-  @spec message(String.t()) :: t
-  def message(name) when is_binary(name), do: oneof(:message_type, name)
+  # A message or enum type, by its provider's name or a well-known type's.
+  @spec message(CEL.TypeProvider.name()) :: t
+  def message(name) when is_atom(name) or is_binary(name), do: oneof(:message_type, name)
 
   @spec optional(t) :: t
   def optional(value_type), do: abstract("optional_type", [value_type])
@@ -112,7 +116,7 @@ defmodule CEL.ProtoType do
   def coerce(:type), do: type()
   def coerce({:list, elem_type}), do: list(coerce(elem_type))
   def coerce({:map, key_type, value_type}), do: map(coerce(key_type), coerce(value_type))
-  def coerce({:message, name}) when is_binary(name), do: message(name)
+  def coerce({:message, name}) when is_atom(name) or is_binary(name), do: message(name)
   def coerce({:optional, value_type}), do: optional(coerce(value_type))
 
   @spec denotation(String.t()) :: {:ok, t} | :error
@@ -122,14 +126,29 @@ defmodule CEL.ProtoType do
         {:ok, type}
 
       :error ->
-        case String.to_existing_atom(name) do
-          atom when atom in @type_names -> {:ok, denotation_atom(atom)}
-          _other -> :error
+        case Map.fetch(@type_names, name) do
+          {:ok, atom} -> {:ok, denotation_atom(atom)}
+          :error -> :error
         end
     end
-  rescue
-    ArgumentError -> :error
   end
+
+  @doc """
+  The type as the `cel.expr.Type` message holds it: message and enum names
+  as their full names, whatever form their provider uses.
+  """
+  @spec to_proto(t) :: t
+  def to_proto(%{type_kind: {:message_type, name}}), do: message(to_string(name))
+  def to_proto(%{type_kind: {:type, type}}), do: type(to_proto(type))
+  def to_proto(%{type_kind: {:list_type, %{elem_type: elem}}}), do: list(to_proto(elem))
+
+  def to_proto(%{type_kind: {:map_type, %{key_type: key, value_type: value}}}),
+    do: map(to_proto(key), to_proto(value))
+
+  def to_proto(%{type_kind: {:abstract_type, %{name: name, parameter_types: params}}}),
+    do: abstract(name, Enum.map(params, &to_proto/1))
+
+  def to_proto(type), do: type
 
   defp oneof(kind, value), do: %{type_kind: {kind, value}}
 

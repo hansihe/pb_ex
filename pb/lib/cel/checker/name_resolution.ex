@@ -38,16 +38,28 @@ defmodule CEL.Checker.NameResolution do
     end
   end
 
-  @spec resolve_message_name(String.t(), Env.t()) :: String.t()
+  # The type a message literal names: a well-known type's name, or the
+  # provider's for a message. An unknown one is reported as written when
+  # qualified, otherwise as if in the container.
+  @spec resolve_message_name(String.t(), Env.t()) ::
+          {:ok, CEL.TypeProvider.name()} | {:error, String.t()}
   def resolve_message_name(name, %Env{} = env) when is_binary(name) do
     candidates = candidates(name, env, false)
 
-    Enum.find(candidates, &known_message_name?(env, &1)) ||
-      fallback_message_name(name, candidates)
+    Enum.find_value(candidates, {:error, fallback_message_name(name, candidates)}, fn candidate ->
+      if WellKnownTypes.literal_message?(candidate) do
+        {:ok, candidate}
+      else
+        case Env.find_type(env, candidate) do
+          {:ok, :message, message} -> {:ok, message}
+          _other -> nil
+        end
+      end
+    end)
   end
 
   @spec resolve_enum_call(CEL.Call.t(), Env.t(), [%{String.t() => CType.t()}]) ::
-          {:ok, String.t()} | :error
+          {:ok, CEL.TypeProvider.name()} | :error
   def resolve_enum_call(%CEL.Call{shape: :global, function: name}, %Env{} = env, scopes) do
     resolve_enum_name(name, env, scopes, false)
   end
@@ -110,54 +122,20 @@ defmodule CEL.Checker.NameResolution do
     Enum.any?(scopes, &Map.has_key?(&1, name))
   end
 
+  # CEL's own type names come first; the provider is never asked about them.
   defp resolve_candidate(env, name) do
     case Env.fetch_var(env, name) do
       {:ok, type} ->
         %{kind: :var, name: name, type: type}
 
       :error ->
-        resolve_schema_name(env, name) || resolve_type_denotation(name)
-    end
-  end
-
-  defp resolve_schema_name(env, name) do
-    case schema_enum_value(env, name) do
-      {:ok, enum_value} ->
-        enum_name = Atom.to_string(enum_value.enum)
-
-        %{
-          kind: :enum_value,
-          name: enum_name <> "." <> Atom.to_string(enum_value.value),
-          type: CType.message(enum_name),
-          value: Value.enum(enum_name, enum_value.number)
-        }
-
-      :error ->
-        case schema_type_denotation(env, name) do
-          {:ok, denotation} ->
-            %{
-              kind: :type,
-              name: name,
-              type: CType.type(CType.from_cel(denotation)),
-              denotation: denotation
-            }
-
-          :error ->
-            nil
-        end
-    end
-  end
-
-  defp schema_enum_value(%Env{} = env, name) do
-    case env.message_schema.enum_value(env.schema, name) do
-      {:ok, enum_value} -> {:ok, enum_value}
-      :unknown_enum -> :error
-      :unknown_value -> :error
+        resolve_type_denotation(name) || resolve_enum_value(env, name) ||
+          resolve_provider_type(env, name)
     end
   end
 
   defp resolve_type_denotation(name) do
-    case ProtoType.denotation(name) do
+    case builtin_denotation(name) do
       {:ok, denotation} ->
         %{
           kind: :type,
@@ -171,21 +149,48 @@ defmodule CEL.Checker.NameResolution do
     end
   end
 
-  defp schema_type_denotation(%Env{} = env, name) do
-    case resolve_message(env, name) do
-      {:ok, message} ->
-        message = Atom.to_string(message)
-
-        case WellKnownTypes.type_denotation(message) do
-          {:ok, denotation} -> {:ok, denotation}
-          :error -> {:ok, ProtoType.message(message)}
-        end
+  defp builtin_denotation(name) do
+    case ProtoType.denotation(name) do
+      {:ok, denotation} ->
+        {:ok, denotation}
 
       :error ->
-        case env.message_schema.resolve_enum(env.schema, name) do
-          {:ok, enum} -> {:ok, ProtoType.message(Atom.to_string(enum))}
-          :error -> :error
-        end
+        if WellKnownTypes.literal_message?(name),
+          do: {:ok, ProtoType.message(name)},
+          else: :error
+    end
+  end
+
+  # `pkg.Enum.VALUE`: the enum is resolved first, so the value's type and
+  # value carry the provider's name for it.
+  defp resolve_enum_value(env, name) do
+    with [_, _ | _] = parts <- String.split(name, "."),
+         {value_name, enum_parts} = List.pop_at(parts, -1),
+         {:ok, :enum, enum} <- Env.find_type(env, Enum.join(enum_parts, ".")),
+         {:ok, number} <- Env.enum_value(env, enum, value_name) do
+      %{
+        kind: :enum_value,
+        name: to_string(enum) <> "." <> value_name,
+        type: CType.message(enum),
+        value: Value.enum(enum, number)
+      }
+    else
+      _other -> nil
+    end
+  end
+
+  defp resolve_provider_type(env, name) do
+    case Env.find_type(env, name) do
+      {:ok, _kind, type} ->
+        %{
+          kind: :type,
+          name: name,
+          type: CType.type(CType.message(type)),
+          denotation: ProtoType.message(type)
+        }
+
+      :error ->
+        nil
     end
   end
 
@@ -194,9 +199,9 @@ defmodule CEL.Checker.NameResolution do
       name
       |> candidates(env, absolute?)
       |> Enum.find_value(fn candidate ->
-        case env.message_schema.resolve_enum(env.schema, candidate) do
-          {:ok, enum} -> Atom.to_string(enum)
-          :error -> nil
+        case Env.find_type(env, candidate) do
+          {:ok, :enum, enum} -> enum
+          _other -> nil
         end
       end)
       |> case do
@@ -256,13 +261,6 @@ defmodule CEL.Checker.NameResolution do
   defp fallback_message_name(name, [first | _] = candidates) do
     if String.contains?(name, "."), do: List.last(candidates), else: first
   end
-
-  defp known_message_name?(env, name) do
-    WellKnownTypes.literal_message?(name) or env.message_schema.known_message?(env.schema, name)
-  end
-
-  defp resolve_message(%Env{} = env, name),
-    do: env.message_schema.resolve_message(env.schema, name)
 
   defp qualified_name(%{expr_kind: {:ident_expr, %{name: "." <> name}}}), do: {:ok, name, true}
   defp qualified_name(%{expr_kind: {:ident_expr, %{name: name}}}), do: {:ok, name, false}

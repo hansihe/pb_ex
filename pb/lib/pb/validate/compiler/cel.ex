@@ -100,7 +100,7 @@ defmodule PB.Validate.Compiler.CEL do
 
     env =
       CEL.Env.build(
-        schema: schema,
+        types: PB.CEL.types(schema),
         vars: Map.put_new(vars, "now", :timestamp),
         functions: CELExtensions.functions()
       )
@@ -124,7 +124,8 @@ defmodule PB.Validate.Compiler.CEL do
       end
 
     if valid_result_type?(checked.root_type) do
-      regexes = compile_static_regexes!(checked, Map.get(attrs, :vars, %{}), target, id)
+      vars = Map.get(attrs, :vars, %{})
+      regexes = compile_static_regexes!(checked, vars, env.types, target, id)
 
       ValidateSchema.cel_op(
         %{
@@ -152,8 +153,8 @@ defmodule PB.Validate.Compiler.CEL do
 
   defp rule_expression(%{expression: expression}), do: expression || ""
 
-  defp compile_static_regexes!(%Checked{} = checked, vars, target, id) do
-    case Regexes.precompile(checked, vars) do
+  defp compile_static_regexes!(%Checked{} = checked, vars, types, target, id) do
+    case Regexes.precompile(checked, vars, types) do
       {:ok, regexes} ->
         regexes
 

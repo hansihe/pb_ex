@@ -51,7 +51,7 @@ defmodule CEL.Checker.TypePattern do
           | {:type, t}
           | {:list, t}
           | {:map, t, t}
-          | {:message, String.t()}
+          | {:message, CEL.TypeProvider.name()}
           | {:abstract, String.t(), [t]}
           | {:one_of, [t]}
           | {:optional, t}
@@ -73,8 +73,8 @@ defmodule CEL.Checker.TypePattern do
   def valid?({:arg, index}, :result) when is_integer(index) and index >= 0, do: true
   def valid?({:param, name}, _position) when is_binary(name) or is_atom(name), do: true
   def valid?({:wrapper, primitive}, _position) when primitive in @primitives, do: true
-  def valid?({:message, name}, _position) when is_binary(name), do: true
-  def valid?({:enum, name}, _position) when is_binary(name), do: true
+  def valid?({:message, name}, _position) when is_binary(name) or is_atom(name), do: true
+  def valid?({:enum, name}, _position) when is_binary(name) or is_atom(name), do: true
   def valid?({:type, type}, position), do: valid?(type, position)
   def valid?({:list, elem}, position), do: valid?(elem, position)
   def valid?({:map, key, value}, position), do: valid?(key, position) and valid?(value, position)

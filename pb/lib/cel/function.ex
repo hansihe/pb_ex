@@ -42,8 +42,8 @@ defmodule CEL.Function do
   @typedoc "`{Module, function}`; the other forms are PB's own."
   @type eval :: nil | :intrinsic | {:mfa, mfa_target} | mfa_target
 
-  @typedoc "`:vars` and `:call` are for custom functions; the rest are PB's own."
-  @type eval_context :: :schema | :message_runtime | :vars | :call
+  @typedoc "Extra arguments an overload's `:eval` receives; see `CEL.Function.Overload`."
+  @type eval_context :: :types | :vars | :call
 
   @type t :: %__MODULE__{
           name: String.t(),
@@ -68,8 +68,10 @@ defmodule CEL.Function do
         `{:error, reason}` or `{:unknown, reason}`. Without `:eval` the
         overload can be type-checked but not evaluated.
       * `:eval_context` — extra arguments appended after the argument list,
-        in order: `:vars` for the variable bindings, keyed by string name, and
-        `:call` for `%{function: name, overload_id: id, expr_id: id}`.
+        in order: `:vars` for the variable bindings, keyed by string name,
+        `:call` for `%{function: name, overload_id: id, expr_id: id}`, and
+        `:types` for the environment's `t:CEL.TypeProvider.t/0`, to read
+        message arguments with.
       * `:strict` — when `false`, the function is also called with error and
         unknown arguments, as `{:error, %CEL.Error{}}` and
         `{:unknown, %CEL.Unknown{}}`. Defaults to `true`.

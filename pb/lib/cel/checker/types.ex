@@ -14,7 +14,7 @@ defmodule CEL.Checker.Types do
           | {:type, t}
           | {:list, t}
           | {:map, t, t}
-          | {:message, String.t()}
+          | {:message, CEL.TypeProvider.name()}
           | {:optional, t}
           | {:abstract, String.t(), [t]}
           | {:var, var_id}
@@ -75,8 +75,8 @@ defmodule CEL.Checker.Types do
   @spec map(t, t) :: t
   def map(key_type \\ dyn(), value_type \\ dyn()), do: {:map, key_type, value_type}
 
-  @spec message(String.t()) :: t
-  def message(name) when is_binary(name), do: {:message, name}
+  @spec message(CEL.TypeProvider.name()) :: t
+  def message(name) when is_atom(name) or is_binary(name), do: {:message, name}
 
   @spec optional(t) :: t
   def optional(value_type), do: {:optional, value_type}
@@ -96,7 +96,7 @@ defmodule CEL.Checker.Types do
   def from_input(:type), do: type()
   def from_input(:timestamp), do: timestamp()
   def from_input(:duration), do: duration()
-  def from_input({:enum, name}) when is_binary(name), do: message(name)
+  def from_input({:enum, name}) when is_atom(name) or is_binary(name), do: message(name)
 
   def from_input({:wrapper, primitive} = type)
       when primitive in [:bool, :int, :uint, :double, :string, :bytes], do: type
@@ -107,7 +107,7 @@ defmodule CEL.Checker.Types do
   def from_input({:map, key_type, value_type}),
     do: map(from_input(key_type), from_input(value_type))
 
-  def from_input({:message, name}) when is_binary(name), do: message(name)
+  def from_input({:message, name}) when is_atom(name) or is_binary(name), do: message(name)
   def from_input({:optional, value_type}), do: optional(from_input(value_type))
 
   def from_input({:abstract, name, params}) when is_binary(name) and is_list(params),
@@ -349,9 +349,9 @@ defmodule CEL.Checker.Types do
 
     case from_input(expected) do
       {:message, name} ->
-        case WellKnownTypes.field_type(name) do
-          {:ok, type} -> assignable?(from_cel(type), actual)
-          :error -> false
+        case WellKnownTypes.builtin_type(name) do
+          nil -> false
+          type -> assignable?(from_input(type), actual)
         end
 
       _type ->
@@ -381,7 +381,6 @@ defmodule CEL.Checker.Types do
     )
   end
 
-  def value_type({:message, name, _fields}) when is_atom(name), do: message(Atom.to_string(name))
   def value_type({:message, name, _fields}), do: message(name)
   def value_type({:optional, :none}), do: optional(dyn())
   def value_type({:optional, {:some, value}}), do: optional(value_type(value))
@@ -390,7 +389,7 @@ defmodule CEL.Checker.Types do
   @doc """
   The message names a type mentions.
   """
-  @spec message_names(t) :: [String.t()]
+  @spec message_names(t) :: [CEL.TypeProvider.name()]
   def message_names({:message, name}), do: [name]
   def message_names({:wrapper, _primitive}), do: []
   def message_names({:abstract, _name, params}), do: Enum.flat_map(params, &message_names/1)
@@ -414,7 +413,7 @@ defmodule CEL.Checker.Types do
   def format({:map, key_type, value_type}),
     do: "map(" <> format(key_type) <> ", " <> format(value_type) <> ")"
 
-  def format({:message, name}), do: name
+  def format({:message, name}), do: to_string(name)
   def format({:optional, value_type}), do: "optional_type(" <> format(value_type) <> ")"
 
   def format({:abstract, name, params}) do

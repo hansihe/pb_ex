@@ -1,12 +1,12 @@
 defmodule CEL.WellKnownTypes do
   @moduledoc false
 
-  # How CEL treats the protobuf well-known types by name: the CEL types of
+  # How CEL treats the protobuf well-known types by name: the CEL types the
   # wrapper, `Timestamp`, `Duration`, `Any`, `Struct`, `Value` and `ListValue`
-  # fields, and their message literals, which CEL checks and evaluates itself,
-  # with or without a schema. Packing and unpacking `Any` payloads needs
-  # protobuf, so it goes through the message runtime (`CEL.Message.Runtime`'s
-  # `from_any/3` and `to_any/2`).
+  # types stand for, and their message literals, which CEL checks and
+  # evaluates itself, with or without a type provider. These names are CEL's
+  # own, never a provider's. Unpacking an `Any` literal's payload needs its
+  # type, so it goes through the provider's `unpack_any/3`.
 
   alias CEL.ProtoType
   alias CEL.Runtime.Time
@@ -77,32 +77,21 @@ defmodule CEL.WellKnownTypes do
     end
   end
 
-  @spec field_type(String.t()) :: {:ok, ProtoType.t()} | :error
-  def field_type(name) when is_binary(name) do
+  @doc """
+  The CEL type a well-known type stands for, as a field's or a declaration's
+  type, or `nil` for any other name.
+  """
+  @spec builtin_type(term) :: CEL.Type.t() | nil
+  def builtin_type(name) do
     cond do
-      wrapper_type = @wrapper_types[name] ->
-        {:ok, wrapper_field_type(wrapper_type)}
-
-      name == @timestamp_type ->
-        {:ok, ProtoType.timestamp()}
-
-      name == @duration_type ->
-        {:ok, ProtoType.duration()}
-
-      name == "google.protobuf.Any" ->
-        {:ok, ProtoType.dyn()}
-
-      name == "google.protobuf.ListValue" ->
-        {:ok, ProtoType.list(ProtoType.dyn())}
-
-      name == "google.protobuf.Struct" ->
-        {:ok, ProtoType.map(ProtoType.string(), ProtoType.dyn())}
-
-      name == "google.protobuf.Value" ->
-        {:ok, ProtoType.dyn()}
-
-      true ->
-        :error
+      wrapper_type = @wrapper_types[name] -> {:wrapper, wrapper_type}
+      name == @timestamp_type -> :timestamp
+      name == @duration_type -> :duration
+      name == "google.protobuf.Any" -> :dyn
+      name == "google.protobuf.ListValue" -> {:list, :dyn}
+      name == "google.protobuf.Struct" -> {:map, :string, :dyn}
+      name == "google.protobuf.Value" -> :dyn
+      true -> nil
     end
   end
 
@@ -164,8 +153,8 @@ defmodule CEL.WellKnownTypes do
     end
   end
 
-  @spec type_denotation(String.t()) :: {:ok, ProtoType.t()} | :error
-  def type_denotation(name) when is_binary(name) do
+  @spec type_denotation(term) :: {:ok, ProtoType.t()} | :error
+  def type_denotation(name) do
     case name do
       @timestamp_type -> {:ok, ProtoType.timestamp()}
       @duration_type -> {:ok, ProtoType.duration()}
@@ -182,13 +171,6 @@ defmodule CEL.WellKnownTypes do
       name -> name
     end
   end
-
-  defp wrapper_field_type(:int), do: ProtoType.wrapper(:INT64)
-  defp wrapper_field_type(:uint), do: ProtoType.wrapper(:UINT64)
-  defp wrapper_field_type(:double), do: ProtoType.wrapper(:DOUBLE)
-  defp wrapper_field_type(:bool), do: ProtoType.wrapper(:BOOL)
-  defp wrapper_field_type(:string), do: ProtoType.wrapper(:STRING)
-  defp wrapper_field_type(:bytes), do: ProtoType.wrapper(:BYTES)
 
   defp wrapper_literal_type(:int), do: ProtoType.int()
   defp wrapper_literal_type(:uint), do: ProtoType.uint()

@@ -42,15 +42,16 @@ defmodule CEL.Regexes do
 
   @doc """
   Compiles the `matches()` patterns of a checked expression that are known
-  before evaluation: string literals, and selections from `vars` (the rule
-  values protovalidate binds as constants). Returns the regexes by call id.
+  before evaluation: string literals, and selections from `vars` (CEL values
+  protovalidate binds as constants), read through `types`. Returns the
+  regexes by call id.
   """
-  @spec precompile(Checked.t(), map) ::
+  @spec precompile(Checked.t(), %{String.t() => CEL.Value.t()}, CEL.TypeProvider.t() | nil) ::
           {:ok, %{Checked.expr_id() => Regex.t()}} | {:error, String.t()}
-  def precompile(%Checked{ops: ops}, vars) do
+  def precompile(%Checked{ops: ops}, vars, types \\ nil) do
     Enum.reduce_while(ops, {:ok, %{}}, fn
       {id, {:call, %{eval: @matches_eval} = op}}, {:ok, regexes} ->
-        with {:ok, pattern} <- static_match_pattern(op, ops, vars),
+        with {:ok, pattern} <- static_match_pattern(op, ops, {vars, types}),
              {:ok, regex} <- compile(pattern) do
           {:cont, {:ok, Map.put(regexes, id, regex)}}
         else
@@ -63,26 +64,26 @@ defmodule CEL.Regexes do
     end)
   end
 
-  defp static_match_pattern(%{arg_ids: []}, _ops, _vars), do: :dynamic
+  defp static_match_pattern(%{arg_ids: []}, _ops, _known), do: :dynamic
 
-  defp static_match_pattern(%{arg_ids: arg_ids}, ops, vars) do
-    case static_value(List.last(arg_ids), ops, vars) do
-      {:ok, value} when is_binary(value) -> {:ok, value}
+  defp static_match_pattern(%{arg_ids: arg_ids}, ops, known) do
+    case static_value(List.last(arg_ids), ops, known) do
+      {:ok, {:string, pattern}} -> {:ok, pattern}
       _other -> :dynamic
     end
   end
 
-  defp static_value(id, ops, vars) do
+  defp static_value(id, ops, {vars, types} = known) do
     case Map.get(ops, id) do
-      {:const, %{value: {:string, value}}} ->
+      {:const, %{value: value}} ->
         {:ok, value}
 
       {:ident, %{kind: :var, name: name}} ->
         Map.fetch(vars, name)
 
       {:select, %{receiver_id: receiver_id} = select} ->
-        case static_value(receiver_id, ops, vars) do
-          {:ok, receiver} -> static_select(receiver, select)
+        case static_value(receiver_id, ops, known) do
+          {:ok, receiver} -> static_select(receiver, select, types)
           _dynamic -> :dynamic
         end
 
@@ -91,25 +92,24 @@ defmodule CEL.Regexes do
     end
   end
 
-  defp static_select(value, select) when is_map(value) and not is_struct(value) do
-    select
-    |> static_select_keys()
-    |> Enum.find_value(:dynamic, fn key ->
-      case Map.fetch(value, key) do
-        {:ok, value} -> {:ok, value}
-        :error -> false
-      end
-    end)
+  defp static_select(
+         {:message, message, payload},
+         %{kind: :message_field, message: message, cel_field: field},
+         {types, state}
+       ) do
+    case types.get_field(state, payload, field) do
+      {:ok, value} -> {:ok, value}
+      {:error, _reason} -> :dynamic
+    end
   end
 
-  defp static_select(_value, _select), do: :dynamic
-
-  defp static_select_keys(select) do
-    [
-      get_in(select, [:field_ref, :field]),
-      Map.get(select, :field)
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
+  defp static_select({:map, values}, %{kind: kind, field: field}, _types)
+       when kind in [:map_field, :dyn_field] do
+    case Map.fetch(values, {:string, field}) do
+      {:ok, value} -> {:ok, value}
+      :error -> :dynamic
+    end
   end
+
+  defp static_select(_value, _select, _types), do: :dynamic
 end

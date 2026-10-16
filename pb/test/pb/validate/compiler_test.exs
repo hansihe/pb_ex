@@ -163,7 +163,10 @@ defmodule PB.Validate.CompilerTest do
 
     assert email_rule.kind == :predefined
     assert email_rule.id == "string.email"
-    assert email_rule.vars == %{"rules" => %{well_known: {:email, true}}, "rule" => true}
+    assert email_rule.vars == %{
+             "rules" => {:message, :"buf.validate.StringRules", %{well_known: {:email, true}}},
+             "rule" => {:bool, true}
+           }
 
     assert email_rule.rule_path == %{
              elements: [
@@ -181,7 +184,10 @@ defmodule PB.Validate.CompilerTest do
     assert %{validate: %{cel: [%CELOp{} = min_len_rule]}} = min_len
     assert min_len_rule.kind == :predefined
     assert min_len_rule.id == "string.min_len"
-    assert min_len_rule.vars == %{"rules" => %{min_len: 3}, "rule" => 3}
+    assert min_len_rule.vars == %{
+             "rules" => {:message, :"buf.validate.StringRules", %{min_len: 3}},
+             "rule" => {:uint, 3}
+           }
 
     assert min_len_rule.rule_path == %{
              elements: [
@@ -193,15 +199,20 @@ defmodule PB.Validate.CompilerTest do
     const = message.fields_by_name.const
     assert %{validate: %{cel: [%CELOp{} = const_rule]}} = const
     assert const_rule.id == "string.const"
-    assert const_rule.vars == %{"rules" => %{const: "foo"}, "rule" => "foo"}
+    assert const_rule.vars == %{
+             "rules" => {:message, :"buf.validate.StringRules", %{const: "foo"}},
+             "rule" => {:string, "foo"}
+           }
 
     header_name = message.fields_by_name.header_name
     assert %{validate: %{cel: [%CELOp{} = header_name_rule | _rules]}} = header_name
     assert header_name_rule.id == "string.well_known_regex.header_name"
 
     assert header_name_rule.vars == %{
-             "rules" => %{well_known: {:well_known_regex, :KNOWN_REGEX_HTTP_HEADER_NAME}},
-             "rule" => :KNOWN_REGEX_HTTP_HEADER_NAME
+             "rules" =>
+               {:message, :"buf.validate.StringRules",
+                %{well_known: {:well_known_regex, :KNOWN_REGEX_HTTP_HEADER_NAME}}},
+             "rule" => {:enum, :"buf.validate.KnownRegex", 1}
            }
   end
 
@@ -388,10 +399,10 @@ defmodule PB.Validate.CompilerTest do
     assert value_rule.id == "string.not_bad"
 
     assert value_rule.vars == %{
-             "rules" => %{
-               extension_key => %{:"validate_custom_predefined.string_not_bad" => true}
-             },
-             "rule" => true
+             "rules" =>
+               {:message, :"buf.validate.StringRules",
+                %{extension_key => %{:"validate_custom_predefined.string_not_bad" => true}}},
+             "rule" => {:bool, true}
            }
 
     assert value_rule.rule_path == %{
@@ -432,10 +443,10 @@ defmodule PB.Validate.CompilerTest do
     assert %{validate: %{cel: [%CELOp{} = count_rule]}} = count
     assert count_rule.id == "int64.abs_in"
 
+    rules = %{extension_key => %{:"validate_custom_predefined.int64_abs_in" => [%{value: -2}]}}
+
     assert count_rule.vars == %{
-             "rules" => %{
-               extension_key => %{:"validate_custom_predefined.int64_abs_in" => [%{value: -2}]}
-             },
+             "rules" => {:message, :"buf.validate.Int64Rules", rules},
              "rule" => {:list, [int: -2]}
            }
 

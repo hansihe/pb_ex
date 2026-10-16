@@ -58,7 +58,7 @@ defmodule CEL.Program do
   """
   @spec eval(t, map | keyword) :: {:ok, Value.t()} | {:unknown, Unknown.t()} | {:error, Error.t()}
   def eval(%__MODULE__{checked: checked, env: env, regexes: regexes}, values \\ %{}) do
-    Evaluator.eval(checked, values, [regexes: regexes] ++ evaluator_opts(env))
+    Evaluator.eval(checked, values, regexes: regexes, types: env.types)
   end
 
   @doc """
@@ -76,15 +76,5 @@ defmodule CEL.Program do
 
   def unwrap!({:unknown, %Unknown{} = unknown}) do
     raise Error, phase: :eval, message: "result is unknown", details: %{unknown: unknown}
-  end
-
-  defp evaluator_opts(%Env{} = env) do
-    opts = [message_schema: env.message_schema, message_runtime: env.message_runtime]
-
-    if is_nil(env.schema) do
-      opts
-    else
-      Keyword.put(opts, :schema, env.schema)
-    end
   end
 end

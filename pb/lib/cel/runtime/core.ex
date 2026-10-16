@@ -2,7 +2,6 @@ defmodule CEL.Runtime.Core do
   @moduledoc false
 
   alias CEL.Checker.Types, as: CType
-  alias CEL.Message.Schema
   alias CEL.Runtime.Number
   alias CEL.Runtime.Time
   alias CEL.Value
@@ -25,21 +24,17 @@ defmodule CEL.Runtime.Core do
   def equals([left, right]), do: {:ok, Value.bool(equal?(left, right))}
   def equals(_values), do: no_such_overload()
 
-  @spec equals([Value.t()], Schema.schema(), module()) :: result
-  def equals([left, right], schema, message_runtime),
-    do: {:ok, Value.bool(equal?(left, right, schema, message_runtime))}
-
-  def equals(_values, _schema, _message_runtime), do: no_such_overload()
+  @spec equals([Value.t()], CEL.TypeProvider.t()) :: result
+  def equals([left, right], types), do: {:ok, Value.bool(equal?(left, right, types))}
+  def equals(_values, _types), do: no_such_overload()
 
   @spec not_equals([Value.t()]) :: result
   def not_equals([left, right]), do: {:ok, Value.bool(not equal?(left, right))}
   def not_equals(_values), do: no_such_overload()
 
-  @spec not_equals([Value.t()], Schema.schema(), module()) :: result
-  def not_equals([left, right], schema, message_runtime),
-    do: {:ok, Value.bool(not equal?(left, right, schema, message_runtime))}
-
-  def not_equals(_values, _schema, _message_runtime), do: no_such_overload()
+  @spec not_equals([Value.t()], CEL.TypeProvider.t()) :: result
+  def not_equals([left, right], types), do: {:ok, Value.bool(not equal?(left, right, types))}
+  def not_equals(_values, _types), do: no_such_overload()
 
   @spec less([Value.t()]) :: result
   def less([left, right]), do: compare(left, right, :<)
@@ -108,27 +103,21 @@ defmodule CEL.Runtime.Core do
 
   def type_of(_values), do: no_such_overload()
 
-  @spec equal?(Value.t(), Value.t()) :: boolean
-  def equal?(left, right), do: equal?(left, right, nil, nil)
-
-  @spec equal?(Value.t(), Value.t(), Schema.schema(), module() | nil) :: boolean
-  def equal?(left, right, schema, message_runtime \\ nil) do
+  # Without a provider, messages of the same type are equal when their payloads
+  # are.
+  @spec equal?(Value.t(), Value.t(), CEL.TypeProvider.t() | nil) :: boolean
+  def equal?(left, right, types \\ nil) do
     case Number.equal?(left, right) do
       {:ok, equal?} -> equal?
-      :error -> equal_non_numeric?(left, right, schema, message_runtime)
+      :error -> equal_non_numeric?(left, right, types)
     end
   end
 
-  @spec fetch_equal_key(%{Value.t() => Value.t()}, Value.t()) :: {:ok, Value.t()} | :error
-  def fetch_equal_key(values, key) do
-    fetch_equal_key(values, key, nil, nil)
-  end
-
-  @spec fetch_equal_key(%{Value.t() => Value.t()}, Value.t(), Schema.schema(), module() | nil) ::
+  @spec fetch_equal_key(%{Value.t() => Value.t()}, Value.t(), CEL.TypeProvider.t() | nil) ::
           {:ok, Value.t()} | :error
-  def fetch_equal_key(values, key, schema, message_runtime \\ nil) do
+  def fetch_equal_key(values, key, types \\ nil) do
     Enum.find_value(values, :error, fn {candidate, value} ->
-      if equal?(candidate, key, schema, message_runtime), do: {:ok, value}, else: false
+      if equal?(candidate, key, types), do: {:ok, value}, else: false
     end)
   end
 
@@ -200,13 +189,6 @@ defmodule CEL.Runtime.Core do
     end
   end
 
-  defp optional_select({:message, _name, fields}, field) do
-    case fetch_message_field(fields, field) do
-      {:ok, value} -> {:ok, maybe_optional_some(value)}
-      :error -> {:ok, Value.optional_none()}
-    end
-  end
-
   defp optional_select({:optional, :none}, _field), do: {:ok, Value.optional_none()}
   defp optional_select({:optional, {:some, operand}}, field), do: optional_select(operand, field)
 
@@ -216,28 +198,6 @@ defmodule CEL.Runtime.Core do
 
   defp maybe_optional_some({:optional, _value} = optional), do: optional
   defp maybe_optional_some(value), do: Value.optional_some(value)
-
-  defp fetch_message_field(fields, field) do
-    cond do
-      Map.has_key?(fields, field) ->
-        Map.fetch(fields, field)
-
-      is_binary(field) ->
-        case existing_atom(field) do
-          {:ok, atom} -> Map.fetch(fields, atom)
-          :error -> :error
-        end
-
-      true ->
-        :error
-    end
-  end
-
-  defp existing_atom(value) do
-    {:ok, String.to_existing_atom(value)}
-  rescue
-    ArgumentError -> :error
-  end
 
   defp negate_value(value) do
     case Number.negate(value) do
@@ -339,55 +299,41 @@ defmodule CEL.Runtime.Core do
     end
   end
 
-  defp equal_non_numeric?({:list, left}, {:list, right}, schema, message_runtime)
+  defp equal_non_numeric?({:list, left}, {:list, right}, types)
        when length(left) == length(right) do
     left
     |> Enum.zip(right)
-    |> Enum.all?(fn {left, right} -> equal?(left, right, schema, message_runtime) end)
+    |> Enum.all?(fn {left, right} -> equal?(left, right, types) end)
   end
 
-  defp equal_non_numeric?({:list, _left}, {:list, _right}, _schema, _message_runtime), do: false
+  defp equal_non_numeric?({:list, _left}, {:list, _right}, _types), do: false
 
-  defp equal_non_numeric?({:map, left}, {:map, right}, schema, message_runtime)
+  defp equal_non_numeric?({:map, left}, {:map, right}, types)
        when map_size(left) == map_size(right) do
     Enum.all?(left, fn {left_key, left_value} ->
-      case fetch_equal_key(right, left_key, schema, message_runtime) do
-        {:ok, right_value} -> equal?(left_value, right_value, schema, message_runtime)
+      case fetch_equal_key(right, left_key, types) do
+        {:ok, right_value} -> equal?(left_value, right_value, types)
         :error -> false
       end
     end)
   end
 
-  defp equal_non_numeric?({:map, _left}, {:map, _right}, _schema, _message_runtime), do: false
+  defp equal_non_numeric?({:map, _left}, {:map, _right}, _types), do: false
 
-  defp equal_non_numeric?({:enum, _name, value}, {:int, value}, _schema, _mr), do: true
-  defp equal_non_numeric?({:int, value}, {:enum, _name, value}, _schema, _mr), do: true
-  defp equal_non_numeric?({:enum, _name, _left}, {:int, _right}, _schema, _mr), do: false
-  defp equal_non_numeric?({:int, _left}, {:enum, _name, _right}, _schema, _mr), do: false
+  defp equal_non_numeric?({:enum, _name, value}, {:int, value}, _types), do: true
+  defp equal_non_numeric?({:int, value}, {:enum, _name, value}, _types), do: true
+  defp equal_non_numeric?({:enum, _name, _left}, {:int, _right}, _types), do: false
+  defp equal_non_numeric?({:int, _left}, {:enum, _name, _right}, _types), do: false
 
-  defp equal_non_numeric?(
-         {:message, _left_name, _left_fields} = left,
-         {:message, _right_name, _right_fields} = right,
-         schema,
-         message_runtime
-       ) do
-    case message_equal?(message_runtime, schema, left, right) do
-      {:ok, equal?} -> equal?
-      :not_applicable -> left == right
-    end
-  end
+  defp equal_non_numeric?({:message, name, left}, {:message, name, right}, {types, state}),
+    do: types.equal?(state, name, left, right)
 
   # Type values are equal when their names are, as in cel-go: the type of
   # `optional.of(1)` is `optional_type`.
-  defp equal_non_numeric?({:type, _left} = left, {:type, _right} = right, _schema, _mr),
+  defp equal_non_numeric?({:type, _left} = left, {:type, _right} = right, _types),
     do: Value.type_name(left) == Value.type_name(right)
 
-  defp equal_non_numeric?(left, right, _schema, _message_runtime), do: left == right
-
-  defp message_equal?(nil, _schema, _left, _right), do: :not_applicable
-
-  defp message_equal?(message_runtime, schema, left, right),
-    do: message_runtime.equal?(schema, left, right)
+  defp equal_non_numeric?(left, right, _types), do: left == right
 
   defp compare_values(left, right) do
     case Number.compare(left, right) do
@@ -440,10 +386,9 @@ defmodule CEL.Runtime.Core do
 
   defp value_kind(:null), do: "null"
   defp value_kind({kind, _value}), do: Atom.to_string(kind)
-  defp value_kind({:enum, name, _value}), do: name
+  defp value_kind({:enum, name, _value}), do: to_string(name)
   defp value_kind({:object, type_url, _value}), do: type_url
-  defp value_kind({:message, name, _fields}) when is_atom(name), do: Atom.to_string(name)
-  defp value_kind({:message, name, _fields}), do: name
+  defp value_kind({:message, name, _fields}), do: to_string(name)
   defp value_kind(other), do: inspect(other)
 
   defp no_such_overload, do: {:error, "no such overload"}

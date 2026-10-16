@@ -10,9 +10,8 @@ defmodule PB.TestSupport.CELConformance do
   alias CEL.Function.Overload
   alias CEL.Error
   alias CEL.Value
-  alias PB.CEL.MessageRuntime
+  alias PB.CEL.MessageSchema
   alias PB.CEL.ProtoCodec
-  alias PB.CEL.MessageSchema, as: CELSchema
 
   @fixture_root Path.expand("../../fixtures/cel_conformance", __DIR__)
   @schema PB.TestSupport.TestSchema
@@ -219,9 +218,7 @@ defmodule PB.TestSupport.CELConformance do
          vars: Map.merge(binding_vars, env_vars),
          functions: functions,
          container: case.container,
-         schema: @schema,
-         message_schema: CELSchema,
-         message_runtime: MessageRuntime
+         types: PB.CEL.types(@schema)
        )}
     end
   end
@@ -560,9 +557,7 @@ defmodule PB.TestSupport.CELConformance do
       vars: vars,
       functions: functions,
       container: case.container,
-      schema: @schema,
-      message_schema: CELSchema,
-      message_runtime: MessageRuntime
+      types: PB.CEL.types(@schema)
     )
   end
 
@@ -724,7 +719,8 @@ defmodule PB.TestSupport.CELConformance do
 
   defp supported_type?(%{type_kind: {:message_type, name}}, schema) do
     name in ["google.protobuf.Timestamp", "google.protobuf.Duration"] or
-      CELSchema.known_message?(schema, name) or CELSchema.known_enum?(schema, name)
+      match?({:ok, _message}, MessageSchema.resolve_message(schema, name)) or
+      match?({:ok, _enum}, MessageSchema.resolve_enum(schema, name))
   end
 
   defp supported_type?(%{type_kind: {:list_type, %{elem_type: elem_type}}}, schema),

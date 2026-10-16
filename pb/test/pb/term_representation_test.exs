@@ -118,10 +118,8 @@ defmodule PB.TermRepresentationTest do
                "msg.name == 'Alice' && msg.pet.name == 'Rex' && has(msg.pet) && !has(msg.fish)",
                %{"msg" => person},
                CEL.Env.build(
-                 schema: schema,
-                 vars: %{"msg" => {:message, "test.Person"}},
-                 message_schema: PB.CEL.MessageSchema,
-                 message_runtime: PB.CEL.MessageRuntime
+                 types: PB.CEL.types(schema),
+                 vars: %{"msg" => {:message, "test.Person"}}
                )
              ) == {:bool, true}
 

@@ -161,16 +161,17 @@ defmodule CEL.Expr do
     @moduledoc """
     A message literal, `pkg.Message{field: value, ?other: maybe}`.
 
-    `message` is the message's full name. Each field has its name and `value`
-    node; `optional` is true for a field written with `?`, which is set only
-    when its optional value is present.
+    `message` is the message's type: its `CEL.TypeProvider`'s name for it,
+    or a well-known type's full name, such as `"google.protobuf.Int64Value"`.
+    Each field has its name and `value` node; `optional` is true for a field
+    written with `?`, which is set only when its optional value is present.
     """
     defstruct [:id, :type, :message, fields: []]
 
     @type t :: %__MODULE__{
             id: CEL.Checked.expr_id(),
             type: CEL.Expr.type(),
-            message: String.t(),
+            message: CEL.TypeProvider.name(),
             fields: [CEL.Expr.message_field()]
           }
   end
@@ -428,7 +429,7 @@ defmodule CEL.Expr do
     %Call{
       id: id,
       type: type,
-      function: Map.get(op, :enum, op.name),
+      function: to_string(Map.get(op, :enum, op.name)),
       overload_id: op.overload_id,
       target: op.target_id && node(op.target_id, checked),
       args: Enum.map(op.arg_ids, &node(&1, checked))
@@ -461,13 +462,13 @@ defmodule CEL.Expr do
     fields =
       Enum.map(op.fields, fn field ->
         %{
-          field: to_string(field.field),
+          field: field.field,
           value: node(field.value_id, checked),
           optional: field.optional?
         }
       end)
 
-    %MessageLiteral{id: id, type: type, message: to_string(op.message), fields: fields}
+    %MessageLiteral{id: id, type: type, message: op.message, fields: fields}
   end
 
   defp build(id, {:comprehension, op}, type, checked) do

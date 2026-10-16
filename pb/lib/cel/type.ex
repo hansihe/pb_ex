@@ -10,8 +10,10 @@ defmodule CEL.Type do
       `google.protobuf.Duration`
     * `:null` and `:dyn`
     * `{:list, t}` and `{:map, key, value}`
-    * `{:message, "pkg.Message"}` — a protobuf message, by full name
-    * `{:enum, "pkg.Enum"}` — a protobuf enum, by full name
+    * `{:message, name}` — a message type, by its `CEL.TypeProvider`'s
+      name for it, such as `:"pkg.Message"`. A declaration may spell it as an
+      atom or a string; types CEL returns carry the provider's form.
+    * `{:enum, name}` — an enum type, named the same way
     * `{:wrapper, primitive}` — a wrapper message such as
       `google.protobuf.Int64Value` (`{:wrapper, :int}`)
     * `{:optional, t}` — `optional_type(t)`
@@ -35,8 +37,8 @@ defmodule CEL.Type do
           | {:type, t}
           | {:list, t}
           | {:map, t, t}
-          | {:message, String.t()}
-          | {:enum, String.t()}
+          | {:message, CEL.TypeProvider.name()}
+          | {:enum, CEL.TypeProvider.name()}
           | {:optional, t}
           | {:abstract, String.t(), [t]}
 
@@ -59,7 +61,7 @@ defmodule CEL.Type do
   # messages, and may leave an unresolved type variable, which is dyn to a
   # reader.
   @doc false
-  @spec from_checker(CheckerTypes.t(), MapSet.t(String.t())) :: t
+  @spec from_checker(CheckerTypes.t(), MapSet.t(CEL.TypeProvider.name())) :: t
   def from_checker(type, enums \\ MapSet.new())
   def from_checker(@timestamp, _enums), do: :timestamp
   def from_checker(@duration, _enums), do: :duration

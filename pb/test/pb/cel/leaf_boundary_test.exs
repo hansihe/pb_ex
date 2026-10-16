@@ -7,15 +7,27 @@ defmodule CEL.LeafBoundaryTest do
   # each leaf module's abstract code (calls, structs, types, behaviours and
   # module atoms) and, for macros, which leave no trace there, from
   # `mix xref`'s compile-time edges. Separate projects take over once they exist.
+  #
+  # Names of message and enum types are their provider's, so the leaf must
+  # never make an atom from text: the abstract code may not call any of the
+  # functions that do.
   use ExUnit.Case, async: false
 
   # {leaf module, referenced module} => why the reference stays for now.
-  @allowed %{
-    # `schema:` defaults the providers to the protobuf binding, which
-    # `CEL.Env.build/1` callers rely on; resolved in step 2 of the split.
-    {CEL.Env, PB.CEL.MessageSchema} => :env_schema_default,
-    {CEL.Env, PB.CEL.MessageRuntime} => :env_schema_default
-  }
+  @allowed %{}
+
+  @atom_makers [
+    {String, :to_atom, 1},
+    {String, :to_existing_atom, 1},
+    {List, :to_atom, 1},
+    {List, :to_existing_atom, 1},
+    {:erlang, :binary_to_atom, 1},
+    {:erlang, :binary_to_atom, 2},
+    {:erlang, :binary_to_existing_atom, 1},
+    {:erlang, :binary_to_existing_atom, 2},
+    {:erlang, :list_to_atom, 1},
+    {:erlang, :list_to_existing_atom, 1}
+  ]
 
   @root Path.expand("../../..", __DIR__)
 
@@ -51,6 +63,21 @@ defmodule CEL.LeafBoundaryTest do
     assert violations == []
   end
 
+  test "the CEL leaf never makes an atom from text" do
+    calls =
+      for module <- Enum.sort(leaf_modules()),
+          {callee, function, arity} <- remote_calls(module),
+          {callee, function, arity} in @atom_makers,
+          do: {module, {callee, function, arity}}
+
+    assert calls == []
+  end
+
+  # Elixir inlines `String.to_existing_atom/1` to the `:erlang` call.
+  test "the atom check sees such calls in abstract code" do
+    assert Enum.any?(@atom_makers, &(&1 in remote_calls(PB.CEL.MessageSchema)))
+  end
+
   test "every allowlisted reference is still needed" do
     leaf = leaf_modules()
 
@@ -76,11 +103,28 @@ defmodule CEL.LeafBoundaryTest do
   defp leaf_file?(_path), do: false
 
   defp references(module) do
+    module |> abstract_code() |> collect(MapSet.new()) |> MapSet.delete(module)
+  end
+
+  defp abstract_code(module) do
     {:ok, {^module, [abstract_code: {:raw_abstract_v1, forms}]}} =
       module |> :code.which() |> :beam_lib.chunks([:abstract_code])
 
-    forms |> collect(MapSet.new()) |> MapSet.delete(module)
+    forms
   end
+
+  # Calls through a variable module or function are not found; the leaf has
+  # none that make atoms.
+  defp remote_calls(module), do: module |> abstract_code() |> collect_calls(MapSet.new())
+
+  defp collect_calls({:call, _anno, {:remote, _, {:atom, _, mod}, {:atom, _, fun}}, args}, acc),
+    do: collect_calls(args, MapSet.put(acc, {mod, fun, length(args)}))
+
+  defp collect_calls(term, acc) when is_tuple(term),
+    do: term |> Tuple.to_list() |> collect_calls(acc)
+
+  defp collect_calls([head | tail], acc), do: collect_calls(tail, collect_calls(head, acc))
+  defp collect_calls(_term, acc), do: acc
 
   # Remote calls and remote types name Erlang modules too; any other atom
   # counts only when it is an Elixir module name.

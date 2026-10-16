@@ -164,11 +164,11 @@ defmodule CEL.Checker do
           end
         end
       else
-        message_name = NameResolution.resolve_message_name(struct.message_name, state.env)
         field_types = message_field_types(Map.get(struct, :entries, []), value_types)
         entries = Map.get(struct, :entries, [])
 
-        with {:ok, op, state} <-
+        with {:ok, message_name} <- message_literal_name(expr, struct.message_name, state),
+             {:ok, op, state} <-
                message_literal_op(expr, message_name, entries, value_types, state) do
           state = put_op(state, expr, op)
           ok(expr, message_literal_type(message_name, field_types, state), state)
@@ -615,7 +615,7 @@ defmodule CEL.Checker do
       {:ok, _type, overload_id, field_ref} ->
         state =
           state
-          |> put_presence_test_op(expr, field, overload_id, operand_type, field_ref)
+          |> put_presence_test_op(expr, field, overload_id, field_ref)
 
         ok(expr, CType.bool(), state)
 
@@ -627,19 +627,15 @@ defmodule CEL.Checker do
   defp select_type(_state, :dyn, _field), do: {:ok, CType.dyn(), "select_dyn", nil}
 
   defp select_type(state, {:message, message}, field) do
-    message_schema = state.env.message_schema
-
-    case message_schema.field(state.env.schema, message, field) do
-      {:ok, %{message: message, field: field, info: info}} ->
-        with {:ok, type} <- message_schema.field_type(state.env.schema, info) do
-          {:ok, CType.from_cel(type), "select_message", %{message: message, field: field}}
-        end
+    case message_field(state, message, field) do
+      {:ok, cel_field} ->
+        {:ok, CType.from_input(cel_field.type), "select_message", {message, cel_field}}
 
       :unknown_message ->
         {:ok, CType.dyn(), "select_dyn", nil}
 
-      :unknown_field ->
-        select_extension_type(state, message, field)
+      :error ->
+        {:error, "no such field #{inspect(field)}"}
     end
   end
 
@@ -660,24 +656,20 @@ defmodule CEL.Checker do
     {:error, "field selection is not defined for #{CType.format(type)}"}
   end
 
-  # A backtick-quoted, fully-qualified selector (`msg.`pkg.ext_name``) names a
-  # proto2 extension rather than a declared field. Declared field names are bare
-  # identifiers, so the dot is the discriminator.
-  defp select_extension_type(state, message, field) do
-    message_schema = state.env.message_schema
-
-    with true <- extension_name?(field),
-         {:ok, %{message: message, extension: extension, info: info}} <-
-           message_schema.extension(state.env.schema, message, field),
-         {:ok, type} <- message_schema.field_type(state.env.schema, info) do
-      {:ok, CType.from_cel(type), "select_message", %{message: message, extension: extension}}
+  # A message type the provider does not know, such as one declared without a
+  # provider, or a well-known type, is selected from as `dyn`. A
+  # backtick-quoted, fully-qualified selector (`msg.`pkg.ext_name``) names a
+  # proto2 extension, which the provider finds by that name.
+  defp message_field(state, message, field) do
+    with false <- WellKnownTypes.literal_message?(message),
+         :error <- Env.find_field(state.env, message, field),
+         {:ok, :message, ^message} <- Env.find_type(state.env, to_string(message)) do
+      :error
     else
-      _other -> {:error, "no such field #{inspect(field)}"}
+      {:ok, %CEL.Field{}} = found -> found
+      _unknown -> :unknown_message
     end
   end
-
-  defp extension_name?(field) when is_binary(field), do: String.contains?(field, ".")
-  defp extension_name?(_field), do: false
 
   defp optional_select_type(_state, type, _field) when type in [:dyn, :null] do
     {:ok, CType.optional(CType.dyn()), "optional_select", nil}
@@ -688,19 +680,15 @@ defmodule CEL.Checker do
   end
 
   defp optional_select_type(state, {:message, message}, field) do
-    message_schema = state.env.message_schema
-
-    case message_schema.field(state.env.schema, message, field) do
-      {:ok, %{message: message, field: field, info: info}} ->
-        with {:ok, type} <- message_schema.field_type(state.env.schema, info) do
-          {:ok, CType.optional(CType.from_cel(type)), "optional_select",
-           %{message: message, field: field}}
-        end
+    case message_field(state, message, field) do
+      {:ok, cel_field} ->
+        type = CType.optional(CType.from_input(cel_field.type))
+        {:ok, type, "optional_select", {message, cel_field}}
 
       :unknown_message ->
         {:ok, CType.optional(CType.dyn()), "optional_select", nil}
 
-      :unknown_field ->
+      :error ->
         {:error, "no such field #{inspect(field)}"}
     end
   end
@@ -728,7 +716,14 @@ defmodule CEL.Checker do
     |> Map.new()
   end
 
-  # Literals of the well-known types are CEL's own, whatever the schema says.
+  defp message_literal_name(expr, name, state) do
+    case NameResolution.resolve_message_name(name, state.env) do
+      {:ok, message_name} -> {:ok, message_name}
+      {:error, name} -> error(expr, "unknown message type #{name}")
+    end
+  end
+
+  # Literals of the well-known types are CEL's own, whatever the provider says.
   defp message_literal_op(expr, message_name, entries, value_types, state) do
     if WellKnownTypes.literal_message?(message_name) do
       with {:ok, fields, state} <-
@@ -736,35 +731,16 @@ defmodule CEL.Checker do
         {:ok, {:message_literal, %{message: message_name, fields: fields}}, state}
       end
     else
-      schema_message_literal_op(expr, message_name, entries, value_types, state)
-    end
-  end
-
-  defp schema_message_literal_op(expr, message_name, entries, value_types, state) do
-    message_schema = state.env.message_schema
-
-    case message_schema.resolve_message(state.env.schema, message_name) do
-      {:ok, message} ->
-        with {:ok, fields, state} <-
-               checked_message_literal_fields(
-                 message_schema,
-                 state.env.schema,
-                 message,
-                 entries,
-                 value_types,
-                 state
-               ),
-             :ok <-
-               validate_required_literal_fields(
-                 expr,
-                 message_schema.required_fields(state.env.schema, message),
-                 fields
-               ) do
-          {:ok, {:message_literal, %{message: message, fields: fields}}, state}
-        end
-
-      :error ->
-        error(expr, "unknown message type #{message_name}")
+      with {:ok, fields, state} <-
+             message_literal_fields(message_name, entries, value_types, state),
+           :ok <-
+             validate_required_literal_fields(
+               expr,
+               Env.required_fields(state.env, message_name),
+               fields
+             ) do
+        {:ok, {:message_literal, %{message: message_name, fields: fields}}, state}
+      end
     end
   end
 
@@ -806,57 +782,25 @@ defmodule CEL.Checker do
     end
   end
 
-  defp checked_message_literal_fields(
-         message_schema,
-         schema,
-         message,
-         entries,
-         value_types,
-         state
-       ) do
+  defp message_literal_fields(message, entries, value_types, state) do
     entries
     |> Enum.zip(value_types)
     |> Enum.reduce_while({:ok, [], state}, fn
       {%{key_kind: {:field_key, field}, value: %{id: value_id} = value} = entry, type},
       {:ok, fields, state} ->
-        case message_schema.field(schema, message, field) do
-          {:ok, %{message: message, field: field_ref_name, info: info}} ->
-            literal = message_schema.literal_field(schema, message, info)
+        with {:ok, cel_field} <- literal_field(state, message, field, value),
+             {:ok, state} <-
+               expect_literal_field_assignable(cel_field.type, type, state, value, field) do
+          field = %{
+            field: field,
+            cel_field: cel_field,
+            value_id: value_id,
+            optional?: Map.get(entry, :optional_entry, false)
+          }
 
-            with {:ok, field_type} <- message_schema.field_type(schema, info),
-                 {:ok, state} <-
-                   expect_message_literal_field_assignable(
-                     literal,
-                     CType.from_cel(field_type),
-                     type,
-                     state,
-                     value,
-                     "message field #{inspect(field)}"
-                   ) do
-              field =
-                %{
-                  field: field_ref_name,
-                  field_ref: %{message: message, field: field_ref_name},
-                  value_id: value_id,
-                  optional?: Map.get(entry, :optional_entry, false),
-                  cardinality: literal.cardinality
-                }
-                |> maybe_put_oneof_name(literal)
-
-              {:cont, {:ok, [field | fields], state}}
-            else
-              {:error, %Error{} = error} ->
-                {:halt, {:error, error}}
-
-              {:error, reason} when is_binary(reason) ->
-                {:halt, error(value, reason)}
-            end
-
-          :unknown_field ->
-            {:halt, error(value, "no such field #{inspect(field)}")}
-
-          :unknown_message ->
-            {:halt, error(value, "unknown message #{inspect(Atom.to_string(message))}")}
+          {:cont, {:ok, [field | fields], state}}
+        else
+          {:error, %Error{} = error} -> {:halt, {:error, error}}
         end
 
       {_entry, _type}, {:ok, fields, state} ->
@@ -868,37 +812,33 @@ defmodule CEL.Checker do
     end
   end
 
-  defp expect_message_literal_field_assignable(literal, expected, actual, state, expr, field) do
-    case message_literal_enum_int_assignable(literal, expected, actual, state) do
-      {:ok, state} ->
-        {:ok, state}
-
-      :error ->
-        expect_assignable(
-          expected,
-          actual,
-          state,
-          expr,
-          "message field #{inspect(field)}"
-        )
+  defp literal_field(state, message, field, value) do
+    case Env.find_field(state.env, message, field) do
+      {:ok, cel_field} -> {:ok, cel_field}
+      :error -> error(value, "no such field #{inspect(field)}")
     end
   end
 
-  defp message_literal_enum_int_assignable(%{enum?: true}, _expected, :int, state) do
-    {:ok, state}
+  # An int may be assigned to an enum field.
+  defp expect_literal_field_assignable({:enum, _name}, :int, state, _expr, _field),
+    do: {:ok, state}
+
+  defp expect_literal_field_assignable(expected, actual, state, expr, field) do
+    expect_assignable(
+      CType.from_input(expected),
+      actual,
+      state,
+      expr,
+      "message field #{inspect(field)}"
+    )
   end
-
-  defp message_literal_enum_int_assignable(_literal, _expected, _actual, _state), do: :error
-
-  defp maybe_put_oneof_name(field, %{oneof_name: nil}), do: field
-  defp maybe_put_oneof_name(field, %{oneof_name: name}), do: Map.put(field, :oneof_name, name)
 
   defp validate_required_literal_fields(expr, required, fields) do
     present = MapSet.new(fields, & &1.field)
 
     case Enum.find(required, &(not MapSet.member?(present, &1))) do
       nil -> :ok
-      field -> error(expr, "missing required field #{inspect(Atom.to_string(field))}")
+      field -> error(expr, "missing required field #{inspect(field)}")
     end
   end
 
@@ -1049,7 +989,7 @@ defmodule CEL.Checker do
          type: CType.bool(),
          overload_id: overload_id,
          eval: {:mfa, {RuntimeCore, runtime}},
-         eval_context: [:schema, :message_runtime]
+         eval_context: [:types]
        }, state.solver}
     else
       :unknown
@@ -1107,9 +1047,7 @@ defmodule CEL.Checker do
     type in [CType.int(), CType.string(), CType.dyn()]
   end
 
-  defp schema_enum_type?(%Env{} = env, {:message, name}) do
-    env.message_schema.known_enum?(env.schema, name)
-  end
+  defp schema_enum_type?(%Env{} = env, {:message, name}), do: Env.enum?(env, name)
 
   defp schema_enum_type?(_env, _type), do: false
 
@@ -1134,7 +1072,7 @@ defmodule CEL.Checker do
   defp enum_names(types, env) do
     for {_id, type} <- types,
         name <- CType.message_names(type),
-        env.message_schema.known_enum?(env.schema, name),
+        Env.enum?(env, name),
         into: MapSet.new(),
         do: name
   end
@@ -1231,19 +1169,11 @@ defmodule CEL.Checker do
         overload_id: overload_id
       }
       |> maybe_put_field_ref(field_ref)
-      |> maybe_put_message(state, operand_type, field_ref)
 
     put_op(state, expr, {:select, op})
   end
 
-  defp put_presence_test_op(
-         %State{} = state,
-         expr,
-         field,
-         overload_id,
-         operand_type,
-         field_ref
-       ) do
+  defp put_presence_test_op(%State{} = state, expr, field, overload_id, field_ref) do
     op =
       %{
         kind: :presence_test,
@@ -1253,22 +1183,19 @@ defmodule CEL.Checker do
         overload_id: overload_id
       }
       |> maybe_put_field_ref(field_ref)
-      |> maybe_put_message(state, operand_type, field_ref)
 
     put_op(state, expr, {:select, op})
   end
 
-  defp select_kind(_state, "select_message", _operand_type, %{message: _message}) do
-    :message_field
-  end
+  defp select_kind(_state, "select_message", _operand_type, {_message, _field}),
+    do: :message_field
 
   defp select_kind(_state, "select_message", _operand_type, nil), do: :dyn_field
   defp select_kind(_state, "select_map", _operand_type, _field_ref), do: :map_field
   defp select_kind(_state, "select_dyn", _operand_type, _field_ref), do: :dyn_field
 
-  defp select_kind(_state, "optional_select", _operand_type, %{message: _message}) do
-    :optional_field
-  end
+  defp select_kind(_state, "optional_select", _operand_type, {_message, _field}),
+    do: :optional_field
 
   defp select_kind(%State{} = state, "optional_select", operand_type, nil) do
     operand_type = Solver.finalize_native(state.solver, checker_type(operand_type))
@@ -1286,14 +1213,12 @@ defmodule CEL.Checker do
 
   defp select_receiver_id(%{expr_kind: {:select_expr, %{operand: %{id: id}}}}), do: id
 
+  # A field the checker found carries the message type it was found on, which
+  # evaluation expects the operand to be.
   defp maybe_put_field_ref(op, nil), do: op
-  defp maybe_put_field_ref(op, field_ref), do: Map.put(op, :field_ref, field_ref)
 
-  defp maybe_put_message(op, _state, _operand_type, %{message: message}) do
-    Map.put(op, :message, message)
-  end
-
-  defp maybe_put_message(op, %State{}, _operand_type, nil), do: op
+  defp maybe_put_field_ref(op, {message, cel_field}),
+    do: Map.merge(op, %{message: message, cel_field: cel_field})
 
   defp optional_select_op(call, receiver, field, overload_id, receiver_type, field_ref) do
     %{
@@ -1305,16 +1230,9 @@ defmodule CEL.Checker do
       overload_id: overload_id
     }
     |> maybe_put_field_ref(field_ref)
-    |> maybe_put_message(receiver_type, field_ref)
   end
 
-  defp maybe_put_message(op, _receiver_type, %{message: message}) do
-    Map.put(op, :message, message)
-  end
-
-  defp maybe_put_message(op, _receiver_type, nil), do: op
-
-  defp optional_select_kind(_receiver_type, %{message: _message}), do: :optional_field
+  defp optional_select_kind(_receiver_type, {_message, _field}), do: :optional_field
 
   defp optional_select_kind(receiver_type, nil) do
     if optional_map_type?(receiver_type) do

@@ -11,25 +11,17 @@ defmodule CEL.CheckerTest do
   alias CEL.Function.Overload
   alias CEL.Runtime.Core, as: RuntimeCore
 
-  defmodule WrappedMessageSchema do
-    @behaviour CEL.Message.Schema
+  # A provider whose state wraps PB.CEL.Types' own.
+  defmodule WrappedTypes do
+    @behaviour CEL.TypeProvider
 
-    alias PB.CEL.MessageSchema
+    for {name, arity} <- CEL.TypeProvider.behaviour_info(:callbacks) do
+      args = Macro.generate_arguments(arity - 1, __MODULE__)
 
-    def normalize({:wrapped, schema}), do: MessageSchema.normalize(schema)
-    def normalize(schema), do: MessageSchema.normalize(schema)
-
-    defdelegate known_message?(schema, name), to: MessageSchema
-    defdelegate known_enum?(schema, name), to: MessageSchema
-    defdelegate resolve_message(schema, name), to: MessageSchema
-    defdelegate resolve_enum(schema, name), to: MessageSchema
-    defdelegate enum_value(schema, name), to: MessageSchema
-    defdelegate enum_number(schema, enum, name), to: MessageSchema
-    defdelegate field(schema, message, field), to: MessageSchema
-    defdelegate extension(schema, message, name), to: MessageSchema
-    defdelegate field_type(schema, field), to: MessageSchema
-    defdelegate literal_field(schema, message, field), to: MessageSchema
-    defdelegate required_fields(schema, message), to: MessageSchema
+      @impl true
+      def unquote(name)({:wrapped, schema}, unquote_splicing(args)),
+        do: PB.CEL.Types.unquote(name)(schema, unquote_splicing(args))
+    end
   end
 
   test "checks variables and records references" do
@@ -217,7 +209,7 @@ defmodule CEL.CheckerTest do
     assert {:select, op} = Checked.op(checked, checked.expr)
     assert op.kind == :dyn_field
     refute Map.has_key?(op, :message)
-    refute Map.has_key?(op, :field_ref)
+    refute Map.has_key?(op, :cel_field)
   end
 
   test "uses schema-backed protobuf field types" do
@@ -228,7 +220,7 @@ defmodule CEL.CheckerTest do
         "msg.single_int64",
         env(
           vars: %{"msg" => msg_type},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -246,9 +238,11 @@ defmodule CEL.CheckerTest do
                 test_only: false,
                 overload_id: "select_message",
                 message: :"cel.expr.conformance.proto3.TestAllTypes",
-                field_ref: %{
-                  message: :"cel.expr.conformance.proto3.TestAllTypes",
-                  field: :single_int64
+                cel_field: %CEL.Field{
+                  name: "single_int64",
+                  type: :int,
+                  kind: :singular,
+                  ref: {:field, :"cel.expr.conformance.proto3.TestAllTypes", :single_int64}
                 }
               }}
 
@@ -257,7 +251,7 @@ defmodule CEL.CheckerTest do
         "msg.map_int32_int64[1]",
         env(
           vars: %{"msg" => msg_type},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -268,7 +262,7 @@ defmodule CEL.CheckerTest do
         "msg.oneof_type.payload.single_int64",
         env(
           vars: %{"msg" => msg_type},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -279,7 +273,7 @@ defmodule CEL.CheckerTest do
         "[msg.single_int64_wrapper, msg.single_int64]",
         env(
           vars: %{"msg" => msg_type},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -291,7 +285,7 @@ defmodule CEL.CheckerTest do
         "[msg.single_timestamp, null][0]",
         env(
           vars: %{"msg" => msg_type},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -302,7 +296,7 @@ defmodule CEL.CheckerTest do
                "msg.missing",
                env(
                  vars: %{"msg" => msg_type},
-                 schema: PB.TestSupport.TestSchema
+                 types: PB.CEL.types(PB.TestSupport.TestSchema)
                )
              )
 
@@ -311,7 +305,7 @@ defmodule CEL.CheckerTest do
         "has(msg.single_int64)",
         env(
           vars: %{"msg" => msg_type},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -328,9 +322,11 @@ defmodule CEL.CheckerTest do
                 test_only: true,
                 overload_id: "select_message",
                 message: :"cel.expr.conformance.proto3.TestAllTypes",
-                field_ref: %{
-                  message: :"cel.expr.conformance.proto3.TestAllTypes",
-                  field: :single_int64
+                cel_field: %CEL.Field{
+                  name: "single_int64",
+                  type: :int,
+                  kind: :singular,
+                  ref: {:field, :"cel.expr.conformance.proto3.TestAllTypes", :single_int64}
                 }
               }}
 
@@ -339,12 +335,12 @@ defmodule CEL.CheckerTest do
                "has(msg.missing)",
                env(
                  vars: %{"msg" => msg_type},
-                 schema: PB.TestSupport.TestSchema
+                 types: PB.CEL.types(PB.TestSupport.TestSchema)
                )
              )
   end
 
-  test "uses configured checker message schema provider" do
+  test "uses the configured type provider and its state" do
     msg_type = CType.message("cel.expr.conformance.proto3.TestAllTypes")
 
     checked =
@@ -352,8 +348,7 @@ defmodule CEL.CheckerTest do
         "msg.single_int64",
         env(
           vars: %{"msg" => msg_type},
-          schema: {:wrapped, PB.TestSupport.TestSchema},
-          message_schema: WrappedMessageSchema
+          types: {WrappedTypes, {:wrapped, PB.TestSupport.TestSchema}}
         )
       )
 
@@ -369,7 +364,7 @@ defmodule CEL.CheckerTest do
         "msg.?single_int64",
         env(
           vars: %{"msg" => msg_type},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -388,9 +383,11 @@ defmodule CEL.CheckerTest do
                 test_only: false,
                 overload_id: "optional_select",
                 message: :"cel.expr.conformance.proto3.TestAllTypes",
-                field_ref: %{
-                  message: :"cel.expr.conformance.proto3.TestAllTypes",
-                  field: :single_int64
+                cel_field: %CEL.Field{
+                  name: "single_int64",
+                  type: :int,
+                  kind: :singular,
+                  ref: {:field, :"cel.expr.conformance.proto3.TestAllTypes", :single_int64}
                 }
               }}
 
@@ -399,7 +396,7 @@ defmodule CEL.CheckerTest do
         "maybe_msg.single_int64",
         env(
           vars: %{"maybe_msg" => CType.optional(msg_type)},
-          schema: PB.TestSupport.TestSchema
+          types: PB.CEL.types(PB.TestSupport.TestSchema)
         )
       )
 
@@ -408,10 +405,8 @@ defmodule CEL.CheckerTest do
     assert {:select, op} = Checked.op(checked, checked.expr)
     assert op.kind == :optional_field
 
-    assert op.field_ref == %{
-             message: :"cel.expr.conformance.proto3.TestAllTypes",
-             field: :single_int64
-           }
+    assert op.message == :"cel.expr.conformance.proto3.TestAllTypes"
+    assert %CEL.Field{name: "single_int64", type: :int} = op.cel_field
 
     checked = CEL.check!("fields.?key", env(vars: %{"fields" => CType.map(:string, :int)}))
 
@@ -419,7 +414,7 @@ defmodule CEL.CheckerTest do
 
     assert {:select, op} = Checked.op(checked, checked.expr)
     assert op.kind == :optional_map_field
-    refute Map.has_key?(op, :field_ref)
+    refute Map.has_key?(op, :cel_field)
 
     checked = CEL.check!("fields.?key", env(vars: %{"fields" => CType.dyn()}))
 
@@ -427,19 +422,19 @@ defmodule CEL.CheckerTest do
 
     assert {:select, op} = Checked.op(checked, checked.expr)
     assert op.kind == :optional_dyn_field
-    refute Map.has_key?(op, :field_ref)
+    refute Map.has_key?(op, :cel_field)
   end
 
   test "resolves schema-backed enum names" do
     opts =
       env(
         container: "cel.expr.conformance.proto3",
-        schema: PB.TestSupport.TestSchema
+        types: PB.CEL.types(PB.TestSupport.TestSchema)
       )
 
     checked = CEL.check!("GlobalEnum.GAZ", opts)
 
-    assert root_type(checked) == CType.message("cel.expr.conformance.proto3.GlobalEnum")
+    assert root_type(checked) == CType.message(:"cel.expr.conformance.proto3.GlobalEnum")
 
     assert ref(checked, checked.expr.id) == %{
              name: "cel.expr.conformance.proto3.GlobalEnum.GAZ",
@@ -454,29 +449,29 @@ defmodule CEL.CheckerTest do
               %{
                 kind: :enum_value,
                 name: "cel.expr.conformance.proto3.GlobalEnum.GAZ",
-                value: {:enum, "cel.expr.conformance.proto3.GlobalEnum", 2}
+                value: {:enum, :"cel.expr.conformance.proto3.GlobalEnum", 2}
               }}
 
     checked = CEL.check!("GlobalEnum", opts)
 
     assert root_type(checked) ==
-             CType.type(CType.message("cel.expr.conformance.proto3.GlobalEnum"))
+             CType.type(CType.message(:"cel.expr.conformance.proto3.GlobalEnum"))
 
     assert Checked.op(checked, checked.expr) ==
              {:ident,
               %{
                 kind: :type,
                 name: "cel.expr.conformance.proto3.GlobalEnum",
-                denotation: CEL.ProtoType.message("cel.expr.conformance.proto3.GlobalEnum")
+                denotation: CEL.ProtoType.message(:"cel.expr.conformance.proto3.GlobalEnum")
               }}
 
     assert root_type(CEL.check!("type(GlobalEnum.GOO)", opts)) ==
-             CType.type(CType.message("cel.expr.conformance.proto3.GlobalEnum"))
+             CType.type(CType.message(:"cel.expr.conformance.proto3.GlobalEnum"))
 
     assert root_type(CEL.check!("int(GlobalEnum.GAZ)", opts)) == CType.int()
 
     assert root_type(CEL.check!("TestAllTypes.NestedEnum(2)", opts)) ==
-             CType.message("cel.expr.conformance.proto3.TestAllTypes.NestedEnum")
+             CType.message(:"cel.expr.conformance.proto3.TestAllTypes.NestedEnum")
   end
 
   test "resolves identifiers and message literals through the container" do
@@ -729,11 +724,7 @@ defmodule CEL.CheckerTest do
     assert decoded == proto
   end
 
-  defp env(opts) do
-    opts
-    |> Keyword.put_new(:message_schema, PB.CEL.MessageSchema)
-    |> CEL.Env.build()
-  end
+  defp env(opts), do: CEL.Env.build(opts)
   defp root_type(checked), do: checked.root_type
   defp ref(checked, expr_or_id), do: Checked.ref(checked, expr_or_id)
 

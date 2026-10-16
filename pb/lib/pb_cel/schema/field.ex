@@ -1,8 +1,9 @@
 defmodule PB.CEL.Schema.Field do
   @moduledoc false
 
-  alias CEL.ProtoType
-  alias CEL.WellKnownTypes
+  # CEL types of PB's compiled fields, in `CEL.Type` shorthand. Enum and
+  # message types are named by PB's atoms; the well-known types are the CEL
+  # types they stand for.
 
   @signed_int_types [
     :TYPE_INT32,
@@ -24,50 +25,56 @@ defmodule PB.CEL.Schema.Field do
   defguard float_type?(type) when type in @float_types
   defguard message_type?(type) when type in @message_types
 
-  @spec cel_type(CEL.Message.Schema.schema(), t()) :: {:ok, ProtoType.t()} | {:error, String.t()}
+  @well_known_types %{
+    "google.protobuf.Timestamp": :timestamp,
+    "google.protobuf.Duration": :duration,
+    "google.protobuf.Any": :dyn,
+    "google.protobuf.Value": :dyn,
+    "google.protobuf.ListValue": {:list, :dyn},
+    "google.protobuf.Struct": {:map, :string, :dyn},
+    "google.protobuf.Int32Value": {:wrapper, :int},
+    "google.protobuf.Int64Value": {:wrapper, :int},
+    "google.protobuf.UInt32Value": {:wrapper, :uint},
+    "google.protobuf.UInt64Value": {:wrapper, :uint},
+    "google.protobuf.FloatValue": {:wrapper, :double},
+    "google.protobuf.DoubleValue": {:wrapper, :double},
+    "google.protobuf.BoolValue": {:wrapper, :bool},
+    "google.protobuf.StringValue": {:wrapper, :string},
+    "google.protobuf.BytesValue": {:wrapper, :bytes}
+  }
+
+  @spec cel_type(PB.schema(), t()) :: {:ok, CEL.Type.t()} | {:error, String.t()}
   def cel_type(schema, %{cardinality: :map, map_key: key, map_value: value}) do
     with {:ok, key_type} <- singular_cel_type(schema, key),
          {:ok, value_type} <- singular_cel_type(schema, value) do
-      {:ok, ProtoType.map(key_type, value_type)}
+      {:ok, {:map, key_type, value_type}}
     end
   end
 
   def cel_type(schema, %{cardinality: :repeated} = field) do
     with {:ok, elem_type} <- singular_cel_type(schema, field) do
-      {:ok, ProtoType.list(elem_type)}
+      {:ok, {:list, elem_type}}
     end
   end
 
   def cel_type(schema, field), do: singular_cel_type(schema, field)
 
-  @spec singular_cel_type(CEL.Message.Schema.schema(), t()) ::
-          {:ok, ProtoType.t()} | {:error, String.t()}
-  def singular_cel_type(_schema, %{type: type}) when signed_int_type?(type),
-    do: {:ok, ProtoType.int()}
-
-  def singular_cel_type(_schema, %{type: type}) when unsigned_int_type?(type),
-    do: {:ok, ProtoType.uint()}
-
-  def singular_cel_type(_schema, %{type: type}) when float_type?(type),
-    do: {:ok, ProtoType.double()}
-
-  def singular_cel_type(_schema, %{type: :TYPE_BOOL}), do: {:ok, ProtoType.bool()}
-  def singular_cel_type(_schema, %{type: :TYPE_STRING}), do: {:ok, ProtoType.string()}
-  def singular_cel_type(_schema, %{type: :TYPE_BYTES}), do: {:ok, ProtoType.bytes()}
+  @spec singular_cel_type(PB.schema(), t()) :: {:ok, CEL.Type.t()} | {:error, String.t()}
+  def singular_cel_type(_schema, %{type: type}) when signed_int_type?(type), do: {:ok, :int}
+  def singular_cel_type(_schema, %{type: type}) when unsigned_int_type?(type), do: {:ok, :uint}
+  def singular_cel_type(_schema, %{type: type}) when float_type?(type), do: {:ok, :double}
+  def singular_cel_type(_schema, %{type: :TYPE_BOOL}), do: {:ok, :bool}
+  def singular_cel_type(_schema, %{type: :TYPE_STRING}), do: {:ok, :string}
+  def singular_cel_type(_schema, %{type: :TYPE_BYTES}), do: {:ok, :bytes}
 
   def singular_cel_type(_schema, %{type: :TYPE_ENUM, type_name: type_name}),
-    do: {:ok, ProtoType.message(Atom.to_string(type_name))}
+    do: {:ok, {:enum, type_name}}
 
-  def singular_cel_type(_schema, %{type: :TYPE_ENUM}), do: {:ok, ProtoType.int()}
+  def singular_cel_type(_schema, %{type: :TYPE_ENUM}), do: {:ok, :int}
 
   def singular_cel_type(_schema, %{type: type, type_name: type_name})
       when message_type?(type) do
-    name = Atom.to_string(type_name)
-
-    case WellKnownTypes.field_type(name) do
-      {:ok, type} -> {:ok, type}
-      :error -> {:ok, ProtoType.message(name)}
-    end
+    {:ok, Map.get(@well_known_types, type_name, {:message, type_name})}
   end
 
   def singular_cel_type(_schema, %{type: type}) do

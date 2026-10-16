@@ -46,16 +46,20 @@ defmodule CEL.ProgramTest do
           {[vars: :nope], ~r/:vars: expected a keyword list or map/},
           {[functions: [:nope]], ~r/:functions: expected a %CEL.Function\{\}/},
           {[container: :pkg], ~r/:container: expected a string/},
-          {[message_schema: Enum], ~r/:message_schema: expected a provider module/}
+          {[schema: PB.TestSupport.TestSchema], ~r/unknown option\(s\): \[:schema\]/},
+          {[types: PB.TestSupport.TestSchema], ~r/:types: expected a \{module, state\}/},
+          {[types: {Enum, nil}], ~r/:types: Enum does not implement CEL.TypeProvider/},
+          {[types: PB.CEL.types(PB.TestSupport.TestSchema), vars: [x: {:message, "pkg.Nope"}]],
+           ~r/:vars: unknown message or enum type pkg.Nope/}
         ] do
       assert_raise CEL.OptionError, pattern, fn -> Env.build(opts) end
     end
   end
 
-  test "Env.build/1 with only :schema reads PB messages" do
+  test "Env.build/1 with only :types reads PB messages" do
     env =
       Env.build(
-        schema: PB.TestSupport.TestSchema,
+        types: PB.CEL.types(PB.TestSupport.TestSchema),
         container: "cel.expr.conformance.proto3",
         vars: [n: :int]
       )
@@ -72,6 +76,6 @@ defmodule CEL.ProgramTest do
     assert env.vars == %{}
     assert env.functions == []
     assert env.container == ""
-    assert env.schema == nil
+    assert {CEL.TypeProvider.Empty, nil} = env.types
   end
 end

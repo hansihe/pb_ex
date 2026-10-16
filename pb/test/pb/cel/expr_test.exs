@@ -67,7 +67,7 @@ defmodule CEL.ExprTest do
   end
 
   test "represents an enum constructor as a call to the enum's full name" do
-    env = CEL.Env.build(schema: PB.TestSupport.TestSchema, container: "cel.expr.conformance")
+    env = CEL.Env.build(types: PB.CEL.types(PB.TestSupport.TestSchema), container: "cel.expr.conformance")
 
     assert %Call{
              function: "cel.expr.conformance.proto3.GlobalEnum",

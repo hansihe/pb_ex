@@ -12,20 +12,20 @@ defmodule CEL.Evaluator do
   alias CEL.Error
   alias CEL.Runtime.Access
   alias CEL.Runtime.Core
+  alias CEL.Checker.Types, as: CType
   alias CEL.Runtime.Enum, as: RuntimeEnum
-  alias CEL.Runtime.NoMessageRuntime
-  alias CEL.Runtime.NoMessageSchema
+  alias CEL.TypeProvider
   alias CEL.Unknown
   alias CEL.Value
   alias CEL.WellKnownTypes
+
+  @no_types {TypeProvider.Empty, nil}
 
   defmodule State do
     @moduledoc false
     defstruct [
       :checked,
-      :schema,
-      :message_schema,
-      :message_runtime,
+      :types,
       regexes: %{},
       vars: %{},
       var_cache: %{},
@@ -37,15 +37,11 @@ defmodule CEL.Evaluator do
 
   @spec eval(Checked.t(), keyword | map, keyword) :: result
   def eval(%Checked{expr: expr} = checked, vars \\ %{}, opts \\ []) do
-    message_schema = eval_message_schema(opts)
-
     state = %State{
       checked: checked,
       vars: normalize_vars(vars),
       regexes: Keyword.get(opts, :regexes, %{}),
-      schema: eval_schema(checked, opts, message_schema),
-      message_schema: message_schema,
-      message_runtime: eval_message_runtime(opts)
+      types: Keyword.get(opts, :types, @no_types)
     }
 
     case eval_id(expr.id, state) do
@@ -464,7 +460,7 @@ defmodule CEL.Evaluator do
   end
 
   defp eval_select(expr, operand, op, state) do
-    case Access.select(state.message_runtime, state.schema, operand, op) do
+    case Access.select(state.types, operand, op) do
       {:ok, value} -> {:ok, value, state}
       {:error, reason} -> error(expr, reason)
     end
@@ -516,15 +512,14 @@ defmodule CEL.Evaluator do
     end
   end
 
-  defp eval_context_value(:schema, _expr, _op, state), do: state.schema
-  defp eval_context_value(:message_runtime, _expr, _op, state), do: state.message_runtime
+  defp eval_context_value(:types, _expr, _op, state), do: state.types
   defp eval_context_value(:vars, _expr, _op, state), do: state.vars
 
   defp eval_context_value(:call, expr, op, _state),
     do: %{function: op.name, overload_id: op.overload_id, expr_id: expr.id}
 
   defp apply_enum_constructor(expr, enum_name, [value], state) do
-    case RuntimeEnum.construct(state.message_schema, state.schema, enum_name, value) do
+    case RuntimeEnum.construct(state.types, enum_name, value) do
       {:ok, value} -> {:ok, value, state}
       {:error, reason} -> error(expr, reason)
     end
@@ -534,22 +529,27 @@ defmodule CEL.Evaluator do
     error(expr, "enum constructor requires exactly one argument")
   end
 
-  # An `Any` literal unpacks when the message runtime knows its type.
-  defp message_value(message_name, fields, state) do
+  defp message_value(message_name, fields, %State{types: {types, state}}) do
     if WellKnownTypes.literal_message?(message_name) do
       case WellKnownTypes.literal_value(message_name, Map.new(fields, &{&1.field, &1.value})) do
-        {:ok, {:object, type_url, value}} ->
-          state.message_runtime.from_any(state.schema, type_url, value)
-
-        result ->
-          result
+        {:ok, {:object, _type_url, _value} = object} -> unpack_any(types, state, object)
+        result -> result
       end
     else
-      case state.message_runtime.from_literal(state.schema, message_name, fields, true) do
+      types.new_message(state, message_name, Enum.map(fields, &{&1.cel_field, &1.value}))
+    end
+  end
+
+  # An `Any` literal unpacks when the provider knows its type.
+  defp unpack_any(types, state, {:object, type_url, value} = object) do
+    if function_exported?(types, :unpack_any, 3) do
+      case types.unpack_any(state, type_url, value) do
         {:ok, value} -> {:ok, value}
-        :unknown -> {:error, "unknown message #{inspect(message_name)}"}
+        :error -> {:ok, object}
         {:error, reason} -> {:error, reason}
       end
+    else
+      {:ok, object}
     end
   end
 
@@ -647,30 +647,14 @@ defmodule CEL.Evaluator do
   defp merge_unknown(nil, %Unknown{} = unknown), do: unknown
   defp merge_unknown(%Unknown{} = acc, %Unknown{} = unknown), do: Unknown.merge(acc, unknown)
 
-  # An enum variable takes what `PB.decode/4` gives an enum field: a value's
-  # name as an atom, or its number.
-  defp coerce_runtime_value(value, {:message, name} = type, %State{} = state)
-       when is_integer(value) or (is_atom(value) and value not in [nil, true, false]) do
-    if state.message_schema.known_enum?(state.schema, name) do
-      arg = if is_integer(value), do: Value.int(value), else: Value.string(Atom.to_string(value))
-      RuntimeEnum.construct(state.message_schema, state.schema, name, arg)
-    else
-      coerce_value(value, type)
-    end
-  end
-
-  defp coerce_runtime_value(value, {:message, name} = type, %State{} = state) do
-    if cel_value?(value) do
+  # A variable of one of the provider's message or enum types may be bound to
+  # what the provider makes values from, such as a decoded message.
+  defp coerce_runtime_value(value, {:message, name} = type, %State{types: {types, state}}) do
+    if cel_value?(value) or CType.time?(type) do
       coerce_value(value, type)
     else
-      case state.message_schema.resolve_message(state.schema, name) do
-        {:ok, message} ->
-          with {:ok, value} <- state.message_runtime.from_decoded(state.schema, message, value) do
-            coerce_value(value, type)
-          end
-
-        :error ->
-          coerce_value(value, type)
+      with {:ok, value} <- types.from_native(state, name, value) do
+        coerce_value(value, type)
       end
     end
   end
@@ -711,41 +695,6 @@ defmodule CEL.Evaluator do
   defp put_second_iter_var(state, "", _value), do: state
   defp put_second_iter_var(state, name, value), do: put_local(state, name, value)
 
-  defp eval_schema(%Checked{}, opts, message_schema) do
-    case Keyword.fetch(opts, :schema) do
-      {:ok, schema} -> message_schema.normalize(schema)
-      :error -> nil
-    end
-  end
-
-  defp eval_message_schema(opts) do
-    message_schema = Keyword.get(opts, :message_schema, NoMessageSchema)
-
-    unless is_atom(message_schema) do
-      raise ArgumentError,
-            "expected :message_schema to be a module, got: #{inspect(message_schema)}"
-    end
-
-    Code.ensure_loaded(message_schema)
-
-    unless function_exported?(message_schema, :normalize, 1) do
-      raise ArgumentError,
-            "expected :message_schema to implement CEL.Message.Schema, got: #{inspect(message_schema)}"
-    end
-
-    message_schema
-  end
-
-  defp eval_message_runtime(opts) do
-    runtime = Keyword.get(opts, :message_runtime, NoMessageRuntime)
-
-    unless is_atom(runtime) do
-      raise ArgumentError, "expected :message_runtime to be a module, got: #{inspect(runtime)}"
-    end
-
-    runtime
-  end
-
   defp normalize_vars(vars) when is_list(vars) or is_map(vars) do
     Map.new(vars, fn {name, value} -> {normalize_name(name), value} end)
   end
@@ -755,10 +704,9 @@ defmodule CEL.Evaluator do
 
   defp value_kind(:null), do: "null"
   defp value_kind({kind, _value}), do: Atom.to_string(kind)
-  defp value_kind({:enum, name, _value}), do: name
+  defp value_kind({:enum, name, _value}), do: to_string(name)
   defp value_kind({:object, type_url, _value}), do: type_url
-  defp value_kind({:message, name, _fields}) when is_atom(name), do: Atom.to_string(name)
-  defp value_kind({:message, name, _fields}), do: name
+  defp value_kind({:message, name, _fields}), do: to_string(name)
   defp value_kind(other), do: inspect(other)
 
   defp cel_value?(:null), do: true

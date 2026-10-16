@@ -11,6 +11,8 @@ defmodule PB.CEL.ProtoCodec do
   alias PB.CEL.MessageRuntime
   alias PB.CEL.MessageSchema
 
+  @type expr_value :: CEL.Proto.expr_value() | CEL.Proto.value()
+
   @roots [
     parsed_expr: :"cel.expr.ParsedExpr",
     checked_expr: :"cel.expr.CheckedExpr",
@@ -63,17 +65,17 @@ defmodule PB.CEL.ProtoCodec do
 
   @doc """
   Converts a `cel.expr.ExprValue` or `cel.expr.Value` map into a CEL value.
-  `schema` (a schema map or `use PB.Schema` module) is what `Any` payloads
-  and type values naming messages or enums resolve against.
+  `schema` (a schema map or `use PB.Schema` module) is what `Any` payloads,
+  enum values and type values naming messages or enums resolve against; their
+  names become PB's atoms.
   """
-  @spec from_expr_value(CEL.Proto.expr_value() | CEL.Proto.value(), PB.schema() | module | nil) ::
+  @spec from_expr_value(expr_value, PB.schema() | module | nil) ::
           {:ok, Value.t()} | {:error, term}
   def from_expr_value(expr_value, schema \\ nil) do
-    do_from_expr_value(expr_value, MessageSchema.normalize(schema))
+    do_from_expr_value(expr_value, MessageSchema.schema(schema))
   end
 
-  @spec from_expr_value!(CEL.Proto.expr_value() | CEL.Proto.value(), PB.schema() | module | nil) ::
-          Value.t()
+  @spec from_expr_value!(expr_value, PB.schema() | module | nil) :: Value.t()
   def from_expr_value!(expr_value, schema \\ nil) do
     case from_expr_value(expr_value, schema) do
       {:ok, value} -> value
@@ -118,8 +120,13 @@ defmodule PB.CEL.ProtoCodec do
 
   defp do_from_expr_value(%{kind: {:bytes_value, value}}, _schema), do: {:ok, Value.bytes(value)}
 
-  defp do_from_expr_value(%{kind: {:enum_value, enum}}, _schema) do
-    {:ok, Value.enum(Map.fetch!(enum, :type), Map.get(enum, :value, 0))}
+  defp do_from_expr_value(%{kind: {:enum_value, enum}}, schema) do
+    type = Map.fetch!(enum, :type)
+
+    case MessageSchema.resolve_enum(schema, type) do
+      {:ok, type} -> {:ok, Value.enum(type, Map.get(enum, :value, 0))}
+      :error -> {:error, {:unknown_enum, type}}
+    end
   end
 
   defp do_from_expr_value(%{kind: {:object_value, object}}, schema) do
@@ -165,7 +172,7 @@ defmodule PB.CEL.ProtoCodec do
          :error <- MessageSchema.resolve_enum(schema, type_name) do
       {:error, {:unsupported_type_value, type_name}}
     else
-      {:ok, name} -> {:ok, {:type, ProtoType.message(Atom.to_string(name))}}
+      {:ok, name} -> {:ok, {:type, ProtoType.message(name)}}
     end
   end
 

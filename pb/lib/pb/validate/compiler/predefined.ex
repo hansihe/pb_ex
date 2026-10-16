@@ -7,7 +7,6 @@ defmodule PB.Validate.Compiler.Predefined do
   # All schema lookups run against the merged standard-rule schema.
 
   alias PB.CEL.Schema.Field
-  alias CEL.ProtoType
   alias PB.CEL.FieldReader
   alias PB.CEL.MessageRuntime, as: CELMessage
   alias PB.Validate.Compiler.CEL
@@ -37,7 +36,7 @@ defmodule PB.Validate.Compiler.Predefined do
          {:ok, field_rules_field} <- Context.fetch_field(field_rules_message, rules_name),
          {:ok, rules_message_name} <- rules_message_name(field_rules_field),
          {:ok, rules_message} <- Context.fetch_message(rule_schema, rules_message_name) do
-      rules_type = ProtoType.message(Atom.to_string(rules_message_name))
+      rules_type = {:message, rules_message_name}
 
       rules_message
       |> sorted_rule_fields()
@@ -90,7 +89,7 @@ defmodule PB.Validate.Compiler.Predefined do
           %{"this" => this_type, "rules" => rules_type, "rule" => rule_type},
           kind: :predefined,
           vars: %{
-            "rules" => runtime_rules_value,
+            "rules" => runtime_rules_value(schema, rules_type, runtime_rules_value),
             "rule" => runtime_rule_value(schema, rule_field, rule_value)
           },
           rule_path: rule_path,
@@ -141,15 +140,22 @@ defmodule PB.Validate.Compiler.Predefined do
     end
   end
 
-  defp runtime_rule_value(schema, %{type: type} = rule_field, rule_value)
-       when Field.message_type?(type) do
+  # The rules and the rule are bound as CEL values, read once here rather
+  # than each time a rule is evaluated, and so are known when the rule's
+  # regular expressions are compiled.
+  defp runtime_rules_value(schema, {:message, rules_message_name}, rules_value) do
+    case CELMessage.from_decoded(schema, rules_message_name, rules_value) do
+      {:ok, value} -> value
+      {:error, _reason} -> rules_value
+    end
+  end
+
+  defp runtime_rule_value(schema, rule_field, rule_value) do
     case CELMessage.field_value(schema, rule_field, rule_value) do
       {:ok, value} -> value
       {:error, _reason} -> rule_value
     end
   end
-
-  defp runtime_rule_value(_schema, _rule_field, rule_value), do: rule_value
 
   defp rules_message_name(%{type: type, type_name: type_name}) when Field.message_type?(type),
     do: {:ok, type_name}

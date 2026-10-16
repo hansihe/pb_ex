@@ -39,11 +39,11 @@ defmodule CEL.Value do
           | {:bytes, binary}
           | Time.timestamp()
           | Time.duration()
-          | {:enum, String.t(), integer}
+          | {:enum, CEL.TypeProvider.name(), integer}
           | {:object, String.t(), binary}
           | {:list, [t]}
           | {:map, %{t => t}}
-          | {:message, String.t() | atom(), %{(String.t() | atom()) => t}}
+          | {:message, CEL.TypeProvider.name(), CEL.TypeProvider.payload()}
           | {:optional, :none | {:some, t}}
           | {:type, term}
 
@@ -96,8 +96,9 @@ defmodule CEL.Value do
   @spec duration(integer) :: t
   def duration(value) when is_integer(value), do: {:duration, value}
 
-  @spec enum(String.t(), integer) :: t
-  def enum(type, value) when is_binary(type) and is_integer(value), do: {:enum, type, value}
+  @spec enum(CEL.TypeProvider.name(), integer) :: t
+  def enum(type, value) when (is_atom(type) or is_binary(type)) and is_integer(value),
+    do: {:enum, type, value}
 
   @spec object(String.t(), binary) :: t
   def object(type_url, value) when is_binary(type_url) and is_binary(value) do
@@ -283,10 +284,11 @@ defmodule CEL.Value do
     * a non-finite `double` stays the atom `:nan`/`:infinity`/`:negative_infinity`,
       since Elixir floats cannot represent those.
 
-  Values that have no native Elixir form pass through unchanged in their
-  `t:t/0` shape: `timestamp`/`duration` (already the native well-known-type
-  representation, as PB decodes them) and an un-decoded `object` (an
-  `Any` that was not resolved against a schema).
+  A message becomes its payload, which its `CEL.TypeProvider` owns: for
+  `PB.CEL.types/1`, the message's fields. Values that have no native Elixir
+  form pass through unchanged in their `t:t/0` shape: `timestamp`/`duration`
+  and an un-decoded `object` (an `Any` whose type the provider does not
+  know).
 
   ## Examples
 
@@ -313,8 +315,7 @@ defmodule CEL.Value do
   def to_native({:map, values}),
     do: Map.new(values, fn {key, value} -> {to_native(key), to_native(value)} end)
 
-  def to_native({:message, _name, fields}),
-    do: Map.new(fields, fn {key, value} -> {key, to_native(value)} end)
+  def to_native({:message, _name, payload}), do: payload
 
   def to_native({:optional, :none}), do: nil
   def to_native({:optional, {:some, value}}), do: to_native(value)
@@ -375,13 +376,13 @@ defmodule CEL.Value do
   defp type_value_name(%{type_kind: {:abstract_type, %{name: name}}}), do: name
   defp type_value_name(%{type_kind: {:list_type, _list}}), do: "list"
   defp type_value_name(%{type_kind: {:map_type, _map}}), do: "map"
-  defp type_value_name(%{type_kind: {:message_type, name}}), do: name
+  defp type_value_name(%{type_kind: {:message_type, name}}), do: to_string(name)
   defp type_value_name(:dyn), do: "dyn"
   defp type_value_name(:null), do: "null_type"
   defp type_value_name({:type, _type}), do: "type"
   defp type_value_name({:list, _elem_type}), do: "list"
   defp type_value_name({:map, _key_type, _value_type}), do: "map"
-  defp type_value_name({:message, name}), do: name
+  defp type_value_name({:message, name}), do: to_string(name)
   defp type_value_name({:optional, _value_type}), do: "optional_type"
   defp type_value_name({:abstract, name, _params}), do: name
   defp type_value_name(type), do: type |> CType.from_input() |> CType.format()

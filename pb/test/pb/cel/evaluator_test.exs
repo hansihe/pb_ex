@@ -5,29 +5,62 @@ defmodule CEL.EvaluatorTest do
   alias CEL.Error
   alias CEL.ProtoType
   alias CEL.Value
-  alias PB.CEL.MessageRuntime, as: Message
   alias PB.Validate.CELExtensions
 
-  defmodule StubMessageRuntime do
-    @behaviour CEL.Message.Runtime
+  # A provider of one message type and one enum, named by strings, whose
+  # payloads are maps of CEL values keyed by field name.
+  defmodule StringTypes do
+    @behaviour CEL.TypeProvider
 
-    defdelegate from_decoded(schema, message, value), to: Message
-    defdelegate from_literal(schema, message, fields, wkt_unwrap?), to: Message
-    defdelegate from_literal_message(schema, message, fields), to: Message
-    defdelegate select_ref(schema, message, field_ref, test_only?), to: Message
-    defdelegate optional_select(schema, value, field), to: Message
-    defdelegate optional_select_ref(schema, value, field_ref), to: Message
-    defdelegate field_value(schema, field, value), to: Message
-    defdelegate raw_fields_for_encode(schema, message, value), to: Message
-    defdelegate equal?(schema, left, right), to: Message
-    defdelegate from_any(schema, type_url, value), to: Message
-    defdelegate to_any(schema, value), to: Message
+    @fields %{
+      "a" => %CEL.Field{name: "a", type: :int, ref: "a"},
+      "e" => %CEL.Field{name: "e", type: {:enum, "test.E"}, ref: "e"},
+      "child" => %CEL.Field{name: "child", type: {:message, "test.Msg"}, ref: "child"}
+    }
 
-    def select(_schema, {:message, _name, _fields}, "field", false),
-      do: {:ok, Value.string("runtime")}
+    @impl true
+    def find_type(_state, "test.Msg"), do: {:ok, :message, "test.Msg"}
+    def find_type(_state, "test.E"), do: {:ok, :enum, "test.E"}
+    def find_type(_state, _name), do: :error
 
-    def select(schema, message, field, test_only?),
-      do: Message.select(schema, message, field, test_only?)
+    @impl true
+    def find_field(_state, "test.Msg", name), do: Map.fetch(@fields, name)
+
+    @impl true
+    def enum_value(_state, "test.E", name), do: Map.fetch(%{"X" => 1, "Y" => 2}, name)
+
+    @impl true
+    def new_message(_state, "test.Msg", fields) do
+      {:ok, {:message, "test.Msg", Map.new(fields, fn {field, value} -> {field.ref, value} end)}}
+    end
+
+    @impl true
+    def from_native(_state, "test.Msg", native) do
+      {:ok,
+       {:message, "test.Msg",
+        Map.new(native, fn
+          {"a", a} -> {"a", Value.int(a)}
+          {"e", e} -> {"e", Value.enum("test.E", e)}
+          {"child", child} -> {"child", elem(from_native(nil, "test.Msg", child), 1)}
+        end)}}
+    end
+
+    @impl true
+    def get_field(_state, payload, field) do
+      default = %{
+        "a" => Value.int(0),
+        "e" => Value.enum("test.E", 0),
+        "child" => {:message, "test.Msg", %{}}
+      }
+
+      {:ok, Map.get(payload, field.ref, default[field.ref])}
+    end
+
+    @impl true
+    def has_field?(_state, payload, field), do: Map.has_key?(payload, field.ref)
+
+    @impl true
+    def equal?(_state, "test.Msg", left, right), do: left == right
   end
 
   test "evaluates checked source with runtime bindings" do
@@ -55,15 +88,29 @@ defmodule CEL.EvaluatorTest do
     assert CEL.eval!(expr) == Value.int(2)
   end
 
-  test "uses configured runtime message provider for selects" do
-    checked = CEL.check!("msg.field", env(vars: %{"msg" => {:message, "example.Msg"}}))
+  test "a provider may name its types with strings" do
+    env =
+      env(types: {StringTypes, nil}, container: "test", vars: [m: {:message, :"test.Msg"}])
 
-    assert {:ok, value} =
-             CEL.Evaluator.eval(checked, %{"msg" => {:message, "example.Msg", %{}}},
-               message_runtime: StubMessageRuntime
-             )
+    m = %{"a" => 1, "child" => %{"a" => 2, "e" => 2}}
 
-    assert value == Value.string("runtime")
+    assert CEL.Checked.type(CEL.check!("m.child", env)) == {:message, "test.Msg"}
+    assert CEL.Checked.type(CEL.check!("m.e", env)) == {:enum, "test.E"}
+    assert CEL.eval!("m.a + m.child.a", %{m: m}, env) == Value.int(3)
+    assert CEL.eval!("m.child.e == E.Y && m.e == E(0)", %{m: m}, env) == Value.bool(true)
+    assert CEL.eval!("[has(m.e), has(m.a), m.?e.hasValue()]", %{m: m}, env) ==
+             Value.list([Value.bool(false), Value.bool(true), Value.bool(false)])
+
+    assert CEL.eval!("dyn(m).child.a", %{m: m}, env) == Value.int(2)
+    assert CEL.eval!("Msg{a: 5, e: E.X}", %{}, env) ==
+             {:message, "test.Msg", %{"a" => Value.int(5), "e" => Value.enum("test.E", 1)}}
+
+    assert CEL.eval!("E('Y')", %{}, env) == Value.enum("test.E", 2)
+    assert CEL.eval!("Msg{a: 1} == Msg{a: 1} && type(m) == Msg", %{m: m}, env) == Value.bool(true)
+    assert CEL.eval!("type(m)", %{m: m}, env) |> Value.type_name() == "test.Msg"
+
+    assert {:error, %Error{phase: :check, message: "no such field \"b\""}} =
+             CEL.check("m.b", env)
   end
 
   test "evaluates macro-expanded comprehensions" do
@@ -218,7 +265,7 @@ defmodule CEL.EvaluatorTest do
     opts =
       env(
         vars: %{"x" => {:message, "cel.expr.conformance.proto2.TestAllTypes"}},
-        schema: PB.TestSupport.TestSchema
+        types: PB.CEL.types(PB.TestSupport.TestSchema)
       )
 
     assert CEL.eval!("x.?single_int32.hasValue()", %{"x" => %{single_int32: 18}}, opts) ==
@@ -297,7 +344,7 @@ defmodule CEL.EvaluatorTest do
              %{"x" => value},
              env(
                vars: %{"x" => {:message, "cel.expr.conformance.proto2.TestAllTypes"}},
-               schema: schema
+               types: PB.CEL.types(schema)
              )
            ) == Value.int(17)
 
@@ -306,7 +353,7 @@ defmodule CEL.EvaluatorTest do
              %{"x" => %{single_int32: 18}},
              env(
                vars: %{"x" => {:message, "cel.expr.conformance.proto2.TestAllTypes"}},
-               schema: schema
+               types: PB.CEL.types(schema)
              )
            ) == Value.int(18)
 
@@ -316,14 +363,14 @@ defmodule CEL.EvaluatorTest do
                %{"x" => %{single_int32: 18}},
                env(
                  vars: %{"x" => {:message, "cel.expr.conformance.proto2.TestAllTypes"}},
-                 schema: schema
+                 types: PB.CEL.types(schema)
                )
              )
 
     assert CEL.eval!(
              ~S|google.protobuf.Any{type_url: "type.googleapis.com/cel.expr.conformance.proto2.TestAllTypes", value: b"\x08\x96\x01"}|,
              %{},
-             env(schema: schema)
+             env(types: PB.CEL.types(schema))
            ) ==
              {:message, :"cel.expr.conformance.proto2.TestAllTypes", %{single_int32: 150}}
   end
@@ -332,7 +379,7 @@ defmodule CEL.EvaluatorTest do
     opts =
       env(
         container: "cel.expr.conformance.proto2",
-        schema: PB.TestSupport.TestSchema
+        types: PB.CEL.types(PB.TestSupport.TestSchema)
       )
 
     assert CEL.eval!("TestAllTypes{single_any: 1}", %{}, opts) ==
@@ -368,7 +415,7 @@ defmodule CEL.EvaluatorTest do
   test "packs CEL values into protobuf Value fields with JSON mapping" do
     opts = [
       container: "cel.expr.conformance.proto2",
-      schema: PB.TestSupport.TestSchema
+      types: PB.CEL.types(PB.TestSupport.TestSchema)
     ]
 
     cel_env = env(opts)
@@ -427,7 +474,7 @@ defmodule CEL.EvaluatorTest do
 
     assert CEL.eval!(
              "TestAllTypes{single_value: x}",
-             %{"x" => {:message, "google.protobuf.FieldMask", %{paths: ["foo_bar", "baz"]}}},
+             %{"x" => %{paths: ["foo_bar", "baz"]}},
              env(Keyword.put(opts, :vars, %{"x" => {:message, "google.protobuf.FieldMask"}}))
            ) ==
              {:message, :"cel.expr.conformance.proto2.TestAllTypes",
@@ -441,9 +488,10 @@ defmodule CEL.EvaluatorTest do
              {:message, :"cel.expr.conformance.proto2.TestAllTypes",
               %{single_value: %{kind: {:bool_value, true}}}}
 
+    # A declared well-known type is the CEL type it stands for.
     assert CEL.eval!(
              "TestAllTypes{single_value: x}",
-             %{"x" => {:message, "google.protobuf.BoolValue", %{value: true}}},
+             %{"x" => true},
              env(Keyword.put(opts, :vars, %{"x" => {:message, "google.protobuf.BoolValue"}}))
            ) ==
              {:message, :"cel.expr.conformance.proto2.TestAllTypes",
@@ -461,7 +509,7 @@ defmodule CEL.EvaluatorTest do
     proto2_opts =
       env(
         container: "cel.expr.conformance.proto2",
-        schema: PB.TestSupport.TestSchema
+        types: PB.CEL.types(PB.TestSupport.TestSchema)
       )
 
     assert CEL.eval!("TestAllTypes{single_int32_wrapper: 0}", %{}, proto2_opts) ==
@@ -510,7 +558,7 @@ defmodule CEL.EvaluatorTest do
     proto3_opts =
       env(
         container: "cel.expr.conformance.proto3",
-        schema: PB.TestSupport.TestSchema
+        types: PB.CEL.types(PB.TestSupport.TestSchema)
       )
 
     assert CEL.eval!("has(TestAllTypes{single_int32: 0}.single_int32)", %{}, proto3_opts) ==
@@ -521,31 +569,31 @@ defmodule CEL.EvaluatorTest do
     opts =
       env(
         container: "cel.expr.conformance.proto3",
-        schema: PB.TestSupport.TestSchema
+        types: PB.CEL.types(PB.TestSupport.TestSchema)
       )
 
     assert CEL.eval!("GlobalEnum.GAZ", %{}, opts) ==
-             Value.enum("cel.expr.conformance.proto3.GlobalEnum", 2)
+             Value.enum(:"cel.expr.conformance.proto3.GlobalEnum", 2)
 
     assert CEL.eval!("GlobalEnum", %{}, opts) ==
-             {:type, ProtoType.message("cel.expr.conformance.proto3.GlobalEnum")}
+             {:type, ProtoType.message(:"cel.expr.conformance.proto3.GlobalEnum")}
 
     assert CEL.eval!("type(GlobalEnum.GOO)", %{}, opts) ==
-             {:type, ProtoType.message("cel.expr.conformance.proto3.GlobalEnum")}
+             {:type, ProtoType.message(:"cel.expr.conformance.proto3.GlobalEnum")}
 
     assert CEL.eval!("int(GlobalEnum.GAZ)", %{}, opts) == Value.int(2)
 
     assert CEL.eval!("TestAllTypes.NestedEnum(2)", %{}, opts) ==
-             Value.enum("cel.expr.conformance.proto3.TestAllTypes.NestedEnum", 2)
+             Value.enum(:"cel.expr.conformance.proto3.TestAllTypes.NestedEnum", 2)
 
     assert CEL.eval!(~S|TestAllTypes.NestedEnum("BAZ")|, %{}, opts) ==
-             Value.enum("cel.expr.conformance.proto3.TestAllTypes.NestedEnum", 2)
+             Value.enum(:"cel.expr.conformance.proto3.TestAllTypes.NestedEnum", 2)
 
     assert CEL.eval!(
              "TestAllTypes{standalone_enum: TestAllTypes.NestedEnum.BAZ}.standalone_enum",
              %{},
              opts
-           ) == Value.enum("cel.expr.conformance.proto3.TestAllTypes.NestedEnum", 2)
+           ) == Value.enum(:"cel.expr.conformance.proto3.TestAllTypes.NestedEnum", 2)
 
     assert CEL.eval!("GlobalEnum.GAZ in [2]", %{}, opts) == Value.bool(true)
     assert CEL.eval!("GlobalEnum.GAZ in [1]", %{}, opts) == Value.bool(false)
@@ -803,12 +851,7 @@ defmodule CEL.EvaluatorTest do
     assert CEL.Program.eval!(program, %{x: "hello"}) == Value.bool(true)
   end
 
-  defp env(opts) do
-    opts
-    |> Keyword.put_new(:message_runtime, Message)
-    |> Keyword.put_new(:message_schema, PB.CEL.MessageSchema)
-    |> CEL.Env.build()
-  end
+  defp env(opts), do: CEL.Env.build(opts)
 
   test "has() follows CEL presence for stored defaults, as PB.decode(defaults: true) writes" do
     stored = %{single_int64: 0, repeated_int64: [], map_string_string: %{}, single_string: "a"}
@@ -827,7 +870,7 @@ defmodule CEL.EvaluatorTest do
 
   defp presence_env do
     CEL.Env.build(
-      schema: PB.TestSupport.TestSchema,
+      types: PB.CEL.types(PB.TestSupport.TestSchema),
       vars: [msg: {:message, "cel.expr.conformance.proto3.TestAllTypes"}]
     )
   end

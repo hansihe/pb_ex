@@ -1,7 +1,12 @@
 defmodule CEL.Runtime.Access do
   @moduledoc false
 
-  alias CEL.Message.Schema
+  # Field selection, `x.f`, `has(x.f)` and `x.?f`, on maps and messages. A
+  # field the checker found on a message type is read with its `CEL.Field`;
+  # one selected from a `dyn` operand is looked up by the message's type first.
+  # `has()` and optional selection test the field with `has_field?/3` before
+  # reading it.
+
   alias CEL.Runtime.Core
   alias CEL.Value
 
@@ -16,108 +21,118 @@ defmodule CEL.Runtime.Access do
             | :presence_test,
           required(:field) => String.t(),
           required(:test_only) => boolean(),
-          optional(:field_ref) => Schema.field_ref(),
+          optional(:message) => CEL.TypeProvider.name(),
+          optional(:cel_field) => CEL.Field.t(),
           optional(atom) => term
         }
 
   @type result :: {:ok, Value.t()} | {:error, term}
 
-  @spec select(module(), Schema.schema(), Value.t(), select_op()) :: result
-  def select(message_runtime, schema, operand, %{
-        kind: :presence_test,
-        field_ref: field_ref,
-        test_only: true
-      }) do
-    optional_select_ref(message_runtime, schema, operand, field_ref, true)
-  end
-
-  def select(message_runtime, schema, operand, %{
-        kind: :presence_test,
-        field: field,
-        test_only: true
-      }) do
-    runtime_select(message_runtime, schema, operand, field, true)
-  end
-
-  def select(message_runtime, schema, operand, %{
-        kind: :dyn_field,
-        field: field,
-        test_only: test_only?
-      }) do
-    runtime_select(message_runtime, schema, operand, field, test_only?)
-  end
-
-  def select(message_runtime, schema, operand, %{
-        kind: :optional_dyn_field,
-        field: field,
-        test_only: test_only?
-      }) do
-    optional_select(message_runtime, schema, operand, field, test_only?)
-  end
-
-  def select(_message_runtime, _schema, operand, %{
-        kind: :map_field,
-        field: field,
-        test_only: test_only?
-      }) do
-    map_select(operand, field, test_only?)
-  end
-
-  def select(_message_runtime, _schema, operand, %{
-        kind: :optional_map_field,
-        field: field,
-        test_only: test_only?
-      }) do
-    optional_map_select(operand, field, test_only?)
-  end
-
+  @spec select(CEL.TypeProvider.t(), Value.t(), select_op()) :: result
   def select(
-        message_runtime,
-        schema,
-        operand,
-        %{kind: :message_field, field_ref: field_ref, test_only: test_only?}
+        {types, state},
+        {:message, message, payload},
+        %{kind: :message_field, message: message, cel_field: field}
       ) do
-    message_select_ref(message_runtime, schema, operand, field_ref, test_only?)
+    types.get_field(state, payload, field)
   end
 
-  def select(_message_runtime, _schema, _operand, %{kind: :message_field}) do
-    {:error, "checked message field selection requires field_ref"}
+  def select(_types, operand, %{kind: :message_field, message: message}),
+    do: unexpected_operand(operand, message)
+
+  def select(types, operand, %{kind: :presence_test, message: message, cel_field: field}),
+    do: message_has(types, operand, message, field)
+
+  def select(types, operand, %{kind: :optional_field, message: message, cel_field: field}),
+    do: optional_message_field(types, operand, message, field)
+
+  def select(types, operand, %{kind: :presence_test, field: field}),
+    do: dyn_select(types, operand, field, true)
+
+  def select(types, operand, %{kind: :dyn_field, field: field, test_only: test_only?}),
+    do: dyn_select(types, operand, field, test_only?)
+
+  def select(types, operand, %{kind: :optional_dyn_field, field: field, test_only: test_only?}),
+    do: optional_dyn_select(types, operand, field, test_only?)
+
+  def select(_types, operand, %{kind: :map_field, field: field, test_only: test_only?}),
+    do: map_select(operand, field, test_only?)
+
+  def select(_types, operand, %{kind: :optional_map_field, field: field, test_only: test_only?}),
+    do: optional_map_select(operand, field, test_only?)
+
+  defp message_has(_types, {:optional, :none}, _message, _field), do: {:ok, Value.bool(false)}
+
+  defp message_has(types, {:optional, {:some, operand}}, message, field),
+    do: message_has(types, operand, message, field)
+
+  defp message_has({types, state}, {:message, message, payload}, message, field),
+    do: {:ok, Value.bool(types.has_field?(state, payload, field))}
+
+  defp message_has(_types, operand, message, _field), do: unexpected_operand(operand, message)
+
+  defp optional_message_field(_types, {:optional, :none}, _message, _field),
+    do: {:ok, Value.optional_none()}
+
+  defp optional_message_field(types, {:optional, {:some, operand}}, message, field),
+    do: optional_message_field(types, operand, message, field)
+
+  defp optional_message_field(types, {:message, message, payload}, message, field),
+    do: optional_field_value(types, payload, field)
+
+  defp optional_message_field(_types, operand, message, _field),
+    do: unexpected_operand(operand, message)
+
+  defp optional_field_value({types, state}, payload, field) do
+    if types.has_field?(state, payload, field) do
+      with {:ok, value} <- types.get_field(state, payload, field) do
+        {:ok, Value.optional_some(value)}
+      end
+    else
+      {:ok, Value.optional_none()}
+    end
   end
 
-  def select(
-        message_runtime,
-        schema,
-        operand,
-        %{kind: :optional_field, field_ref: field_ref, test_only: test_only?}
-      ) do
-    optional_select_ref(message_runtime, schema, operand, field_ref, test_only?)
+  defp dyn_select(_types, {:map, _values} = map, field, test_only?),
+    do: map_select(map, field, test_only?)
+
+  defp dyn_select(types, {:optional, _value} = optional, field, test_only?),
+    do: optional_dyn_select(types, optional, field, test_only?)
+
+  defp dyn_select({types, state}, {:message, message, payload}, field, test_only?) do
+    case types.find_field(state, message, field) do
+      {:ok, field} when test_only? -> {:ok, Value.bool(types.has_field?(state, payload, field))}
+      {:ok, field} -> types.get_field(state, payload, field)
+      :error -> {:error, "no such field #{inspect(field)}"}
+    end
   end
 
-  def select(_message_runtime, _schema, _operand, %{kind: :optional_field}) do
-    {:error, "checked optional field selection requires field_ref"}
+  defp dyn_select(_types, _operand, _field, _test_only?),
+    do: {:error, "field selection requires map or message"}
+
+  defp optional_dyn_select(_types, {:optional, :none}, _field, true),
+    do: {:ok, Value.bool(false)}
+
+  defp optional_dyn_select(_types, {:optional, :none}, _field, false),
+    do: {:ok, Value.optional_none()}
+
+  defp optional_dyn_select(types, {:optional, {:some, operand}}, field, test_only?),
+    do: optional_dyn_select(types, operand, field, test_only?)
+
+  defp optional_dyn_select(types, operand, field, true),
+    do: dyn_select(types, operand, field, true)
+
+  defp optional_dyn_select(provider, {:message, message, payload}, field, false) do
+    {types, state} = provider
+
+    case types.find_field(state, message, field) do
+      {:ok, field} -> optional_field_value(provider, payload, field)
+      :error -> {:ok, Value.optional_none()}
+    end
   end
 
-  defp runtime_select(_message_runtime, _schema, {:map, _values} = map, field, test_only?) do
-    map_select(map, field, test_only?)
-  end
-
-  defp runtime_select(message_runtime, schema, {:optional, _value} = optional, field, test_only?) do
-    optional_select(message_runtime, schema, optional, field, test_only?)
-  end
-
-  defp runtime_select(
-         message_runtime,
-         schema,
-         {:message, _name, _fields} = message,
-         field,
-         test_only?
-       ) do
-    message_select(message_runtime, schema, message, field, test_only?)
-  end
-
-  defp runtime_select(_message_runtime, _schema, _operand, _field, _test_only?) do
-    {:error, "field selection requires map or message"}
-  end
+  defp optional_dyn_select(_types, operand, field, false),
+    do: optional_select_core(operand, field)
 
   defp map_select({:map, values}, field, test_only?) do
     key = Value.string(field)
@@ -162,147 +177,14 @@ defmodule CEL.Runtime.Access do
     {:error, "field selection requires map"}
   end
 
-  defp optional_select(_message_runtime, _schema, {:optional, :none}, _field, true) do
-    {:ok, Value.bool(false)}
-  end
-
-  defp optional_select(_message_runtime, _schema, {:optional, :none}, _field, false) do
-    {:ok, Value.optional_none()}
-  end
-
-  defp optional_select(message_runtime, schema, {:optional, {:some, operand}}, field, true) do
-    runtime_select(message_runtime, schema, operand, field, true)
-  end
-
-  defp optional_select(message_runtime, schema, {:optional, {:some, operand}}, field, false) do
-    optional_select_value(message_runtime, schema, operand, field)
-  end
-
-  defp optional_select(message_runtime, schema, operand, field, true) do
-    runtime_select(message_runtime, schema, operand, field, true)
-  end
-
-  defp optional_select(message_runtime, schema, operand, field, false) do
-    optional_select_value(message_runtime, schema, operand, field)
-  end
-
-  defp message_select(
-         message_runtime,
-         schema,
-         {:message, name, fields} = message,
-         field,
-         test_only?
-       ) do
-    case message_runtime.select(schema, message, field, test_only?) do
-      {:ok, value} ->
-        {:ok, value}
-
-      :not_applicable ->
-        literal_message_select(name, fields, field, test_only?)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp message_select_ref(
-         message_runtime,
-         schema,
-         {:message, _name, _fields} = message,
-         field_ref,
-         test_only?
-       ) do
-    case message_runtime.select_ref(schema, message, field_ref, test_only?) do
-      {:ok, value} ->
-        {:ok, value}
-
-      {:error, reason} ->
-        {:error, reason}
-
-      :not_applicable ->
-        {:error, "field selection requires schema-backed message"}
-    end
-  end
-
-  defp message_select_ref(_message_runtime, _schema, _operand, _field_ref, _test_only?) do
-    {:error, "field selection requires message"}
-  end
-
-  defp literal_message_select(_name, fields, field, test_only?) do
-    cond do
-      test_only? ->
-        {:ok, Value.bool(Map.has_key?(fields, field))}
-
-      Map.has_key?(fields, field) ->
-        {:ok, Map.fetch!(fields, field)}
-
-      true ->
-        {:error, "no such field #{inspect(field)}"}
-    end
-  end
-
-  defp optional_select_value(message_runtime, schema, container, field) do
-    case message_runtime.optional_select(schema, container, field) do
-      {:ok, value} -> {:ok, value}
-      {:error, reason} -> {:error, reason}
-      :not_applicable -> optional_select_core(container, field)
-    end
-  end
-
-  defp optional_select_ref(_message_runtime, _schema, {:optional, :none}, _field_ref, true) do
-    {:ok, Value.bool(false)}
-  end
-
-  defp optional_select_ref(_message_runtime, _schema, {:optional, :none}, _field_ref, false) do
-    {:ok, Value.optional_none()}
-  end
-
-  defp optional_select_ref(
-         message_runtime,
-         schema,
-         {:optional, {:some, operand}},
-         field_ref,
-         true
-       ) do
-    message_select_ref(message_runtime, schema, operand, field_ref, true)
-  end
-
-  defp optional_select_ref(
-         message_runtime,
-         schema,
-         {:optional, {:some, operand}},
-         field_ref,
-         false
-       ) do
-    optional_select_value_ref(message_runtime, schema, operand, field_ref)
-  end
-
-  defp optional_select_ref(message_runtime, schema, operand, field_ref, true) do
-    message_select_ref(message_runtime, schema, operand, field_ref, true)
-  end
-
-  defp optional_select_ref(message_runtime, schema, operand, field_ref, false) do
-    optional_select_value_ref(message_runtime, schema, operand, field_ref)
-  end
-
-  defp optional_select_value_ref(
-         message_runtime,
-         schema,
-         {:message, _name, _fields} = message,
-         field_ref
-       ) do
-    case message_runtime.optional_select_ref(schema, message, field_ref) do
-      {:ok, value} -> {:ok, value}
-      {:error, reason} -> {:error, reason}
-      :not_applicable -> {:error, "field selection requires schema-backed message"}
-    end
-  end
-
-  defp optional_select_value_ref(_message_runtime, _schema, _operand, _field_ref) do
-    {:error, "field selection requires message"}
-  end
-
   defp optional_select_core(container, field) do
     Core.optional_select([container, Value.string(field)])
   end
+
+  defp unexpected_operand({:message, actual, _payload}, expected) do
+    expected = inspect(to_string(expected))
+    {:error, "expected message #{expected}, got #{inspect(to_string(actual))}"}
+  end
+
+  defp unexpected_operand(_operand, _expected), do: {:error, "field selection requires message"}
 end

@@ -16,22 +16,16 @@ defmodule CEL.Env do
   alias CEL.Function
   alias CEL.Function.Overload
   alias CEL.Checker.Types, as: CType
-  alias CEL.Runtime.NoMessageRuntime
-  alias CEL.Runtime.NoMessageSchema
+  alias CEL.TypeProvider
+  alias CEL.WellKnownTypes
 
-  # Neither provider has a protobuf binding by default: `message_schema` (checker
-  # reflection) and `message_runtime` (evaluator field access) are supplied by a
-  # host that works against protobuf messages — the protobuf binding's
-  # `PB.CEL.MessageSchema` and `PB.CEL.MessageRuntime`. The CEL-side defaults
-  # know no types; supplying a schema without a `:message_schema` provider
-  # raises. See `NoMessageSchema` / `NoMessageRuntime`.
+  @no_types {TypeProvider.Empty, nil}
+
   defstruct vars: %{},
             functions: [],
             container: "",
             abbreviations: %{},
-            schema: nil,
-            message_schema: NoMessageSchema,
-            message_runtime: NoMessageRuntime,
+            types: @no_types,
             validate_literals: []
 
   @typedoc "An environment; build one with `build/1`."
@@ -40,14 +34,12 @@ defmodule CEL.Env do
   @qualified_name ~r/\A[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\z/
 
   @build_options [
-    schema: {:any, nil},
+    types: {:any, nil},
     container: {:any, nil},
     abbreviations: {:list, []},
     vars: {:any, []},
     functions: {:list, []},
-    validate_literals: {:list, []},
-    message_schema: {:any, nil},
-    message_runtime: {:any, nil}
+    validate_literals: {:list, []}
   ]
 
   @doc """
@@ -55,7 +47,7 @@ defmodule CEL.Env do
 
       env =
         CEL.Env.build(
-          schema: MyApp.Schema,
+          types: PB.CEL.types(MyApp.Schema),
           container: "my.pkg",
           vars: [user: {:message, "my.pkg.User"}, tags: {:list, :string}],
           functions: [my_function]
@@ -67,8 +59,11 @@ defmodule CEL.Env do
       from name to `t:CEL.Type.t/0`.
     * `:functions` — custom functions, as `CEL.Function` structs. See the
       "Custom CEL functions" guide.
-    * `:schema` — a schema from `PB.compile/2`, or a module that
-      `use PB.Schema`, whose messages and enums expressions may use.
+    * `:types` — the message and enum types expressions may use, as a
+      `t:CEL.TypeProvider.t/0`, such as `PB.CEL.types/1` returns for a
+      protobuf schema. Without it there are none. Message and enum names in
+      `:vars` and `:functions` may be atoms or strings; each is resolved
+      through the provider, and an unknown one raises.
     * `:container` — the protobuf package names are resolved in, as with
       `container` in other CEL implementations: with `"my.pkg"`, `User`
       resolves to `my.pkg.User`.
@@ -98,27 +93,9 @@ defmodule CEL.Env do
   @doc false
   @spec from_options(keyword) :: t
   def from_options(opts) when is_list(opts) do
-    schema = Keyword.get(opts, :schema)
-
-    # The one remaining reference from CEL to the protobuf binding: `schema:`
-    # defaults the providers to `PB.CEL.MessageSchema`/`MessageRuntime`, which
-    # `CEL.Env.build(schema: ...)` callers rely on. Resolved in step 2 of the
-    # cel_ex/pb_cel split, when the binding gets its own entry point.
-    default_provider = fn pb_provider -> if schema, do: pb_provider end
-
     opts
     |> Keyword.get(:env, %__MODULE__{})
-    |> put_message_schema(
-      Keyword.get_lazy(opts, :message_schema, fn ->
-        default_provider.(PB.CEL.MessageSchema)
-      end)
-    )
-    |> put_message_runtime(
-      Keyword.get_lazy(opts, :message_runtime, fn ->
-        default_provider.(PB.CEL.MessageRuntime)
-      end)
-    )
-    |> put_schema(schema)
+    |> put_types(Keyword.get(opts, :types))
     |> put_container(Keyword.get(opts, :container))
     |> put_abbreviations(Keyword.get(opts, :abbreviations, []))
     |> merge_vars(Keyword.get(opts, :vars, []))
@@ -142,27 +119,24 @@ defmodule CEL.Env do
     %{env | validate_literals: kinds}
   end
 
-  defp put_message_schema(env, nil), do: env
+  defp put_types(env, nil), do: env
 
-  defp put_message_schema(env, provider),
-    do: %{env | message_schema: provider!(:message_schema, provider, :normalize, 1)}
+  defp put_types(env, {module, _state} = types) when is_atom(module) do
+    exported? =
+      Code.ensure_loaded?(module) and
+        Enum.all?(TypeProvider.required_callbacks(), fn {function, arity} ->
+          function_exported?(module, function, arity)
+        end)
 
-  defp put_message_runtime(env, nil), do: env
-
-  defp put_message_runtime(env, provider),
-    do: %{env | message_runtime: provider!(:message_runtime, provider, :from_decoded, 3)}
-
-  defp provider!(option, provider, function, arity) do
-    unless is_atom(provider) and Code.ensure_loaded?(provider) and
-             function_exported?(provider, function, arity) do
-      invalid_option!(option, provider, "expected a provider module")
+    unless exported? do
+      invalid_option!(:types, types, "#{inspect(module)} does not implement CEL.TypeProvider")
     end
 
-    provider
+    %{env | types: types}
   end
 
-  defp put_schema(env, nil), do: env
-  defp put_schema(env, schema), do: %{env | schema: env.message_schema.normalize(schema)}
+  defp put_types(_env, types),
+    do: invalid_option!(:types, types, "expected a {module, state} CEL.TypeProvider")
 
   defp put_container(env, nil), do: env
 
@@ -195,7 +169,7 @@ defmodule CEL.Env do
   defp merge_vars(env, vars) when is_list(vars) or is_map(vars) do
     Enum.reduce(vars, env, fn
       {name, type}, env when is_atom(name) or is_binary(name) ->
-        %{env | vars: Map.put(env.vars, normalize_name(name), var_type!(name, type))}
+        %{env | vars: Map.put(env.vars, normalize_name(name), var_type!(env, name, type))}
 
       entry, _env ->
         invalid_option!(:vars, entry, "expected {name, type}")
@@ -204,21 +178,86 @@ defmodule CEL.Env do
 
   defp merge_vars(_env, vars), do: invalid_option!(:vars, vars, "expected a keyword list or map")
 
-  defp var_type!(name, type) do
-    CType.from_input(type)
-  rescue
-    FunctionClauseError ->
-      invalid_option!(:vars, type, "#{inspect(name)} has no CEL.Type: #{inspect(type)}")
+  defp var_type!(env, name, type) do
+    type =
+      try do
+        CType.from_input(type)
+      rescue
+        FunctionClauseError ->
+          invalid_option!(:vars, type, "#{inspect(name)} has no CEL.Type: #{inspect(type)}")
+      end
+
+    resolve_names!(env, :vars, type)
+  end
+
+  # Message and enum names a declaration spells as atoms or strings become the
+  # provider's, and the well-known types CEL's own. With no provider, names are
+  # left as written.
+  defp resolve_names!(env, option, {tag, name}) when tag in [:message, :enum] do
+    cond do
+      builtin = WellKnownTypes.builtin_type(to_string(name)) -> CType.from_input(builtin)
+      env.types == @no_types -> {tag, name}
+      true -> {tag, resolve_name!(env, option, name)}
+    end
+  end
+
+  defp resolve_names!(env, option, types) when is_list(types),
+    do: Enum.map(types, &resolve_names!(env, option, &1))
+
+  defp resolve_names!(env, option, type) when is_tuple(type) do
+    type
+    |> Tuple.to_list()
+    |> Enum.map(&resolve_names!(env, option, &1))
+    |> List.to_tuple()
+  end
+
+  defp resolve_names!(_env, _option, type), do: type
+
+  defp resolve_name!(env, option, name) do
+    case find_type(env, to_string(name)) do
+      {:ok, _kind, resolved} -> resolved
+      :error -> invalid_option!(option, name, "unknown message or enum type #{name}")
+    end
   end
 
   defp merge_functions(env, functions) do
     Enum.reduce(functions, env, fn
       %Function{} = function, env ->
-        %{env | functions: [normalize_function(function) | env.functions]}
+        %{env | functions: [normalize_function(env, function) | env.functions]}
 
       other, _env ->
         invalid_option!(:functions, other, "expected a %CEL.Function{}")
     end)
+  end
+
+  @doc false
+  @spec find_type(t, String.t()) :: {:ok, :message | :enum, TypeProvider.name()} | :error
+  def find_type(%__MODULE__{types: {module, state}}, name), do: module.find_type(state, name)
+
+  @doc false
+  @spec find_field(t, TypeProvider.name(), String.t()) :: {:ok, CEL.Field.t()} | :error
+  def find_field(%__MODULE__{types: {module, state}}, message, field),
+    do: module.find_field(state, message, field)
+
+  @doc false
+  @spec enum_value(t, TypeProvider.name(), String.t()) :: {:ok, integer} | :error
+  def enum_value(%__MODULE__{types: {module, state}}, enum, value),
+    do: module.enum_value(state, enum, value)
+
+  @doc false
+  @spec required_fields(t, TypeProvider.name()) :: [String.t()]
+  def required_fields(%__MODULE__{types: {module, state}}, message) do
+    if function_exported?(module, :required_fields, 2),
+      do: module.required_fields(state, message),
+      else: []
+  end
+
+  # The checker spells an enum type as a message of the enum's name.
+  @doc false
+  @spec enum?(t, TypeProvider.name()) :: boolean
+  def enum?(%__MODULE__{} = env, name) do
+    not WellKnownTypes.literal_message?(name) and
+      match?({:ok, :enum, ^name}, find_type(env, to_string(name)))
   end
 
   @spec invalid_option!(atom, term, String.t()) :: no_return
@@ -263,15 +302,16 @@ defmodule CEL.Env do
   defp normalize_container("." <> container), do: normalize_container(container)
   defp normalize_container(container), do: String.trim(container)
 
-  defp normalize_function(%Function{} = function) do
+  defp normalize_function(env, %Function{} = function) do
     %{
       function
-      | overloads: Enum.map(function.overloads, &check_overload(&1, function)),
-        dynamic_overloads: Enum.map(function.dynamic_overloads, &check_overload(&1, function))
+      | overloads: Enum.map(function.overloads, &check_overload(env, &1, function)),
+        dynamic_overloads:
+          Enum.map(function.dynamic_overloads, &check_overload(env, &1, function))
     }
   end
 
-  defp check_overload(%Overload{} = overload, function) do
+  defp check_overload(env, %Overload{} = overload, function) do
     unless is_binary(overload.id) do
       reason = "#{inspect(function.name)} overload :id must be a string"
       invalid_option!(:functions, overload.id, reason)
@@ -284,6 +324,12 @@ defmodule CEL.Env do
     unless TypePattern.valid?(overload.result, :result) do
       invalid_signature!(function, overload, :result, overload.result)
     end
+
+    overload = %{
+      overload
+      | args: resolve_names!(env, :functions, overload.args),
+        result: resolve_names!(env, :functions, overload.result)
+    }
 
     normalize_overload(overload, function)
   end

@@ -1,22 +1,18 @@
 defmodule PB.CEL.MessageRuntime do
   @moduledoc false
 
-  # Protobuf-backed implementation of the `CEL.Message.Runtime` behaviour.
-  #
-  # This is the adapter that binds CEL evaluation to PB's protobuf message
-  # representation: schema-backed field access, schema-projection/adapter
-  # conversion, well-known-type conversion, raw-field normalization, and `Any`
-  # packing/unpacking. It is part of the protobuf binding (`lib/pb_cel`) rather
-  # than the CEL subsystem so the subsystem keeps no logic edges back to the
-  # protobuf runtime; callers inject it via `CEL.Env`'s `:message_runtime`
-  # (and the evaluator's `:message_runtime` option).
+  # PB's protobuf messages as CEL values, for `PB.CEL.Types`: decoded
+  # messages and field values to CEL values, message literals to messages,
+  # schema-backed field reads, message equality, well-known-type conversion and
+  # `Any` packing and unpacking. A message value is `{:message, name, fields}`
+  # with PB's atom name; `fields` is the message as decoded, or as a literal
+  # builds it.
 
   alias PB.CEL.FieldReader
   alias PB.CEL.MessageSchema, as: Schema
   alias CEL.Runtime.Time
   alias PB.CEL.Schema.Field
   alias CEL.Value
-  alias CEL.WellKnownTypes
   alias PB.Runtime.Codec
   alias PB.Runtime.Errors
   alias PB.Runtime.MessageView
@@ -29,8 +25,6 @@ defmodule PB.CEL.MessageRuntime do
   alias PB.Wire
 
   require Field
-
-  @behaviour CEL.Message.Runtime
 
   @nanos_per_second 1_000_000_000
   @json_exact_integer_limit 9_007_199_254_740_992
@@ -70,182 +64,51 @@ defmodule PB.CEL.MessageRuntime do
     end
   end
 
-  @spec from_literal(Schema.schema(), atom(), [map()], boolean()) ::
-          {:ok, Value.t()} | :unknown | {:error, term}
-  def from_literal(schema, message, fields, wkt_unwrap?)
-      when is_atom(message) and is_list(fields) and is_boolean(wkt_unwrap?) do
-    with {:ok, {:message, message, payload}} <- from_literal_message(schema, message, fields) do
-      if wkt_unwrap? do
-        case well_known_decoded_value(schema, message, payload) do
-          {:ok, value} -> {:ok, value}
-          :error -> {:ok, {:message, message, payload}}
-          {:error, reason} -> {:error, reason}
-        end
-      else
-        {:ok, {:message, message, payload}}
-      end
-    else
-      :unknown -> :unknown
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  # The ref of a `CEL.Field` the protobuf binding found: a declared field or
+  # an extension of `message`, by PB's atom names.
+  @type field_ref :: {:field | :extension, atom(), atom()}
 
-  def from_literal(_schema, _message, _fields, _wkt_unwrap?), do: :unknown
-
-  @spec from_literal_message(Schema.schema(), atom(), [map()]) ::
-          {:ok, t()} | :unknown | {:error, term}
-  def from_literal_message(schema, message, fields) when is_atom(message) and is_list(fields) do
-    with {:ok, fields} <- literal_fields(schema, message, fields) do
+  @spec new_message(Schema.schema(), atom(), [{CEL.Field.t(), Value.t()}]) ::
+          {:ok, t()} | {:error, term}
+  def new_message(schema, message, fields) when is_atom(message) and is_list(fields) do
+    with {:ok, msg} <- fetch_message(schema, message),
+         {:ok, fields} <- literal_fields(schema, message, msg, fields) do
       {:ok, {:message, message, fields}}
-    else
-      :error -> :unknown
-      {:error, reason} -> {:error, reason}
     end
   end
 
-  def from_literal_message(_schema, _message, _fields), do: :unknown
+  @spec get_field(Schema.schema(), field_ref(), term()) :: {:ok, Value.t()} | {:error, term}
+  def get_field(schema, {kind, message, name}, payload) do
+    with {:ok, msg} <- fetch_message(schema, message),
+         {:ok, fields} <- proto_fields(schema, message, msg, payload, []) do
+      case kind do
+        :field ->
+          FieldReader.read(schema, msg, fields, name, Map.fetch!(msg.fields_by_name, name))
 
-  @spec select(Schema.schema(), t(), String.t(), boolean()) ::
-          {:ok, Value.t()} | :not_applicable | {:error, term}
-  def select(schema, {:message, message, fields}, field, test_only?)
-      when is_atom(message) and is_binary(field) do
-    with {:ok, msg} <- Schema.fetch_message(schema, message),
-         {:ok, fields} <- proto_fields(schema, message, msg, fields, []),
-         {:ok, %{field: field, info: info}} <- resolve_field(schema, message, field) do
-      if test_only? do
-        {:ok, Value.bool(FieldReader.present?(schema, msg, fields, field, info))}
-      else
-        FieldReader.read(schema, msg, fields, field, info)
+        :extension ->
+          info = Map.fetch!(msg.extensions_by_name, name)
+          FieldReader.read_extension(schema, msg, fields, name, info)
+      end
+    end
+  end
+
+  # A payload that does not convert to protobuf fields has none set.
+  @spec has_field?(Schema.schema(), field_ref(), term()) :: boolean()
+  def has_field?(schema, {kind, message, name}, payload) do
+    with {:ok, msg} <- fetch_message(schema, message),
+         {:ok, fields} <- proto_fields(schema, message, msg, payload, []) do
+      case kind do
+        :field ->
+          FieldReader.present?(schema, msg, fields, name, Map.fetch!(msg.fields_by_name, name))
+
+        :extension ->
+          info = Map.fetch!(msg.extensions_by_name, name)
+          FieldReader.extension_present?(schema, msg, fields, name, info)
       end
     else
-      :unknown_message -> :not_applicable
-      :unknown_field -> {:error, "no such field #{inspect(field)}"}
-      {:error, reason} -> {:error, reason}
-      :error -> :not_applicable
+      _error -> false
     end
   end
-
-  def select(_schema, _message, _field, _test_only?), do: :not_applicable
-
-  @spec select_ref(Schema.schema(), t(), Schema.field_ref(), boolean()) ::
-          {:ok, Value.t()} | :not_applicable | {:error, term}
-  def select_ref(
-        schema,
-        {:message, message, fields},
-        %{message: message, field: field},
-        test_only?
-      )
-      when is_atom(message) and is_atom(field) do
-    case Schema.fetch_message(schema, message) do
-      {:ok, msg} ->
-        with {:ok, fields} <- proto_fields(schema, message, msg, fields, []),
-             {:ok, info} <- Map.fetch(msg.fields_by_name, field) do
-          if test_only? do
-            {:ok, Value.bool(FieldReader.present?(schema, msg, fields, field, info))}
-          else
-            FieldReader.read(schema, msg, fields, field, info)
-          end
-        else
-          {:error, reason} ->
-            {:error, reason}
-
-          :error ->
-            {:error, "no such field #{inspect(Atom.to_string(field))}"}
-        end
-
-      :error ->
-        {:error, "unknown message #{inspect(Atom.to_string(message))}"}
-    end
-  end
-
-  def select_ref(
-        schema,
-        {:message, message, fields},
-        %{message: message, extension: extension},
-        test_only?
-      )
-      when is_atom(message) and is_atom(extension) do
-    case Schema.fetch_message(schema, message) do
-      {:ok, msg} ->
-        with {:ok, fields} <- proto_fields(schema, message, msg, fields, []),
-             {:ok, info} <- Map.fetch(msg.extensions_by_name, extension) do
-          if test_only? do
-            {:ok, Value.bool(FieldReader.extension_present?(schema, msg, fields, extension, info))}
-          else
-            FieldReader.read_extension(schema, msg, fields, extension, info)
-          end
-        else
-          {:error, reason} ->
-            {:error, reason}
-
-          :error ->
-            {:error, "no such field #{inspect(Atom.to_string(extension))}"}
-        end
-
-      :error ->
-        {:error, "unknown message #{inspect(Atom.to_string(message))}"}
-    end
-  end
-
-  def select_ref(_schema, {:message, actual, _fields}, %{message: expected}, _test_only?)
-      when is_atom(actual) and is_atom(expected) do
-    {:error,
-     "expected message #{inspect(Atom.to_string(expected))}, got #{inspect(Atom.to_string(actual))}"}
-  end
-
-  def select_ref(_schema, _message, _field_ref, _test_only?), do: :not_applicable
-
-  @spec optional_select(Schema.schema(), Value.t(), String.t()) ::
-          {:ok, Value.t()} | :not_applicable | {:error, term}
-  def optional_select(schema, {:message, message, fields}, field)
-      when is_atom(message) and is_binary(field) do
-    with {:ok, msg} <- Schema.fetch_message(schema, message),
-         {:ok, fields} <- proto_fields(schema, message, msg, fields, []),
-         {:ok, %{field: field, info: info}} <- resolve_field(schema, message, field) do
-      FieldReader.read_optional(schema, msg, fields, field, info)
-    else
-      :unknown_message -> :not_applicable
-      :unknown_field -> {:ok, Value.optional_none()}
-      {:error, reason} -> {:error, reason}
-      :error -> :not_applicable
-    end
-  end
-
-  def optional_select(_schema, _message, _field), do: :not_applicable
-
-  @spec optional_select_ref(Schema.schema(), Value.t(), Schema.field_ref()) ::
-          {:ok, Value.t()} | :not_applicable | {:error, term}
-  def optional_select_ref(
-        schema,
-        {:message, message, fields},
-        %{message: message, field: field}
-      )
-      when is_atom(message) and is_atom(field) do
-    case Schema.fetch_message(schema, message) do
-      {:ok, msg} ->
-        with {:ok, fields} <- proto_fields(schema, message, msg, fields, []),
-             {:ok, info} <- Map.fetch(msg.fields_by_name, field) do
-          FieldReader.read_optional(schema, msg, fields, field, info)
-        else
-          {:error, reason} ->
-            {:error, reason}
-
-          :error ->
-            {:error, "no such field #{inspect(Atom.to_string(field))}"}
-        end
-
-      :error ->
-        {:error, "unknown message #{inspect(Atom.to_string(message))}"}
-    end
-  end
-
-  def optional_select_ref(_schema, {:message, actual, _fields}, %{message: expected})
-      when is_atom(actual) and is_atom(expected) do
-    {:error,
-     "expected message #{inspect(Atom.to_string(expected))}, got #{inspect(Atom.to_string(actual))}"}
-  end
-
-  def optional_select_ref(_schema, _message, _field_ref), do: :not_applicable
 
   @spec field_value(Schema.schema(), map(), term()) :: {:ok, Value.t()} | {:error, term}
   def field_value(schema, %{cardinality: :repeated} = field, values) when is_list(values) do
@@ -295,30 +158,35 @@ defmodule PB.CEL.MessageRuntime do
     end
   end
 
-  @spec equal?(Schema.schema(), t(), t()) :: {:ok, boolean()} | :not_applicable
-  def equal?(schema, {:message, left_name, left_fields}, {:message, right_name, right_fields})
-      when is_atom(left_name) and is_atom(right_name) do
-    with true <- left_name == right_name,
-         {:ok, msg} <- Schema.fetch_message(schema, left_name),
-         {:ok, left_fields} <- proto_fields(schema, left_name, msg, left_fields, []),
-         {:ok, right_fields} <- proto_fields(schema, right_name, msg, right_fields, []),
-         {:ok, equal?} <- MessageEquality.equal?(schema, left_name, left_fields, right_fields) do
-      {:ok, equal?}
+  # Messages that do not convert to protobuf fields compare by their payloads.
+  @spec equal?(Schema.schema(), atom(), term(), term()) :: boolean()
+  def equal?(schema, message, left, right) do
+    with {:ok, msg} <- Schema.fetch_message(schema, message),
+         {:ok, left_fields} <- proto_fields(schema, message, msg, left, []),
+         {:ok, right_fields} <- proto_fields(schema, message, msg, right, []),
+         {:ok, equal?} <- MessageEquality.equal?(schema, message, left_fields, right_fields) do
+      equal?
     else
-      false -> {:ok, false}
-      _error -> :not_applicable
+      _error -> left == right
     end
   end
 
-  def equal?(_schema, _left, _right), do: :not_applicable
+  # An `Any` the schema does not know is kept as an opaque object value.
+  @spec from_any(Schema.schema(), String.t(), binary) :: {:ok, Value.t()} | {:error, term}
+  def from_any(schema, type_url, value) do
+    case unpack_any(schema, type_url, value) do
+      :error -> {:ok, Value.object(type_url, value)}
+      result -> result
+    end
+  end
 
   # Any host is accepted: the last path segment names the message, as for
   # ProtoJSON and Go's resolvers. `Timestamp` and `Duration` unpack without a
-  # schema; other messages unpack when the schema knows them and are otherwise
-  # kept as an opaque object value.
-  @spec from_any(Schema.schema(), String.t(), binary) :: {:ok, Value.t()} | {:error, term}
-  def from_any(schema, type_url, value) when is_binary(type_url) and is_binary(value) do
-    case WellKnownTypes.type_url_name(type_url) do
+  # schema; other messages unpack when the schema knows them.
+  @spec unpack_any(Schema.schema(), String.t(), binary) ::
+          {:ok, Value.t()} | :error | {:error, term}
+  def unpack_any(schema, type_url, value) when is_binary(type_url) and is_binary(value) do
+    case type_url_name(type_url) do
       @timestamp_type ->
         with {:ok, message} <- WKTCodec.decode_timestamp(value) do
           WKTTime.from_proto_timestamp(message)
@@ -335,17 +203,13 @@ defmodule PB.CEL.MessageRuntime do
         end
 
       name ->
-        case Schema.resolve_message(schema, name) do
-          {:ok, message} ->
-            with {:ok, decoded} <- PB.decode(value, schema, message),
-                 {:ok, value} <- from_decoded(schema, message, decoded) do
-              {:ok, value}
-            else
-              {:error, reason} -> {:error, {:object_decode_error, message, reason}}
-            end
-
-          :error ->
-            {:ok, Value.object(type_url, value)}
+        with {:ok, message} <- Schema.resolve_message(schema, name) do
+          with {:ok, decoded} <- PB.decode(value, schema, message),
+               {:ok, value} <- from_decoded(schema, message, decoded) do
+            {:ok, value}
+          else
+            {:error, reason} -> {:error, {:object_decode_error, message, reason}}
+          end
         end
     end
   end
@@ -438,24 +302,24 @@ defmodule PB.CEL.MessageRuntime do
     ] or FieldReader.wrapper_field(schema, message) != nil
   end
 
-  defp resolve_field(schema, message, field) do
-    case Schema.field(schema, message, field) do
-      {:ok, field} -> {:ok, field}
-      :unknown_message -> :unknown_message
-      :unknown_field -> :unknown_field
-    end
-  end
-
   defp oneof_by_name(msg, name) do
     Enum.find_value(msg.oneofs, fn {_index, oneof} ->
       if oneof.name == name, do: oneof
     end)
   end
 
-  defp literal_fields(schema, message, fields) do
-    Enum.reduce_while(fields, {:ok, %{}}, fn field, {:ok, acc} ->
-      with {:ok, info} <- Schema.field_info_ref(schema, field.field_ref),
-           {:ok, entry} <- raw_literal_entry(schema, message, field, info, field.value) do
+  # By the atom a provider's ref or name holds.
+  defp fetch_message(%{messages: messages}, message) do
+    case Map.fetch(messages, message) do
+      {:ok, msg} -> {:ok, msg}
+      :error -> {:error, {:unknown_message, message}}
+    end
+  end
+
+  defp literal_fields(schema, message, msg, fields) do
+    Enum.reduce_while(fields, {:ok, %{}}, fn {field, value}, {:ok, acc} ->
+      with {:ok, name, info} <- literal_field_info(msg, field),
+           {:ok, entry} <- raw_literal_entry(schema, message, field, name, info, value) do
         case entry do
           nil ->
             {:cont, {:ok, acc}}
@@ -464,33 +328,32 @@ defmodule PB.CEL.MessageRuntime do
             {:cont, {:ok, Map.put(acc, key, value)}}
         end
       else
-        :error ->
-          {:halt, {:error, "no such field #{inspect(field.field)}"}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
+        {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
 
-  defp raw_literal_entry(_schema, _message, _field, info, :null)
+  defp literal_field_info(msg, %CEL.Field{ref: {:field, _message, name}}),
+    do: {:ok, name, Map.fetch!(msg.fields_by_name, name)}
+
+  defp literal_field_info(_msg, %CEL.Field{name: name}),
+    do: {:error, "cannot set extension #{inspect(name)} in a message literal"}
+
+  defp raw_literal_entry(_schema, _message, _field, _name, info, :null)
        when info.cardinality == :singular and Field.message_type?(info.type) and
               info.type_name != :"google.protobuf.Value",
        do: {:ok, nil}
 
-  defp raw_literal_entry(schema, message, field, info, value) do
+  defp raw_literal_entry(schema, message, field, name, info, value) do
     with {:ok, value} <- raw_field_value(schema, info, value),
-         {:ok, value} <- normalized_raw_field_value(schema, message, info, value, [field.field]) do
-      {:ok, literal_entry(field, value)}
+         {:ok, value} <- normalized_raw_field_value(schema, message, info, value, [name]) do
+      {:ok, literal_entry(field, name, value)}
     end
   end
 
-  defp literal_entry(_field, :omit), do: nil
-
-  defp literal_entry(%{cardinality: :oneof, oneof_name: oneof_name, field: field}, value),
-    do: {oneof_name, {field, value}}
-
-  defp literal_entry(%{field: field}, value), do: {field, value}
+  defp literal_entry(_field, _name, :omit), do: nil
+  defp literal_entry(%CEL.Field{oneof: nil}, name, value), do: {name, value}
+  defp literal_entry(%CEL.Field{oneof: oneof}, name, value), do: {oneof, {name, value}}
 
   defp normalized_raw_field_value(
          schema,
@@ -733,7 +596,7 @@ defmodule PB.CEL.MessageRuntime do
 
   defp singular_field_value(_schema, %{type: :TYPE_ENUM, type_name: type_name} = field, value) do
     with {:ok, number} <- enum_number(field, value) do
-      {:ok, Value.enum(Atom.to_string(type_name), number)}
+      {:ok, Value.enum(type_name, number)}
     end
   end
 
@@ -795,25 +658,6 @@ defmodule PB.CEL.MessageRuntime do
   defp raw_message_value(schema, %{type_name: type_name}, {:message, message_name, fields})
        when message_name == type_name do
     raw_fields_for_encode(schema, type_name, fields)
-  end
-
-  defp raw_message_value(
-         schema,
-         %{type_name: type_name} = field,
-         {:message, message_name, fields}
-       )
-       when is_binary(message_name) do
-    if Atom.to_string(type_name) == message_name do
-      raw_fields_for_encode(schema, type_name, fields)
-    else
-      value = {:message, message_name, fields}
-
-      case raw_well_known_value(schema, well_known_encode_destination(schema, field), value) do
-        {:ok, value} -> {:ok, value}
-        {:error, reason} -> {:error, reason}
-        :error -> {:error, {:message_type_mismatch, type_name, message_name}}
-      end
-    end
   end
 
   defp raw_message_value(schema, %{type_name: type_name} = field, value) do
@@ -952,13 +796,6 @@ defmodule PB.CEL.MessageRuntime do
        when is_map(fields) do
     with {:ok, paths} <- field_mask_paths(fields) do
       {:ok, %{kind: {:string_value, Enum.map_join(paths, ",", &camel_case/1)}}}
-    end
-  end
-
-  defp raw_google_value(schema, {:message, message, fields}) when is_binary(message) do
-    case message_atom(schema, message) do
-      {:ok, message} -> raw_google_value(schema, {:message, message, fields})
-      :error -> :error
     end
   end
 
@@ -1183,7 +1020,7 @@ defmodule PB.CEL.MessageRuntime do
   end
 
   defp decode_object_value(schema, type_url, value) do
-    type_name = WellKnownTypes.type_url_name(type_url)
+    type_name = type_url_name(type_url)
 
     case Schema.resolve_message(schema, type_name) do
       {:ok, message} ->
@@ -1229,21 +1066,6 @@ defmodule PB.CEL.MessageRuntime do
     end
   end
 
-  defp message_atom(schema, message) do
-    case Schema.resolve_message(schema, message) do
-      {:ok, message} -> {:ok, message}
-      :error -> existing_atom(message)
-    end
-  end
-
-  defp existing_atom("." <> message), do: existing_atom(message)
-
-  defp existing_atom(message) do
-    {:ok, String.to_existing_atom(message)}
-  rescue
-    ArgumentError -> :error
-  end
-
   defp camel_case(name) do
     name
     |> :erlang.binary_to_list()
@@ -1282,6 +1104,13 @@ defmodule PB.CEL.MessageRuntime do
     |> case do
       {:ok, values} -> {:ok, Enum.reverse(values)}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp type_url_name(type_url) do
+    case type_url |> String.split("/") |> List.last() do
+      "" -> type_url
+      name -> name
     end
   end
 end

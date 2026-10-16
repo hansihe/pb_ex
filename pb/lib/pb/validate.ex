@@ -23,7 +23,6 @@ defmodule PB.Validate do
   alias PB.CEL.Schema.Field
   alias PB.CEL.FieldReader
   alias PB.CEL.MessageRuntime, as: CELMessage
-  alias PB.CEL.MessageSchema, as: CELSchema
   alias PB.Runtime.Errors, as: RuntimeErrors
   alias PB.Runtime.MessageView
   alias PB.Runtime.Scalar
@@ -587,9 +586,7 @@ defmodule PB.Validate do
     vars = op_vars(op, value, context)
 
     case Evaluator.eval(op.checked, vars,
-           schema: eval_schema,
-           message_schema: CELSchema,
-           message_runtime: CELMessage,
+           types: PB.CEL.types(eval_schema),
            regexes: Map.get(op, :regexes, %{})
          ) do
       {:ok, {:bool, true}} ->
