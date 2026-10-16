@@ -52,27 +52,33 @@ defmodule PB.CEL.ValueTest do
 
     assert {:ok, timestamp_bytes} = WKTCodec.encode_timestamp(timestamp_message)
 
-    assert Value.from_expr_value(%{
-             kind:
-               {:object_value,
-                %{
-                  type_url: "type.googleapis.com/google.protobuf.Timestamp",
-                  value: IO.iodata_to_binary(timestamp_bytes)
-                }}
-           }) == {:ok, Value.timestamp(1_234_567_890_123_456_789)}
+    assert Value.from_expr_value(
+             %{
+               kind:
+                 {:object_value,
+                  %{
+                    type_url: "type.googleapis.com/google.protobuf.Timestamp",
+                    value: IO.iodata_to_binary(timestamp_bytes)
+                  }}
+             },
+             message_runtime: MessageRuntime
+           ) == {:ok, Value.timestamp(1_234_567_890_123_456_789)}
 
     {:ok, duration_message} = WKTTime.to_proto_duration(Value.duration(123_321_456_789))
 
     assert {:ok, duration_bytes} = WKTCodec.encode_duration(duration_message)
 
-    assert Value.from_expr_value(%{
-             kind:
-               {:object_value,
-                %{
-                  type_url: "type.googleapis.com/google.protobuf.Duration",
-                  value: IO.iodata_to_binary(duration_bytes)
-                }}
-           }) == {:ok, Value.duration(123_321_456_789)}
+    assert Value.from_expr_value(
+             %{
+               kind:
+                 {:object_value,
+                  %{
+                    type_url: "type.googleapis.com/google.protobuf.Duration",
+                    value: IO.iodata_to_binary(duration_bytes)
+                  }}
+             },
+             message_runtime: MessageRuntime
+           ) == {:ok, Value.duration(123_321_456_789)}
   end
 
   test "decodes schema-backed object values" do
@@ -142,6 +148,15 @@ defmodule PB.CEL.ValueTest do
 
     assert {:ok, expr_value} = Value.to_expr_value(value)
     assert Value.from_expr_value(expr_value) == {:ok, value}
+  end
+
+  test "packs and unpacks timestamps and durations through the message runtime" do
+    for value <- [Value.timestamp(1_234_567_890_123_456_789), Value.duration(-1_500_000_000)] do
+      assert {:ok, expr_value} = Value.to_expr_value(value, message_runtime: MessageRuntime)
+      assert Value.from_expr_value(expr_value, message_runtime: MessageRuntime) == {:ok, value}
+
+      assert Value.to_expr_value(value) == {:error, :no_message_runtime}
+    end
   end
 
   describe "to_native/1" do

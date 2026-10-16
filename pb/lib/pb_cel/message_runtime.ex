@@ -22,6 +22,8 @@ defmodule PB.CEL.MessageRuntime do
   alias PB.Runtime.MessageView
   alias PB.Runtime.MessageEquality
   alias PB.WellKnownTypes.Any
+  alias PB.WellKnownTypes.Codec, as: WKTCodec
+  alias PB.WellKnownTypes.Time, as: WKTTime
   alias PB.Runtime.Representation
   alias PB.Runtime.Scalar
   alias PB.Wire
@@ -33,6 +35,9 @@ defmodule PB.CEL.MessageRuntime do
   @nanos_per_second 1_000_000_000
   @json_exact_integer_limit 9_007_199_254_740_992
   @adapted_payload :__pb_adapted_message__
+
+  @timestamp_type "google.protobuf.Timestamp"
+  @duration_type "google.protobuf.Duration"
 
   @type t :: {:message, atom(), term()}
 
@@ -306,6 +311,59 @@ defmodule PB.CEL.MessageRuntime do
   end
 
   def equal?(_schema, _left, _right), do: :not_applicable
+
+  # Any host is accepted: the last path segment names the message, as for
+  # ProtoJSON and Go's resolvers. `Timestamp` and `Duration` unpack without a
+  # schema; other messages unpack when the schema knows them and are otherwise
+  # kept as an opaque object value.
+  @spec from_any(Schema.schema(), String.t(), binary) :: {:ok, Value.t()} | {:error, term}
+  def from_any(schema, type_url, value) when is_binary(type_url) and is_binary(value) do
+    case WellKnownTypes.type_url_name(type_url) do
+      @timestamp_type ->
+        with {:ok, message} <- WKTCodec.decode_timestamp(value) do
+          WKTTime.from_proto_timestamp(message)
+        end
+
+      @duration_type ->
+        with {:ok, message} <- WKTCodec.decode_duration(value),
+             {:ok, {:duration, ns}} <- WKTTime.from_proto_duration(message),
+             true <- Time.duration_ns?(ns) do
+          {:ok, Value.duration(ns)}
+        else
+          false -> {:error, :duration_out_of_range}
+          {:error, reason} -> {:error, reason}
+        end
+
+      name ->
+        case Schema.resolve_message(schema, name) do
+          {:ok, message} ->
+            with {:ok, decoded} <- PB.decode(value, schema, message),
+                 {:ok, value} <- from_decoded(schema, message, decoded) do
+              {:ok, value}
+            else
+              {:error, reason} -> {:error, {:object_decode_error, message, reason}}
+            end
+
+          :error ->
+            {:ok, Value.object(type_url, value)}
+        end
+    end
+  end
+
+  @spec to_any(Schema.schema(), Value.t()) :: {:ok, map} | {:error, term}
+  def to_any(_schema, {:timestamp, _ns} = value) do
+    with {:ok, message} <- WKTTime.to_proto_timestamp(value),
+         {:ok, iodata} <- WKTCodec.encode_timestamp(message) do
+      {:ok, %{type_url: Any.type_url(@timestamp_type), value: IO.iodata_to_binary(iodata)}}
+    end
+  end
+
+  def to_any(_schema, {:duration, _ns} = value) do
+    with {:ok, message} <- WKTTime.to_proto_duration(value),
+         {:ok, iodata} <- WKTCodec.encode_duration(message) do
+      {:ok, %{type_url: Any.type_url(@duration_type), value: IO.iodata_to_binary(iodata)}}
+    end
+  end
 
   defp from_adapted_decoded(schema, message, adapter, decoded) do
     if well_known_message?(schema, message) do

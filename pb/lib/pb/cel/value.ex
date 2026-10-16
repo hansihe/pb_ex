@@ -27,7 +27,6 @@ defmodule PB.CEL.Value do
   alias PB.CEL.Runtime.NoMessageRuntime
   alias PB.CEL.Runtime.NoMessageSchema
   alias PB.CEL.ProtoType
-  alias PB.CEL.WellKnownTypes
   alias PB.WellKnownTypes.Time, as: WKTTime
 
   @type special_double :: :nan | :infinity | :negative_infinity
@@ -134,14 +133,21 @@ defmodule PB.CEL.Value do
   @spec from_expr_value(Proto.expr_value() | Proto.value()) :: {:ok, t} | {:error, term}
   def from_expr_value(expr_value), do: from_expr_value(expr_value, [])
 
+  # `Any` payloads (`object_value`) unpack through the `:message_runtime`, and
+  # type values naming messages or enums resolve through the `:message_schema`,
+  # against `:schema`.
   @doc false
   @spec from_expr_value(Proto.expr_value() | Proto.value(), keyword) :: {:ok, t} | {:error, term}
   def from_expr_value(expr_value, opts) when is_list(opts) do
+    do_from_expr_value(expr_value, providers(opts))
+  end
+
+  defp providers(opts) do
     message_schema = Keyword.get(opts, :message_schema, NoMessageSchema)
     message_runtime = Keyword.get(opts, :message_runtime, NoMessageRuntime)
     schema = opts |> Keyword.get(:schema) |> message_schema.normalize()
 
-    do_from_expr_value(expr_value, {message_schema, message_runtime, schema})
+    {message_schema, message_runtime, schema}
   end
 
   defp do_from_expr_value(%{kind: {:value, value}}, schema), do: do_from_expr_value(value, schema)
@@ -164,17 +170,11 @@ defmodule PB.CEL.Value do
     {:ok, enum(Map.fetch!(enum, :type), Map.get(enum, :value, 0))}
   end
 
-  defp do_from_expr_value(%{kind: {:object_value, object}}, schema) do
-    type_url = Map.fetch!(object, :type_url)
-    value = Map.get(object, :value, "")
-
-    case WellKnownTypes.object_value(type_url, value) do
-      {:ok, {:object, ^type_url, ^value}} ->
-        schema_object_value(schema, type_url, value)
-
-      result ->
-        result
-    end
+  defp do_from_expr_value(
+         %{kind: {:object_value, object}},
+         {_message_schema, message_runtime, schema}
+       ) do
+    message_runtime.from_any(schema, Map.fetch!(object, :type_url), Map.get(object, :value, ""))
   end
 
   defp do_from_expr_value(%{kind: {:list_value, list}}, schema) do
@@ -224,29 +224,6 @@ defmodule PB.CEL.Value do
     end
   end
 
-  defp schema_object_value({_message_schema, _message_runtime, nil}, type_url, value),
-    do: {:ok, object(type_url, value)}
-
-  defp schema_object_value({message_schema, message_runtime, schema}, type_url, value) do
-    type_name = WellKnownTypes.type_url_name(type_url)
-
-    case message_schema.resolve_message(schema, type_name) do
-      {:ok, message} ->
-        # Unpacking an `Any` needs both the wire codec (foundation) and the
-        # injected message runtime, so alternate proto backends route through
-        # their configured provider rather than a hardwired default.
-        with {:ok, decoded} <- PB.decode(value, schema, message),
-             {:ok, value} <- message_runtime.from_decoded(schema, message, decoded) do
-          {:ok, value}
-        else
-          {:error, reason} -> {:error, {:object_decode_error, message, reason}}
-        end
-
-      :error ->
-        {:ok, object(type_url, value)}
-    end
-  end
-
   defp schema_type_value({_message_schema, _message_runtime, nil}, type_name),
     do: {:error, {:unsupported_type_value, type_name}}
 
@@ -265,18 +242,22 @@ defmodule PB.CEL.Value do
     end
   end
 
+  # Takes the options `from_expr_value/2` does; timestamps and durations pack
+  # into `Any` payloads through the `:message_runtime`.
   @doc false
   @spec to_expr_value(t) :: {:ok, Proto.expr_value()} | {:error, term}
-  def to_expr_value(value) when is_value(value) do
-    with {:ok, value} <- to_value(value) do
+  @spec to_expr_value(t, keyword) :: {:ok, Proto.expr_value()} | {:error, term}
+  def to_expr_value(value, opts \\ []) when is_value(value) and is_list(opts) do
+    with {:ok, value} <- to_value(value, providers(opts)) do
       {:ok, %{kind: {:value, value}}}
     end
   end
 
   @doc false
   @spec to_expr_value!(t) :: Proto.expr_value()
-  def to_expr_value!(value) do
-    case to_expr_value(value) do
+  @spec to_expr_value!(t, keyword) :: Proto.expr_value()
+  def to_expr_value!(value, opts \\ []) do
+    case to_expr_value(value, opts) do
       {:ok, expr_value} -> expr_value
       {:error, reason} -> raise ArgumentError, "cannot encode CEL expr value: #{inspect(reason)}"
     end
@@ -518,45 +499,40 @@ defmodule PB.CEL.Value do
     {:error, "cannot convert #{inspect(value)} to #{CType.format(type)}"}
   end
 
-  defp to_value(:null), do: {:ok, %{kind: {:null_value, :NULL_VALUE}}}
-  defp to_value({:bool, value}), do: {:ok, %{kind: {:bool_value, value}}}
-  defp to_value({:int, value}), do: {:ok, %{kind: {:int64_value, value}}}
-  defp to_value({:uint, value}), do: {:ok, %{kind: {:uint64_value, value}}}
-  defp to_value({:double, value}), do: {:ok, %{kind: {:double_value, value}}}
-  defp to_value({:string, value}), do: {:ok, %{kind: {:string_value, value}}}
-  defp to_value({:bytes, value}), do: {:ok, %{kind: {:bytes_value, value}}}
+  defp to_value(:null, _providers), do: {:ok, %{kind: {:null_value, :NULL_VALUE}}}
+  defp to_value({:bool, value}, _providers), do: {:ok, %{kind: {:bool_value, value}}}
+  defp to_value({:int, value}, _providers), do: {:ok, %{kind: {:int64_value, value}}}
+  defp to_value({:uint, value}, _providers), do: {:ok, %{kind: {:uint64_value, value}}}
+  defp to_value({:double, value}, _providers), do: {:ok, %{kind: {:double_value, value}}}
+  defp to_value({:string, value}, _providers), do: {:ok, %{kind: {:string_value, value}}}
+  defp to_value({:bytes, value}, _providers), do: {:ok, %{kind: {:bytes_value, value}}}
 
-  defp to_value({:timestamp, _ns} = value) do
-    with {:ok, object} <- WellKnownTypes.to_object_value(value) do
+  defp to_value({kind, _ns} = value, {_message_schema, message_runtime, schema})
+       when kind in [:timestamp, :duration] do
+    with {:ok, object} <- message_runtime.to_any(schema, value) do
       {:ok, %{kind: {:object_value, object}}}
     end
   end
 
-  defp to_value({:duration, _ns} = value) do
-    with {:ok, object} <- WellKnownTypes.to_object_value(value) do
-      {:ok, %{kind: {:object_value, object}}}
-    end
-  end
-
-  defp to_value({:enum, type, value}) do
+  defp to_value({:enum, type, value}, _providers) do
     {:ok, %{kind: {:enum_value, %{type: type, value: value}}}}
   end
 
-  defp to_value({:object, type_url, value}) do
+  defp to_value({:object, type_url, value}, _providers) do
     {:ok, %{kind: {:object_value, %{type_url: type_url, value: value}}}}
   end
 
-  defp to_value({:list, values}) do
-    with {:ok, values} <- map_while_ok(values, &to_value/1) do
+  defp to_value({:list, values}, providers) do
+    with {:ok, values} <- map_while_ok(values, &to_value(&1, providers)) do
       {:ok, %{kind: {:list_value, %{values: values}}}}
     end
   end
 
-  defp to_value({:map, values}) do
+  defp to_value({:map, values}, providers) do
     values
     |> Enum.reduce_while({:ok, []}, fn {key, value}, {:ok, acc} ->
-      with {:ok, key} <- to_value(key),
-           {:ok, value} <- to_value(value) do
+      with {:ok, key} <- to_value(key, providers),
+           {:ok, value} <- to_value(value, providers) do
         {:cont, {:ok, [%{key: key, value: value} | acc]}}
       else
         {:error, reason} -> {:halt, {:error, reason}}
@@ -568,9 +544,14 @@ defmodule PB.CEL.Value do
     end
   end
 
-  defp to_value({:type, _type} = value), do: {:ok, %{kind: {:type_value, type_name(value)}}}
-  defp to_value({:message, _name, _fields}), do: {:error, :message_value_encoding_not_supported}
-  defp to_value({:optional, _optional}), do: {:error, :optional_value_encoding_not_supported}
+  defp to_value({:type, _type} = value, _providers),
+    do: {:ok, %{kind: {:type_value, type_name(value)}}}
+
+  defp to_value({:message, _name, _fields}, _providers),
+    do: {:error, :message_value_encoding_not_supported}
+
+  defp to_value({:optional, _optional}, _providers),
+    do: {:error, :optional_value_encoding_not_supported}
 
   defp type_value_name(%{type_kind: {:dyn, %{}}}), do: "dyn"
   defp type_value_name(%{type_kind: {:null, :NULL_VALUE}}), do: "null_type"

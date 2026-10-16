@@ -47,4 +47,10 @@ defmodule PB.CEL.Runtime.NoMessageRuntime do
 
   @impl true
   def equal?(_schema, _left, _right), do: :not_applicable
+
+  @impl true
+  def from_any(_schema, _type_url, _value), do: @error
+
+  @impl true
+  def to_any(_schema, _value), do: @error
 end

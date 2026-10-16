@@ -34,4 +34,10 @@ defmodule PB.CEL.Message.Runtime do
   @callback raw_fields_for_encode(schema_provider(), atom(), term()) ::
               {:ok, map()} | {:error, term()}
   @callback equal?(schema_provider(), message(), message()) :: {:ok, boolean()} | :not_applicable
+  # Unpacks an `Any` payload: `type_url` and the encoded message, as in a
+  # `cel.expr.Value` `object_value`.
+  @callback from_any(schema_provider(), String.t(), binary()) :: {:ok, value()} | {:error, term()}
+  # Packs a timestamp or duration value into an `Any` payload.
+  @callback to_any(schema_provider(), value()) ::
+              {:ok, %{type_url: String.t(), value: binary()}} | {:error, term()}
 end

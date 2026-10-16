@@ -1,18 +1,17 @@
 defmodule PB.CEL.WellKnownTypes do
   @moduledoc false
 
+  # How CEL treats the protobuf well-known types by name: the CEL types of
+  # wrapper, `Timestamp`, `Duration`, `Any`, `Struct`, `Value` and `ListValue`
+  # fields, and the values of their message literals. Packing and unpacking
+  # `Any` payloads needs protobuf, so it goes through the message runtime
+  # (`PB.CEL.Message.Runtime`'s `from_any/3` and `to_any/2`).
+
   alias PB.CEL.ProtoType
   alias PB.CEL.Value
-  alias PB.CEL.Runtime.Time
-  alias PB.WellKnownTypes.Any
-  alias PB.WellKnownTypes.Codec, as: WKTCodec
-  alias PB.WellKnownTypes.Time, as: WKTTime
-  alias PB.Wire
 
   @timestamp_type "google.protobuf.Timestamp"
   @duration_type "google.protobuf.Duration"
-  @timestamp_type_url Any.type_url(@timestamp_type)
-  @duration_type_url Any.type_url(@duration_type)
 
   @wrapper_types %{
     "google.protobuf.Int32Value" => :int,
@@ -129,44 +128,6 @@ defmodule PB.CEL.WellKnownTypes do
     end
   end
 
-  @spec object_value(String.t(), binary) :: {:ok, Value.t()} | {:error, term}
-  def object_value(type_url, value) when is_binary(type_url) and is_binary(value),
-    do: object_value(type_url_name(type_url), type_url, value)
-
-  defp object_value(@timestamp_type, _type_url, value) do
-    with {:ok, message} <- WKTCodec.decode_timestamp(value) do
-      WKTTime.from_proto_timestamp(message)
-    end
-  end
-
-  defp object_value(@duration_type, _type_url, value) do
-    with {:ok, message} <- WKTCodec.decode_duration(value),
-         {:ok, {:duration, ns}} <- WKTTime.from_proto_duration(message),
-         true <- Time.duration_ns?(ns) do
-      {:ok, Value.duration(ns)}
-    else
-      false -> {:error, :duration_out_of_range}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp object_value(_name, type_url, value), do: {:ok, Value.object(type_url, value)}
-
-  @spec to_object_value(Value.t()) :: {:ok, map} | {:error, term}
-  def to_object_value({:timestamp, _ns} = value) do
-    with {:ok, message} <- WKTTime.to_proto_timestamp(value),
-         {:ok, iodata} <- WKTCodec.encode_timestamp(message) do
-      {:ok, %{type_url: @timestamp_type_url, value: IO.iodata_to_binary(iodata)}}
-    end
-  end
-
-  def to_object_value({:duration, _ns} = value) do
-    with {:ok, message} <- WKTTime.to_proto_duration(value),
-         {:ok, iodata} <- WKTCodec.encode_duration(message) do
-      {:ok, %{type_url: @duration_type_url, value: IO.iodata_to_binary(iodata)}}
-    end
-  end
-
   @spec type_denotation(String.t()) :: {:ok, ProtoType.t()} | :error
   def type_denotation(name) when is_binary(name) do
     case name do
@@ -180,9 +141,9 @@ defmodule PB.CEL.WellKnownTypes do
   # ProtoJSON and Go's resolvers.
   @spec type_url_name(String.t()) :: String.t()
   def type_url_name(type_url) do
-    case Any.split_type_url(type_url) do
-      {:ok, _prefix, name} -> name
-      :error -> type_url
+    case type_url |> String.split("/") |> List.last() do
+      "" -> type_url
+      name -> name
     end
   end
 
@@ -242,9 +203,16 @@ defmodule PB.CEL.WellKnownTypes do
     {:ok, Value.object(type_url, value)}
   end
 
+  # A `FloatValue` holds a float32: round as encoding one would, a double out of
+  # float32 range becoming an infinity.
   defp maybe_float32_wrapper({:double, value}, "google.protobuf.FloatValue")
-       when is_float(value),
-       do: value |> Wire.encode_float32() |> Wire.decode_float32() |> Value.double()
+       when is_float(value) do
+    case <<value::little-float-32>> do
+      <<0, 0, 128, 127>> -> Value.double(:infinity)
+      <<0, 0, 128, 255>> -> Value.double(:negative_infinity)
+      <<rounded::little-float-32>> -> Value.double(rounded)
+    end
+  end
 
   defp maybe_float32_wrapper(value, _message_name), do: value
 end

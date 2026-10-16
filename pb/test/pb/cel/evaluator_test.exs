@@ -21,6 +21,8 @@ defmodule PB.CEL.EvaluatorTest do
     defdelegate field_value(schema, field, value), to: Message
     defdelegate raw_fields_for_encode(schema, message, value), to: Message
     defdelegate equal?(schema, left, right), to: Message
+    defdelegate from_any(schema, type_url, value), to: Message
+    defdelegate to_any(schema, value), to: Message
 
     def select(_schema, {:message, _name, _fields}, "field", false),
       do: {:ok, Value.string("runtime")}
