@@ -5,8 +5,7 @@ defmodule CEL.ValueTest do
 
   alias CEL.ProtoType
   alias CEL.Value
-  alias PB.CEL.MessageRuntime
-  alias PB.CEL.MessageSchema
+  alias PB.CEL.ProtoCodec
   alias PB.WellKnownTypes.Codec, as: WKTCodec
   alias PB.WellKnownTypes.Time, as: WKTTime
 
@@ -19,10 +18,10 @@ defmodule CEL.ValueTest do
   end
 
   test "decodes cel.expr.ExprValue and cel.expr.Value scalars" do
-    assert Value.from_expr_value(%{kind: {:value, %{kind: {:int64_value, 42}}}}) ==
+    assert ProtoCodec.from_expr_value(%{kind: {:value, %{kind: {:int64_value, 42}}}}) ==
              {:ok, Value.int(42)}
 
-    assert Value.from_expr_value(%{kind: {:double_value, :infinity}}) ==
+    assert ProtoCodec.from_expr_value(%{kind: {:double_value, :infinity}}) ==
              {:ok, Value.double(:infinity)}
   end
 
@@ -42,7 +41,7 @@ defmodule CEL.ValueTest do
          }}
     }
 
-    assert Value.from_expr_value(expr_value) ==
+    assert ProtoCodec.from_expr_value(expr_value) ==
              {:ok, Value.list([Value.string("one"), Value.null()])}
   end
 
@@ -52,7 +51,7 @@ defmodule CEL.ValueTest do
 
     assert {:ok, timestamp_bytes} = WKTCodec.encode_timestamp(timestamp_message)
 
-    assert Value.from_expr_value(
+    assert ProtoCodec.from_expr_value(
              %{
                kind:
                  {:object_value,
@@ -60,15 +59,14 @@ defmodule CEL.ValueTest do
                     type_url: "type.googleapis.com/google.protobuf.Timestamp",
                     value: IO.iodata_to_binary(timestamp_bytes)
                   }}
-             },
-             message_runtime: MessageRuntime
+             }
            ) == {:ok, Value.timestamp(1_234_567_890_123_456_789)}
 
     {:ok, duration_message} = WKTTime.to_proto_duration(Value.duration(123_321_456_789))
 
     assert {:ok, duration_bytes} = WKTCodec.encode_duration(duration_message)
 
-    assert Value.from_expr_value(
+    assert ProtoCodec.from_expr_value(
              %{
                kind:
                  {:object_value,
@@ -76,15 +74,14 @@ defmodule CEL.ValueTest do
                     type_url: "type.googleapis.com/google.protobuf.Duration",
                     value: IO.iodata_to_binary(duration_bytes)
                   }}
-             },
-             message_runtime: MessageRuntime
+             }
            ) == {:ok, Value.duration(123_321_456_789)}
   end
 
   test "decodes schema-backed object values" do
     schema = PB.TestSupport.TestSchema.schema()
 
-    assert Value.from_expr_value(
+    assert ProtoCodec.from_expr_value(
              %{
                kind:
                  {:object_value,
@@ -93,13 +90,11 @@ defmodule CEL.ValueTest do
                     value: <<8, 17>>
                   }}
              },
-             schema: schema,
-             message_schema: MessageSchema,
-             message_runtime: MessageRuntime
+             schema
            ) ==
              {:ok, {:message, :"cel.expr.conformance.proto2.TestAllTypes", %{single_int32: 17}}}
 
-    assert Value.from_expr_value(
+    assert ProtoCodec.from_expr_value(
              %{
                kind:
                  {:object_value,
@@ -108,18 +103,14 @@ defmodule CEL.ValueTest do
                     value: <<8, 128, 137, 122>>
                   }}
              },
-             schema: schema,
-             message_schema: MessageSchema,
-             message_runtime: MessageRuntime
+             schema
            ) == {:ok, Value.int(2_000_000)}
   end
 
   test "resolves object values by the last segment of any type URL" do
     schema = PB.TestSupport.TestSchema.schema()
-    opts = [schema: schema, message_schema: MessageSchema, message_runtime: MessageRuntime]
-
     object = fn type_url, value ->
-      Value.from_expr_value(%{kind: {:object_value, %{type_url: type_url, value: value}}}, opts)
+      ProtoCodec.from_expr_value(%{kind: {:object_value, %{type_url: type_url, value: value}}}, schema)
     end
 
     assert object.("example.com/a/cel.expr.conformance.proto2.TestAllTypes", <<8, 17>>) ==
@@ -130,13 +121,13 @@ defmodule CEL.ValueTest do
   end
 
   test "decodes CEL type values" do
-    assert Value.from_expr_value(%{kind: {:type_value, "null_type"}}) ==
+    assert ProtoCodec.from_expr_value(%{kind: {:type_value, "null_type"}}) ==
              {:ok, {:type, ProtoType.null()}}
 
-    assert Value.from_expr_value(%{kind: {:type_value, "list"}}) ==
+    assert ProtoCodec.from_expr_value(%{kind: {:type_value, "list"}}) ==
              {:ok, {:type, ProtoType.list(ProtoType.dyn())}}
 
-    assert Value.from_expr_value(%{kind: {:type_value, "google.protobuf.Timestamp"}}) ==
+    assert ProtoCodec.from_expr_value(%{kind: {:type_value, "google.protobuf.Timestamp"}}) ==
              {:ok, {:type, ProtoType.timestamp()}}
   end
 
@@ -146,16 +137,15 @@ defmodule CEL.ValueTest do
         Value.string("k") => Value.list([Value.uint(1), Value.double(:negative_infinity)])
       })
 
-    assert {:ok, expr_value} = Value.to_expr_value(value)
-    assert Value.from_expr_value(expr_value) == {:ok, value}
+    assert {:ok, expr_value} = ProtoCodec.to_expr_value(value)
+    assert ProtoCodec.from_expr_value(expr_value) == {:ok, value}
   end
 
-  test "packs and unpacks timestamps and durations through the message runtime" do
+  test "packs and unpacks timestamps and durations as Any payloads" do
     for value <- [Value.timestamp(1_234_567_890_123_456_789), Value.duration(-1_500_000_000)] do
-      assert {:ok, expr_value} = Value.to_expr_value(value, message_runtime: MessageRuntime)
-      assert Value.from_expr_value(expr_value, message_runtime: MessageRuntime) == {:ok, value}
-
-      assert Value.to_expr_value(value) == {:error, :no_message_runtime}
+      assert {:ok, expr_value} = ProtoCodec.to_expr_value(value)
+      assert {:object_value, _object} = expr_value.kind |> elem(1) |> Map.fetch!(:kind)
+      assert ProtoCodec.from_expr_value(expr_value) == {:ok, value}
     end
   end
 

@@ -11,6 +11,7 @@ defmodule PB.TestSupport.CELConformance do
   alias CEL.Error
   alias CEL.Value
   alias PB.CEL.MessageRuntime
+  alias PB.CEL.ProtoCodec
   alias PB.CEL.MessageSchema, as: CELSchema
 
   @fixture_root Path.expand("../../fixtures/cel_conformance", __DIR__)
@@ -756,13 +757,7 @@ defmodule PB.TestSupport.CELConformance do
   defp supported_type?(%{type_kind: {:type, type}}, schema), do: supported_type?(type, schema)
   defp supported_type?(_type, _schema), do: false
 
-  defp expr_value_to_value(expr_value),
-    do:
-      Value.from_expr_value(expr_value,
-        schema: @schema,
-        message_schema: CELSchema,
-        message_runtime: MessageRuntime
-      )
+  defp expr_value_to_value(expr_value), do: ProtoCodec.from_expr_value(expr_value, @schema)
 
   defp verify_sha256!(bin, fixture), do: verify_sha256!(bin, fixture.output, fixture.sha256)
 

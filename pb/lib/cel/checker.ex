@@ -1347,16 +1347,8 @@ defmodule CEL.Checker do
     put_op(state, expr, {:ident, resolved_ident_op(state, resolved)})
   end
 
-  defp maybe_put_resolved_value(reference, %{value: value}), do: Map.put(reference, :value, value)
-  defp maybe_put_resolved_value(reference, _resolved), do: reference
-
   defp resolved_ident_op(_state, %{kind: :type, denotation: denotation} = resolved) do
-    %{
-      kind: :type,
-      name: resolved.name,
-      denotation: denotation
-    }
-    |> maybe_put_resolved_value(resolved)
+    %{kind: :type, name: resolved.name, denotation: denotation}
   end
 
   defp resolved_ident_op(_state, %{kind: :enum_value, value: value} = resolved) do

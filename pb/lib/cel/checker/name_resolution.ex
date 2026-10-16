@@ -3,8 +3,8 @@ defmodule CEL.Checker.NameResolution do
 
   alias CEL.Env
   alias CEL.Checker.Types, as: CType
-  alias CEL.Proto
   alias CEL.ProtoType
+  alias CEL.Value
   alias CEL.WellKnownTypes
 
   @type resolved ::
@@ -28,7 +28,7 @@ defmodule CEL.Checker.NameResolution do
               required(:kind) => :enum_value,
               required(:name) => String.t(),
               required(:type) => CType.t(),
-              required(:value) => Proto.value()
+              required(:value) => Value.t()
             }
 
   @spec resolve(map, Env.t(), [%{String.t() => CType.t()}]) :: {:ok, resolved} | :error
@@ -129,7 +129,7 @@ defmodule CEL.Checker.NameResolution do
           kind: :enum_value,
           name: enum_name <> "." <> Atom.to_string(enum_value.value),
           type: CType.message(enum_name),
-          value: %{kind: {:enum_value, %{type: enum_name, value: enum_value.number}}}
+          value: Value.enum(enum_name, enum_value.number)
         }
 
       :error ->
@@ -139,8 +139,7 @@ defmodule CEL.Checker.NameResolution do
               kind: :type,
               name: name,
               type: CType.type(CType.from_cel(denotation)),
-              denotation: denotation,
-              value: %{kind: {:type_value, schema_type_value_name(denotation)}}
+              denotation: denotation
             }
 
           :error ->
@@ -189,14 +188,6 @@ defmodule CEL.Checker.NameResolution do
         end
     end
   end
-
-  defp schema_type_value_name(%{type_kind: {:message_type, name}}), do: name
-
-  defp schema_type_value_name(%{type_kind: {:well_known, :TIMESTAMP}}),
-    do: "google.protobuf.Timestamp"
-
-  defp schema_type_value_name(%{type_kind: {:well_known, :DURATION}}),
-    do: "google.protobuf.Duration"
 
   defp resolve_enum_name(name, env, scopes, absolute?) do
     with :ok <- local_prefix_available(name, scopes, absolute?) do

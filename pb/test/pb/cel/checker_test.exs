@@ -454,9 +454,7 @@ defmodule CEL.CheckerTest do
               %{
                 kind: :enum_value,
                 name: "cel.expr.conformance.proto3.GlobalEnum.GAZ",
-                value: %{
-                  kind: {:enum_value, %{type: "cel.expr.conformance.proto3.GlobalEnum", value: 2}}
-                }
+                value: {:enum, "cel.expr.conformance.proto3.GlobalEnum", 2}
               }}
 
     checked = CEL.check!("GlobalEnum", opts)
@@ -469,8 +467,7 @@ defmodule CEL.CheckerTest do
               %{
                 kind: :type,
                 name: "cel.expr.conformance.proto3.GlobalEnum",
-                denotation: CEL.ProtoType.message("cel.expr.conformance.proto3.GlobalEnum"),
-                value: %{kind: {:type_value, "cel.expr.conformance.proto3.GlobalEnum"}}
+                denotation: CEL.ProtoType.message("cel.expr.conformance.proto3.GlobalEnum")
               }}
 
     assert root_type(CEL.check!("type(GlobalEnum.GOO)", opts)) ==

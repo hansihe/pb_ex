@@ -138,7 +138,7 @@ defmodule CEL.Checked do
              required(:name) => String.t(),
              optional(:type) => CType.t(),
              optional(:denotation) => ProtoType.t(),
-             optional(:value) => term
+             optional(:value) => Value.t()
            }}
 
   @typedoc false
@@ -386,6 +386,12 @@ defmodule CEL.Checked do
 
   defp reference(_op), do: nil
 
-  defp maybe_put_value(reference, %{value: value}), do: Map.put(reference, :value, value)
+  # The value an enum or type name stands for, as a `cel.expr.Value`.
+  defp maybe_put_value(reference, %{kind: :enum_value, value: {:enum, type, number}}),
+    do: Map.put(reference, :value, %{kind: {:enum_value, %{type: type, value: number}}})
+
+  defp maybe_put_value(reference, %{kind: :type, denotation: denotation}),
+    do: Map.put(reference, :value, %{kind: {:type_value, Value.type_name({:type, denotation})}})
+
   defp maybe_put_value(reference, _op), do: reference
 end

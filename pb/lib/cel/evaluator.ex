@@ -157,8 +157,8 @@ defmodule CEL.Evaluator do
     end
   end
 
-  defp eval_ident_op(expr, %{kind: :enum_value, value: value}, state) do
-    eval_reference_value(expr, value, state)
+  defp eval_ident_op(_expr, %{kind: :enum_value, value: value}, state) do
+    {:ok, value, state}
   end
 
   defp eval_ident_op(_expr, %{kind: :type, denotation: denotation}, state) do
@@ -678,17 +678,6 @@ defmodule CEL.Evaluator do
   defp coerce_runtime_value(value, type, _state), do: coerce_value(value, type)
 
   defp coerce_value(value, type), do: Value.coerce(value, type)
-
-  defp eval_reference_value(expr, value, state) do
-    case Value.from_expr_value(value,
-           schema: state.schema,
-           message_schema: state.message_schema,
-           message_runtime: state.message_runtime
-         ) do
-      {:ok, value} -> {:ok, value, state}
-      {:error, reason} -> error(expr, reason)
-    end
-  end
 
   defp fetch_local(scopes, name) do
     Enum.find_value(scopes, :error, fn scope ->

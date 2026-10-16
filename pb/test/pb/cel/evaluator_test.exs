@@ -280,7 +280,7 @@ defmodule CEL.EvaluatorTest do
     schema = PB.TestSupport.TestSchema.schema()
 
     value =
-      Value.from_expr_value!(
+      PB.CEL.ProtoCodec.from_expr_value!(
         %{
           kind:
             {:object_value,
@@ -289,9 +289,7 @@ defmodule CEL.EvaluatorTest do
                value: <<8, 17>>
              }}
         },
-        schema: schema,
-        message_schema: PB.CEL.MessageSchema,
-        message_runtime: Message
+        schema
       )
 
     assert CEL.eval!(
