@@ -114,7 +114,7 @@ defmodule CEL.CustomFunctionTest do
       fields = Keyword.merge([id: "bad_x", args: [:int], result: :int], overload)
       function = %Function{name: "bad", overloads: [struct!(Overload, fields)]}
 
-      assert_raise PB.OptionError, pattern, fn -> env(functions: [function]) end
+      assert_raise CEL.OptionError, pattern, fn -> env(functions: [function]) end
     end
   end
 
@@ -131,7 +131,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -149,7 +149,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -167,7 +167,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -185,7 +185,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -203,7 +203,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -221,7 +221,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -239,7 +239,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end
@@ -257,7 +257,7 @@ defmodule CEL.CustomFunctionTest do
       ]
     }
 
-    assert_raise PB.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
+    assert_raise CEL.OptionError, ~r/"bad" overload :eval must be \{Module, function\}/, fn ->
       CEL.check!("bad()", env(functions: [bad_function]))
     end
   end

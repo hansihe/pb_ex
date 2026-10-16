@@ -142,7 +142,7 @@ defmodule CEL.AbbreviationsTest do
           {[abbreviations: [:"a.b"]], ~r/expected a qualified name/},
           {[abbreviations: "a.b"], ~r/:abbreviations/}
         ] do
-      assert_raise PB.OptionError, pattern, fn -> Env.build(opts) end
+      assert_raise CEL.OptionError, pattern, fn -> Env.build(opts) end
     end
   end
 end

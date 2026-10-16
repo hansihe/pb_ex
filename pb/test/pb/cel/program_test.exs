@@ -34,7 +34,7 @@ defmodule CEL.ProgramTest do
     assert map_size(calls) == 1
     assert {:ok, %{source_info: %{macro_calls: %{}}}} = CEL.parse("f(x)", macros: false)
 
-    assert_raise PB.OptionError, ~r/unknown option/, fn ->
+    assert_raise CEL.OptionError, ~r/unknown option/, fn ->
       CEL.parse("1", disable_macros: true)
     end
   end
@@ -48,7 +48,7 @@ defmodule CEL.ProgramTest do
           {[container: :pkg], ~r/:container: expected a string/},
           {[message_schema: Enum], ~r/:message_schema: expected a provider module/}
         ] do
-      assert_raise PB.OptionError, pattern, fn -> Env.build(opts) end
+      assert_raise CEL.OptionError, pattern, fn -> Env.build(opts) end
     end
   end
 

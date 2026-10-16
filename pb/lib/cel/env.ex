@@ -85,7 +85,7 @@ defmodule CEL.Env do
       `duration('30d')`, `timestamp('nope')` or `s.matches('[')`. By default
       these fail when evaluated, as CEL specifies.
 
-  Raises `PB.OptionError` for an unknown option or an invalid value.
+  Raises `CEL.OptionError` for an unknown option or an invalid value.
   """
   @spec build(keyword) :: t
   def build(opts \\ []) do
@@ -223,7 +223,7 @@ defmodule CEL.Env do
 
   @spec invalid_option!(atom, term, String.t()) :: no_return
   defp invalid_option!(option, value, reason) do
-    raise PB.OptionError, kind: :invalid_option, option: option, value: value, reason: reason
+    raise CEL.OptionError, kind: :invalid_option, option: option, value: value, reason: reason
   end
 
   @doc false

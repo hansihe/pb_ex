@@ -14,10 +14,7 @@ defmodule CEL.LeafBoundaryTest do
     # `schema:` defaults the providers to the protobuf binding, which
     # `CEL.Env.build/1` callers rely on; resolved in step 2 of the split.
     {CEL.Env, PB.CEL.MessageSchema} => :env_schema_default,
-    {CEL.Env, PB.CEL.MessageRuntime} => :env_schema_default,
-    # Option errors are raised as `PB.OptionError`, as documented.
-    {CEL.Env, PB.OptionError} => :public_exception,
-    {CEL.Options, PB.OptionError} => :public_exception
+    {CEL.Env, PB.CEL.MessageRuntime} => :env_schema_default
   }
 
   @root Path.expand("../../..", __DIR__)

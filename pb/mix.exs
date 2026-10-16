@@ -163,6 +163,7 @@ defmodule PB.MixProject do
         PB.OptionError,
         PB.AdapterError,
         CEL.Error,
+        CEL.OptionError,
         PB.Validate.CompileError
       ]
     ]

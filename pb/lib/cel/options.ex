@@ -1,8 +1,7 @@
 defmodule CEL.Options do
   @moduledoc false
 
-  # Keyword option checks for the CEL entry points, raising `PB.OptionError` as
-  # the rest of PB does.
+  # Keyword option checks for the CEL entry points, raising `CEL.OptionError`.
 
   @typedoc """
   Accepted options, each with its allowed values (`:any`, `:boolean`, `:list`
@@ -12,14 +11,14 @@ defmodule CEL.Options do
 
   @doc """
   Validates a keyword list against `spec`, returning a map of every option in
-  the spec (defaults filled in). Raises `PB.OptionError` for an unknown key, a
+  the spec (defaults filled in). Raises `CEL.OptionError` for an unknown key, a
   value outside the allowed ones, or something that is not a keyword list.
   """
   @spec validate!(term, spec) :: map
   def validate!(opts, spec) do
     case validate(opts, spec) do
       {:ok, opts} -> opts
-      {:error, fields} -> raise PB.OptionError, fields
+      {:error, fields} -> raise CEL.OptionError, fields
     end
   end
 

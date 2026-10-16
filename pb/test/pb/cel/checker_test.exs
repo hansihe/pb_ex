@@ -98,7 +98,7 @@ defmodule CEL.CheckerTest do
 
     assert {:ok, _checked} = CEL.check("duration('30d')", env(validate_literals: [:regex]))
 
-    assert_raise PB.OptionError, ~r/validate_literals/, fn -> env(validate_literals: [:int]) end
+    assert_raise CEL.OptionError, ~r/validate_literals/, fn -> env(validate_literals: [:int]) end
   end
 
   test "orders mixed numeric types without dyn, as the CEL spec allows" do

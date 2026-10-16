@@ -80,7 +80,7 @@ defmodule CEL do
       `exists`, `exists_one`, `map`, `filter`, `cel.bind`, `optMap`,
       `optFlatMap`). Defaults to `true`.
 
-  Raises `PB.OptionError` for an unknown option or an invalid value.
+  Raises `CEL.OptionError` for an unknown option or an invalid value.
   """
   @spec parse(String.t(), keyword) :: {:ok, parsed()} | {:error, Error.t()}
   def parse(source, opts \\ []) when is_binary(source) do
