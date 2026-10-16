@@ -69,10 +69,7 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
   defp compile_base_schemas(descriptor_set) do
     draft = Compiler.compile(descriptor_set)
 
-    runtime =
-      draft
-      |> Compiler.finalize()
-      |> PB.Schema.Prepare.prepare()
+    runtime = PB.Schema.Prepare.prepare(draft)
 
     {:ok, %{draft: draft, runtime: runtime}}
   rescue
@@ -127,7 +124,6 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
       base_schema
       |> Transform.slice_draft(roots: [message_name])
       |> PB.Validate.Compiler.annotate()
-      |> Compiler.finalize()
       |> PB.Schema.Prepare.prepare()
 
     {:ok, schema}
