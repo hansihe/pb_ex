@@ -96,7 +96,9 @@ defmodule PB.DescriptorRuntimeTest do
       )
     end
 
-    test "validation accepts matching message-name metadata", %{schema: schema} do
+    test "validation accepts matching message-name metadata" do
+      schema = PB.compile(Fixtures.person_descriptor_set(), plugins: [PB.Validate])
+
       assert :ok =
                PB.Validate.validate(
                  %{
@@ -108,7 +110,8 @@ defmodule PB.DescriptorRuntimeTest do
                )
     end
 
-    test "validation rejects mismatched message-name metadata", %{schema: schema} do
+    test "validation rejects mismatched message-name metadata" do
+      schema = PB.compile(Fixtures.person_descriptor_set(), plugins: [PB.Validate])
       key = :__message_name__
 
       assert {:error, %PB.ValueError{} = error} =

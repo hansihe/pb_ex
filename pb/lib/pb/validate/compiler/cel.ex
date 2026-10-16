@@ -3,7 +3,7 @@ defmodule PB.Validate.Compiler.CEL do
 
   # Compiles CEL rule sources into checked `CELOp`s for `PB.Validate.Compiler`.
   # Owns parsing, type-checking against a compile-time env, rule-path assignment
-  # for user `cel`/`cel_expression` rules, and the `:validate` cel-op merge helper.
+  # for user `cel`/`cel_expression` rules, and the cel-op merge helper.
 
   alias CEL.Checker.Types, as: CType
   alias CEL.Checked
@@ -13,13 +13,13 @@ defmodule PB.Validate.Compiler.CEL do
   alias PB.Validate.Schema, as: ValidateSchema
 
   @doc """
-  Merges compiled CEL ops into an entry's `:validate`, leaving it untouched when
-  there are none.
+  Merges compiled CEL ops into an entry's `PB.Validate` data, leaving it
+  untouched when there are none.
   """
   def add_cel_ops(entry, []), do: entry
 
   def add_cel_ops(entry, ops) do
-    Map.update(entry, :validate, %{cel: ops}, fn validate ->
+    Map.update(entry, PB.Validate, %{cel: ops}, fn validate ->
       Map.update(validate, :cel, ops, &(&1 ++ ops))
     end)
   end

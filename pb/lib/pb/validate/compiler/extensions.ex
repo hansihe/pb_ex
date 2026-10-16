@@ -5,7 +5,7 @@ defmodule PB.Validate.Compiler.Extensions do
   # `PB.Validate.Compiler`, and builds the structural (non-CEL) validation that
   # comes straight off those options: required/disabled/ignore flags, message
   # oneof rules, and predefined-rule definitions on extensions. Also owns the
-  # small `:validate` merge helpers shared with the field compiler.
+  # small validation-data merge helpers shared with the field compiler.
 
   alias PB.Validate.CompileError
   alias PB.Validate.Schema, as: ValidateSchema
@@ -67,13 +67,13 @@ defmodule PB.Validate.Compiler.Extensions do
   end
 
   @doc """
-  Merges structural rules into an entry's `:validate`, leaving it untouched when
-  there are none.
+  Merges structural rules into an entry's `PB.Validate` data, leaving it
+  untouched when there are none.
   """
   def add_structural_validation(entry, rules) when map_size(rules) == 0, do: entry
 
   def add_structural_validation(entry, rules) do
-    Map.update(entry, :validate, rules, &Map.merge(&1, rules))
+    Map.update(entry, PB.Validate, rules, &Map.merge(&1, rules))
   end
 
   @doc """
@@ -87,7 +87,7 @@ defmodule PB.Validate.Compiler.Extensions do
       rules ->
         predefined = ValidateSchema.predefined(rules)
 
-        Map.update(entry, :validate, %{predefined: predefined}, fn validate ->
+        Map.update(entry, PB.Validate, %{predefined: predefined}, fn validate ->
           Map.put(validate, :predefined, predefined)
         end)
     end

@@ -5,7 +5,7 @@ defmodule PB.Validate.Compiler.Fields do
   # buf.validate.field rules across the rule families: direct rules on the field
   # itself, and nested rules on repeated items and map keys/values. Each path
   # delegates structural/native/predefined/user-CEL compilation to the matching
-  # compiler module and merges the results under `:validate`.
+  # compiler module and merges the results under the `PB.Validate` key.
 
   alias PB.CEL.Schema.Field
   alias PB.Validate.Compiler.CEL
@@ -114,7 +114,7 @@ defmodule PB.Validate.Compiler.Fields do
         else
           repeated = ValidateSchema.repeated_rules(%{items: rule_set})
 
-          Map.update(field, :validate, %{repeated: repeated}, fn validate ->
+          Map.update(field, PB.Validate, %{repeated: repeated}, fn validate ->
             Map.put(validate, :repeated, repeated)
           end)
         end
@@ -155,7 +155,7 @@ defmodule PB.Validate.Compiler.Fields do
       if ValidateSchema.empty_map_rules?(map_rules) do
         field
       else
-        Map.update(field, :validate, %{map: map_rules}, fn validate ->
+        Map.update(field, PB.Validate, %{map: map_rules}, fn validate ->
           Map.put(validate, :map, map_rules)
         end)
       end

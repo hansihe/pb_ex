@@ -2,8 +2,6 @@ defmodule PB.Schema.MainTest do
   use ExUnit.Case, async: true
 
   alias PB.Schema.Main
-  alias PB.Validate.Schema.CELSource
-  alias PB.Validate.Schema.Predefined
 
   @extensions :__extensions__
   @predefined :"buf.validate.predefined"
@@ -48,11 +46,12 @@ defmodule PB.Schema.MainTest do
     assert Enum.map(predefined.cel, & &1.id) == ["string.email", "string.email_empty"]
   end
 
-  test "compiled main schema preserves predefined rule metadata" do
-    email =
-      get_in(Main.schema(), [:messages, :"buf.validate.StringRules", :fields_by_name, :email])
+  test "compiled main schema keeps the predefined rule options and runs no plugins" do
+    schema = Main.schema()
+    email = get_in(schema, [:messages, :"buf.validate.StringRules", :fields_by_name, :email])
 
-    assert %{validate: %{predefined: %Predefined{cel: rules}}} = email
-    assert [%CELSource{id: "string.email"}, %CELSource{id: "string.email_empty"}] = rules
+    assert schema.plugins == []
+    assert %{cel: [%{id: "string.email"}, %{id: "string.email_empty"}]} =
+             email.options[@extensions][@predefined]
   end
 end

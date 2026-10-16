@@ -114,8 +114,9 @@ defmodule PB.Schema do
   @doc false
   defmacro __using__(opts) when is_list(opts) do
     validate_opts!(opts)
+    plugins = plugins!(opts, __CALLER__)
 
-    schema_ast = schema_ast(opts)
+    schema_ast = schema_ast(opts, plugins)
     external_resource_ast = external_resource_ast(opts)
 
     quote do
@@ -477,7 +478,7 @@ defmodule PB.Schema do
     # `:descriptor` and should not be surfaced in the public moduledoc.
     unknown =
       Keyword.keys(opts) --
-        [:descriptor, :descriptor_set, :projections, :with_schema]
+        [:descriptor, :descriptor_set, :projections, :plugins, :with_schema]
 
     if unknown != [] do
       raise ArgumentError, "unknown PB.Schema option(s): #{inspect(unknown)}"
@@ -494,8 +495,26 @@ defmodule PB.Schema do
     end
   end
 
-  defp schema_ast(opts) do
-    compile_opts = [projections: Keyword.get(opts, :projections, [])]
+  # Plugins are needed while expanding `use PB.Schema`, for their schema
+  # functions, so the option is evaluated here rather than in the module body.
+  defp plugins!(opts, caller) do
+    {plugins, _binding} = Code.eval_quoted(Keyword.get(opts, :plugins, []), [], caller)
+
+    # Plugin modules may be compiled alongside the schema module.
+    Enum.each(List.wrap(plugins), fn
+      {module, _opts} when is_atom(module) -> Code.ensure_compiled(module)
+      module when is_atom(module) -> Code.ensure_compiled(module)
+      _entry -> :ok
+    end)
+
+    PB.Schema.Plugin.__entries__!(plugins)
+  end
+
+  defp schema_ast(opts, plugins) do
+    compile_opts = [
+      projections: Keyword.get(opts, :projections, []),
+      plugins: Macro.escape(plugins)
+    ]
 
     source_ast =
       cond do

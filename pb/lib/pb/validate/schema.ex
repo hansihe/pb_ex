@@ -3,8 +3,10 @@ defmodule PB.Validate.Schema do
 
   # Validation metadata stored in compiled PB schemas.
   #
-  # `PB.compile/1` stores validation metadata under an entry's `:validate`
-  # key. Message, field, oneof, and extension entries may all carry this key.
+  # `PB.Validate.compile/2` stores validation metadata under an entry's
+  # `PB.Validate` key, as `PB.Schema.Plugin` lays out. Message, field, oneof, and
+  # extension entries may all carry this key, and so does the schema itself
+  # (see `attach_standard_rule_schema/1`).
   # The map is intentionally plain data so compiled schemas remain inspectable:
   #
   #   * `:cel` is a list of `%PB.Validate.Schema.CELOp{}` operations.
@@ -17,9 +19,10 @@ defmodule PB.Validate.Schema do
   #   * `:map` is `%PB.Validate.Schema.MapRules{}` for nested map key/value
   #     validation.
   #   * structural flags such as `:required`, `:ignore`, `:disabled`, and
-  #     `:message_oneofs` are stored directly in the `:validate` map.
+  #     `:message_oneofs` are stored directly in the `PB.Validate` map.
 
   alias PB.Schema.Prepare
+  alias PB.Validate.Compiler.Extensions
   alias PB.Validate.Path
 
   defmodule CELSource do
@@ -267,47 +270,47 @@ defmodule PB.Validate.Schema do
     Path.field_path(Enum.map(fields, &Path.rule_field_element/1))
   end
 
-  @standard_rule_schema_key :standard_rule_schema
-
   @doc """
-  Precomputes the merged standard-rule schema once and carries it on `schema`.
+  Returns `schema` with `PB.Validate`'s schema-level data, marking it as
+  compiled for validation.
 
-  The standard-rule schema (`with_standard_rule_schema/1`) is a pure function of
-  the compiled schema, but building it merges all of `PB.Schema.Main` and re-runs
-  `PB.Schema.Prepare.prepare/1` over the result. Predefined-rule CEL evaluation
-  needs it on every op, so without precomputation `PB.Validate` rebuilds the whole
-  schema per CEL op (scaling with schema size, not message size).
+  The data holds the merged standard-rule schema (`with_standard_rule_schema/1`),
+  a pure function of the compiled schema that merges all of `PB.Schema.Main` and
+  re-runs `PB.Schema.Prepare.prepare/1` over the result. Predefined-rule CEL
+  evaluation needs it on every op, so without precomputation `PB.Validate`
+  rebuilds the whole schema per CEL op (scaling with schema size, not message
+  size). It is only built when the schema has CEL ops that bind extra variables
+  (only predefined rules do), so schemas without them pay nothing.
 
-  Called once at the end of `PB.compile/2`. It is skipped when the schema has no
-  CEL ops that bind extra variables (only predefined rules do), so encode/decode
-  callers and validate-free schemas pay nothing. `PB.Schema.Prepare.prepare/1`
-  drops the cached key, so transforms (slice, adapter application) that re-prepare
-  fall back to recomputation rather than carrying a stale precompute.
+  Called once at the end of `PB.Validate.compile/2`, after the rules are
+  compiled. Schema transforms drop this data with the rest of the plugin's data
+  and compile the rules again.
   """
   @spec attach_standard_rule_schema(PB.schema()) :: PB.schema()
   def attach_standard_rule_schema(schema) when is_map(schema) do
-    # Code.ensure_loaded? guards the bootstrap: PB.Schema.Main itself compiles
-    # through PB.compile/2, and with_standard_rule_schema/1 reads
-    # PB.Schema.Main.schema(), which does not exist yet during Main's own compile.
-    if needs_standard_rule_schema?(schema) and Code.ensure_loaded?(PB.Schema.Main) do
-      Map.put(schema, @standard_rule_schema_key, with_standard_rule_schema(schema))
-    else
-      schema
-    end
+    standard_rule_schema =
+      if needs_standard_rule_schema?(schema), do: with_standard_rule_schema(schema)
+
+    Map.put(schema, PB.Validate, %{standard_rule_schema: standard_rule_schema})
   end
+
+  @doc """
+  Whether `schema` was compiled with the `PB.Validate` plugin.
+  """
+  @spec compiled?(PB.schema()) :: boolean()
+  def compiled?(schema), do: Map.has_key?(schema, PB.Validate)
 
   @doc """
   Returns the merged standard-rule schema for `schema`.
 
-  Uses the precomputed value from `attach_standard_rule_schema/1` when present and
-  recomputes it otherwise, so callers stay correct for hand-built or transformed
-  schema maps that never went through the precompute step.
+  Uses the value precomputed by `attach_standard_rule_schema/1` when present and
+  computes it otherwise, as the rule compiler does before the value exists.
   """
   @spec standard_rule_schema(PB.schema()) :: PB.schema()
   def standard_rule_schema(schema) when is_map(schema) do
-    case Map.get(schema, @standard_rule_schema_key) do
-      nil -> with_standard_rule_schema(schema)
-      prepared -> prepared
+    case schema do
+      %{PB.Validate => %{standard_rule_schema: %{} = prepared}} -> prepared
+      _schema -> with_standard_rule_schema(schema)
     end
   end
 
@@ -328,10 +331,10 @@ defmodule PB.Validate.Schema do
 
   defp field_uses_standard_rules?(field), do: field |> field_cel_ops() |> any_vars_op?()
 
-  defp message_cel_ops(message), do: message |> Map.get(:validate, %{}) |> Map.get(:cel, [])
+  defp message_cel_ops(message), do: message |> Map.get(PB.Validate, %{}) |> Map.get(:cel, [])
 
   defp field_cel_ops(field) do
-    validate = Map.get(field, :validate, %{})
+    validate = Map.get(field, PB.Validate, %{})
 
     Map.get(validate, :cel, []) ++
       rule_set_cel(repeated_items(validate)) ++
@@ -353,10 +356,11 @@ defmodule PB.Validate.Schema do
   # Merges PB.Schema.Main (buf.validate + descriptor.proto + well-known types)
   # into the user schema so predefined-rule CEL can type-check, then prepares the
   # result. The compiler builds this once per pass via `PB.Validate.Compiler.Context`
-  # and `PB.compile/2` caches it on the schema (see `attach_standard_rule_schema/1`),
-  # so this is no longer recomputed per rule.
+  # and `PB.Validate.compile/2` caches it on the schema (see
+  # `attach_standard_rule_schema/1`), so this is no longer recomputed per rule.
   defp with_standard_rule_schema(schema) when is_map(schema) do
     main = PB.Schema.Main.schema()
+    main = Map.put(main, :messages, standard_messages(main.messages))
 
     extensions_by_name =
       Map.merge(
@@ -370,6 +374,20 @@ defmodule PB.Validate.Schema do
     |> Map.put(:extensions_by_name, extensions_by_name)
     |> attach_extensions_to_messages(extensions_by_name)
     |> Prepare.prepare()
+  end
+
+  # PB.Schema.Main is compiled without plugins, so the canonical CEL of its
+  # standard rule fields (`buf.validate.predefined` on, say, `StringRules.email`)
+  # is read from their options here, as the compiler does for user fields.
+  defp standard_messages(messages) do
+    Map.new(messages, fn {fqn, message} ->
+      fields_by_name =
+        Map.new(message.fields_by_name, fn {name, field} ->
+          {name, Extensions.add_predefined_definition(field)}
+        end)
+
+      {fqn, Map.put(message, :fields_by_name, fields_by_name)}
+    end)
   end
 
   defp merge_standard_messages(messages, standard_messages) do

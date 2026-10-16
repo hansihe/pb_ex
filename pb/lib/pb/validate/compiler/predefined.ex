@@ -70,7 +70,7 @@ defmodule PB.Validate.Compiler.Predefined do
          rule_field
        ) do
     sources =
-      case Map.get(rule_field, :validate, %{}) do
+      case Map.get(rule_field, PB.Validate, %{}) do
         %{predefined: %{cel: sources}} -> sources
         _other -> []
       end

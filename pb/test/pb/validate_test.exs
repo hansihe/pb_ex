@@ -15,32 +15,32 @@ defmodule PB.ValidateTest do
       @phase2_binpb_path
       |> File.read!()
       |> PB.decode_descriptor_set!()
-      |> PB.compile()
+      |> PB.compile(plugins: [PB.Validate])
 
     structural_schema =
       @structural_binpb_path
       |> File.read!()
       |> PB.decode_descriptor_set!()
-      |> PB.compile()
+      |> PB.compile(plugins: [PB.Validate])
 
     structural_nested_schema =
       @structural_binpb_path
       |> File.read!()
       |> PB.decode_descriptor_set!()
       |> with_nested_message_oneof_parent()
-      |> PB.compile()
+      |> PB.compile(plugins: [PB.Validate])
 
     predefined_schema =
       @predefined_binpb_path
       |> File.read!()
       |> PB.decode_descriptor_set!()
-      |> PB.compile()
+      |> PB.compile(plugins: [PB.Validate])
 
     custom_predefined_schema =
       @custom_predefined_binpb_path
       |> File.read!()
       |> PB.decode_descriptor_set!()
-      |> PB.compile()
+      |> PB.compile(plugins: [PB.Validate])
 
     {:ok,
      phase2_schema: phase2_schema,

@@ -4,8 +4,10 @@ defmodule PB.Validate.CompilerTest do
   alias CEL.Checked
   alias PB.Validate.CompileError
   alias PB.Validate.Schema.CELOp
+  alias PB.Validate.Schema.CELSource
   alias PB.Validate.Schema.MapRules
   alias PB.Validate.Schema.NativeOp
+  alias PB.Validate.Schema.Predefined
   alias PB.Validate.Schema.RepeatedRules
   alias PB.Validate.Schema.RuleSet
 
@@ -35,13 +37,13 @@ defmodule PB.Validate.CompilerTest do
      structural_oneof_zero_invalid_binpb: File.read!(@structural_oneof_zero_invalid_binpb_path)}
   end
 
-  test "PB.compile/1 annotates message-level user CEL", %{valid_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates message-level user CEL", %{valid_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_phase2.MessageCEL"]
 
-    assert %{validate: %{cel: [op]}} = message
+    assert %{PB.Validate => %{cel: [op]}} = message
     assert op.id == "x"
     assert op.kind == :message_cel
     assert op.message == "value must not be empty"
@@ -63,14 +65,14 @@ defmodule PB.Validate.CompilerTest do
     assert %Checked{} = op.checked
   end
 
-  test "PB.compile/1 annotates field-level user CEL", %{valid_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates field-level user CEL", %{valid_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_phase2.FieldCEL"]
     field = message.fields_by_name.value
 
-    assert %{validate: %{cel: [op]}} = field
+    assert %{PB.Validate => %{cel: [op]}} = field
     assert op.id == "y"
     assert op.kind == :field_cel
     assert op.message == "field value must not be empty"
@@ -90,18 +92,17 @@ defmodule PB.Validate.CompilerTest do
 
     assert op.proto_rule_path == op.rule_path
     assert %Checked{} = op.checked
-    assert message.fields_by_number[1].validate == field.validate
   end
 
-  test "PB.compile/1 annotates message-level cel_expression shorthand", %{
+  test "PB.Validate.compile/2 annotates message-level cel_expression shorthand", %{
     valid_binpb: binpb
   } do
     descriptor_set = PB.decode_descriptor_set!(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_phase2.MessageCELExpression"]
 
-    assert %{validate: %{cel: [op]}} = message
+    assert %{PB.Validate => %{cel: [op]}} = message
     assert op.id == "this.value.size() > 0"
     assert op.kind == :message_cel
     assert op.message == ~s|"this.value.size() > 0" returned false|
@@ -122,16 +123,16 @@ defmodule PB.Validate.CompilerTest do
     assert %Checked{} = op.checked
   end
 
-  test "PB.compile/1 annotates field-level cel_expression shorthand", %{
+  test "PB.Validate.compile/2 annotates field-level cel_expression shorthand", %{
     valid_binpb: binpb
   } do
     descriptor_set = PB.decode_descriptor_set!(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_phase2.FieldCELExpression"]
     field = message.fields_by_name.value
 
-    assert %{validate: %{cel: [op]}} = field
+    assert %{PB.Validate => %{cel: [op]}} = field
     assert op.id == "this.size() > 0"
     assert op.kind == :field_cel
     assert op.message == ~s|"this.size() > 0" returned false|
@@ -152,14 +153,14 @@ defmodule PB.Validate.CompilerTest do
     assert %Checked{} = op.checked
   end
 
-  test "PB.compile/1 annotates predefined field CEL", %{predefined_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates predefined field CEL", %{predefined_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_predefined.StringRules"]
 
     email = message.fields_by_name.email
-    assert %{validate: %{cel: [%CELOp{} = email_rule, %CELOp{} = empty_rule]}} = email
+    assert %{PB.Validate => %{cel: [%CELOp{} = email_rule, %CELOp{} = empty_rule]}} = email
 
     assert email_rule.kind == :predefined
     assert email_rule.id == "string.email"
@@ -181,7 +182,7 @@ defmodule PB.Validate.CompilerTest do
     assert empty_rule.rule_path == email_rule.rule_path
 
     min_len = message.fields_by_name.min_len
-    assert %{validate: %{cel: [%CELOp{} = min_len_rule]}} = min_len
+    assert %{PB.Validate => %{cel: [%CELOp{} = min_len_rule]}} = min_len
     assert min_len_rule.kind == :predefined
     assert min_len_rule.id == "string.min_len"
     assert min_len_rule.vars == %{
@@ -197,7 +198,7 @@ defmodule PB.Validate.CompilerTest do
            }
 
     const = message.fields_by_name.const
-    assert %{validate: %{cel: [%CELOp{} = const_rule]}} = const
+    assert %{PB.Validate => %{cel: [%CELOp{} = const_rule]}} = const
     assert const_rule.id == "string.const"
     assert const_rule.vars == %{
              "rules" => {:message, :"buf.validate.StringRules", %{const: "foo"}},
@@ -205,7 +206,7 @@ defmodule PB.Validate.CompilerTest do
            }
 
     header_name = message.fields_by_name.header_name
-    assert %{validate: %{cel: [%CELOp{} = header_name_rule | _rules]}} = header_name
+    assert %{PB.Validate => %{cel: [%CELOp{} = header_name_rule | _rules]}} = header_name
     assert header_name_rule.id == "string.well_known_regex.header_name"
 
     assert header_name_rule.vars == %{
@@ -216,14 +217,14 @@ defmodule PB.Validate.CompilerTest do
            }
   end
 
-  test "PB.compile/1 annotates nested repeated and map rules", %{predefined_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates nested repeated and map rules", %{predefined_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_predefined.NestedRules"]
 
     names = message.fields_by_name.names
-    assert %{validate: %{repeated: %RepeatedRules{items: %RuleSet{cel: [name_rule]}}}} = names
+    assert %{PB.Validate => %{repeated: %RepeatedRules{items: %RuleSet{cel: [name_rule]}}}} = names
     assert name_rule.id == "string.min_len"
 
     assert name_rule.rule_path == %{
@@ -238,7 +239,7 @@ defmodule PB.Validate.CompilerTest do
     labels = message.fields_by_name.labels
 
     assert %{
-             validate: %{
+             PB.Validate => %{
                map: %MapRules{
                  keys: %RuleSet{cel: [key_rule]},
                  values: %RuleSet{cel: [value_rule]}
@@ -275,7 +276,7 @@ defmodule PB.Validate.CompilerTest do
     ignored_items = message.fields_by_name.ignored_items
 
     assert %{
-             validate: %{
+             PB.Validate => %{
                repeated: %RepeatedRules{items: %RuleSet{cel: [], ignore: :IGNORE_ALWAYS}}
              }
            } = ignored_items
@@ -283,7 +284,7 @@ defmodule PB.Validate.CompilerTest do
     any_values = message.fields_by_name.any_values
 
     assert %{
-             validate: %{
+             PB.Validate => %{
                repeated: %RepeatedRules{items: %RuleSet{native: [%NativeOp{} = any_rule]}}
              }
            } = any_values
@@ -303,14 +304,14 @@ defmodule PB.Validate.CompilerTest do
            }
   end
 
-  test "PB.compile/1 annotates native Any rules", %{predefined_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates native Any rules", %{predefined_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_predefined.AnyRules"]
 
     allowed = message.fields_by_name.allowed
-    assert %{validate: %{native: [%NativeOp{} = allowed_rule]}} = allowed
+    assert %{PB.Validate => %{native: [%NativeOp{} = allowed_rule]}} = allowed
     assert allowed_rule.kind == :any_in
     assert allowed_rule.id == "any.in"
     assert allowed_rule.message == "type URL must be in the allow list"
@@ -326,7 +327,7 @@ defmodule PB.Validate.CompilerTest do
     assert allowed_rule.proto_rule_path == allowed_rule.rule_path
 
     blocked = message.fields_by_name.blocked
-    assert %{validate: %{native: [%NativeOp{} = blocked_rule]}} = blocked
+    assert %{PB.Validate => %{native: [%NativeOp{} = blocked_rule]}} = blocked
     assert blocked_rule.kind == :any_not_in
     assert blocked_rule.id == "any.not_in"
     assert blocked_rule.message == "type URL must not be in the block list"
@@ -340,14 +341,14 @@ defmodule PB.Validate.CompilerTest do
            }
   end
 
-  test "PB.compile/1 annotates native enum defined_only rules", %{predefined_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates native enum defined_only rules", %{predefined_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_predefined.EnumRules"]
 
     status = message.fields_by_name.status
-    assert %{validate: %{native: [%NativeOp{} = status_rule]}} = status
+    assert %{PB.Validate => %{native: [%NativeOp{} = status_rule]}} = status
     assert status_rule.kind == :enum_defined_only
     assert status_rule.id == "enum.defined_only"
     assert status_rule.message == "value must be one of the defined enum values"
@@ -363,7 +364,7 @@ defmodule PB.Validate.CompilerTest do
     statuses = message.fields_by_name.statuses
 
     assert %{
-             validate: %{
+             PB.Validate => %{
                repeated: %RepeatedRules{items: %RuleSet{native: [%NativeOp{} = item_rule]}}
              }
            } = statuses
@@ -380,21 +381,21 @@ defmodule PB.Validate.CompilerTest do
            }
   end
 
-  test "PB.compile/1 annotates extension-backed predefined CEL", %{
+  test "PB.Validate.compile/2 annotates extension-backed predefined CEL", %{
     custom_predefined_binpb: binpb
   } do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_custom_predefined.CustomPredefinedRules"]
     extension = schema.extensions_by_name[:"validate_custom_predefined.string_not_bad"]
     extension_key = :__extensions__
 
-    assert %{validate: %{predefined: %{cel: [source]}}} = extension
+    assert %{PB.Validate => %{predefined: %{cel: [source]}}} = extension
     assert source.id == "string.not_bad"
 
     value = message.fields_by_name.value
-    assert %{validate: %{cel: [%CELOp{} = value_rule]}} = value
+    assert %{PB.Validate => %{cel: [%CELOp{} = value_rule]}} = value
     assert value_rule.kind == :predefined
     assert value_rule.id == "string.not_bad"
 
@@ -419,7 +420,7 @@ defmodule PB.Validate.CompilerTest do
     items = message.fields_by_name.items
 
     assert %{
-             validate: %{
+             PB.Validate => %{
                repeated: %RepeatedRules{items: %RuleSet{cel: [%CELOp{} = item_rule]}}
              }
            } = items
@@ -440,7 +441,7 @@ defmodule PB.Validate.CompilerTest do
            }
 
     count = message.fields_by_name.count
-    assert %{validate: %{cel: [%CELOp{} = count_rule]}} = count
+    assert %{PB.Validate => %{cel: [%CELOp{} = count_rule]}} = count
     assert count_rule.id == "int64.abs_in"
 
     rules = %{extension_key => %{:"validate_custom_predefined.int64_abs_in" => [%{value: -2}]}}
@@ -491,19 +492,16 @@ defmodule PB.Validate.CompilerTest do
     refute Map.has_key?(int64_rules, unknown_key)
   end
 
-  test "Schema.Transform.slice/2 keeps option-referenced extension definitions", %{
-    custom_predefined_binpb: binpb
-  } do
+  test "Schema.Transform.slice/2 keeps option-referenced extension definitions and recompiles the rules",
+       %{custom_predefined_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
     schema =
       descriptor_set
-      |> PB.Schema.Compiler.compile()
-      |> PB.Schema.Transform.slice_draft(
-        roots: [:"validate_custom_predefined.CustomPredefinedRules"]
-      )
-      |> PB.Validate.Compiler.annotate()
-      |> PB.Schema.Prepare.prepare()
+      |> PB.compile(plugins: [PB.Validate])
+      |> PB.Schema.Transform.slice(roots: [:"validate_custom_predefined.CustomPredefinedRules"])
+
+    assert schema.plugins == [{PB.Validate, []}]
 
     assert Map.has_key?(
              schema.extensions_by_name,
@@ -517,90 +515,102 @@ defmodule PB.Validate.CompilerTest do
 
     message = schema.messages[:"validate_custom_predefined.CustomPredefinedRules"]
 
-    assert %{validate: %{cel: [%CELOp{id: "string.not_bad"}]}} =
+    assert %{PB.Validate => %{cel: [%CELOp{id: "string.not_bad"}]}} =
              message.fields_by_name.value
 
-    assert %{validate: %{cel: [%CELOp{id: "int64.abs_in"}]}} =
+    assert %{PB.Validate => %{cel: [%CELOp{id: "int64.abs_in"}]}} =
              message.fields_by_name.count
   end
 
-  test "PB.compile/1 wraps CEL check errors in Validate.CompileError", %{
+  test "the standard-rule schema reads predefined rule CEL from the bundled descriptors", %{
+    predefined_binpb: binpb
+  } do
+    {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
+
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
+    rule_schema = PB.Validate.Schema.standard_rule_schema(schema)
+    email = rule_schema.messages[:"buf.validate.StringRules"].fields_by_name.email
+
+    assert %{PB.Validate => %{predefined: %Predefined{cel: rules}}} = email
+    assert [%CELSource{id: "string.email"}, %CELSource{id: "string.email_empty"}] = rules
+    assert schema[PB.Validate].standard_rule_schema == rule_schema
+  end
+
+  test "PB.Validate.compile/2 wraps CEL check errors in Validate.CompileError", %{
     invalid_binpb: binpb
   } do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
     assert_raise CompileError,
                  ~r/validate_phase2_invalid\.InvalidMessageCEL constraint "bad" CEL check error: no such field "foo"/,
-                 fn -> PB.compile(descriptor_set) end
+                 fn -> PB.compile(descriptor_set, plugins: [PB.Validate]) end
   end
 
-  test "PB.compile/1 rejects Any rules on non-Any fields", %{any_invalid_binpb: binpb} do
+  test "PB.Validate.compile/2 rejects Any rules on non-Any fields", %{any_invalid_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
     assert_raise CompileError,
                  ~r/validate_any_invalid\.WrongAnyRules\.value constraint "any\.in" CEL type error: mismatched rule type and field type/,
-                 fn -> PB.compile(descriptor_set) end
+                 fn -> PB.compile(descriptor_set, plugins: [PB.Validate]) end
   end
 
-  test "PB.compile/1 rejects float and double family mismatches", %{
+  test "PB.Validate.compile/2 rejects float and double family mismatches", %{
     rule_family_float_invalid_binpb: binpb
   } do
     descriptor_set = PB.decode_descriptor_set!(binpb)
 
     assert_raise CompileError,
                  ~r/validate_rule_family_float_invalid\.WrongFloatRules\.value constraint "double\.gt" CEL type error: mismatched rule type and field type/,
-                 fn -> PB.compile(descriptor_set) end
+                 fn -> PB.compile(descriptor_set, plugins: [PB.Validate]) end
   end
 
-  test "PB.compile/1 rejects duration rules on non-Duration messages", %{
+  test "PB.Validate.compile/2 rejects duration rules on non-Duration messages", %{
     rule_family_duration_invalid_binpb: binpb
   } do
     descriptor_set = PB.decode_descriptor_set!(binpb)
 
     assert_raise CompileError,
                  ~r/validate_rule_family_duration_invalid\.WrongDurationRules\.value constraint "duration\.example" CEL type error: mismatched rule type and field type/,
-                 fn -> PB.compile(descriptor_set) end
+                 fn -> PB.compile(descriptor_set, plugins: [PB.Validate]) end
   end
 
-  test "PB.compile/1 annotates structural field rules", %{structural_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates structural field rules", %{structural_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_structural.StructuralRules"]
 
-    assert message.fields_by_name.required_value.validate == %{required: true}
-    assert message.fields_by_number[1].validate == %{required: true}
-
-    assert message.fields_by_name.ignored_always.validate == %{ignore: :IGNORE_ALWAYS}
-    assert message.fields_by_name.ignored_zero.validate == %{ignore: :IGNORE_IF_ZERO_VALUE}
+    assert message.fields_by_name.required_value[PB.Validate] == %{required: true}
+    assert message.fields_by_name.ignored_always[PB.Validate] == %{ignore: :IGNORE_ALWAYS}
+    assert message.fields_by_name.ignored_zero[PB.Validate] == %{ignore: :IGNORE_IF_ZERO_VALUE}
   end
 
-  test "PB.compile/1 annotates structural oneof rules", %{structural_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates structural oneof rules", %{structural_binpb: binpb} do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
-    schema = PB.compile(descriptor_set)
+    schema = PB.compile(descriptor_set, plugins: [PB.Validate])
     message = schema.messages[:"validate_structural.StructuralRules"]
 
-    assert message.oneofs[0].validate == %{required: true}
+    assert message.oneofs[0][PB.Validate] == %{required: true}
   end
 
-  test "PB.compile/1 rejects empty message oneof rules", %{
+  test "PB.Validate.compile/2 rejects empty message oneof rules", %{
     structural_oneof_zero_invalid_binpb: binpb
   } do
     descriptor_set = PB.decode_descriptor_set!(binpb)
 
     assert_raise CompileError, ~r/message oneof rule 0 must reference at least one field/, fn ->
-      PB.compile(descriptor_set)
+      PB.compile(descriptor_set, plugins: [PB.Validate])
     end
   end
 
-  test "PB.compile/1 rejects duplicate message oneof fields", %{
+  test "PB.Validate.compile/2 rejects duplicate message oneof fields", %{
     structural_oneof_duplicate_invalid_binpb: binpb
   } do
     descriptor_set = PB.decode_descriptor_set!(binpb)
 
     assert_raise CompileError, ~r/message oneof rule 0 references duplicate field "value"/, fn ->
-      PB.compile(descriptor_set)
+      PB.compile(descriptor_set, plugins: [PB.Validate])
     end
   end
 end

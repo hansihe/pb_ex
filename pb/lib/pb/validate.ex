@@ -16,8 +16,20 @@ defmodule PB.Validate do
   they are not `PB.Validate.Error`s.
 
   Schemas may be supplied either as a compiled schema map or as a module that
-  `use PB.Schema`.
+  `use PB.Schema`, and must be compiled with this module as a plugin, which
+  compiles the protovalidate rules in the schema's descriptor options:
+
+      schema = PB.compile(descriptor_set, plugins: [PB.Validate])
+
+      defmodule MyApp.Schema do
+        use PB.Schema, descriptor: "priv/proto/schema.binpb", plugins: [PB.Validate]
+      end
+
+  Compiling raises `PB.Validate.CompileError` for rules that are not valid for
+  the schema.
   """
+
+  @behaviour PB.Schema.Plugin
 
   alias CEL.Evaluator
   alias PB.CEL.Schema.Field
@@ -57,12 +69,34 @@ defmodule PB.Validate do
          }
 
   @doc """
+  Compiles the protovalidate rules of a prepared `schema` into it.
+
+  This is the `PB.Schema.Plugin` callback; pass `plugins: [PB.Validate]` to
+  `PB.compile/2` or `use PB.Schema` rather than calling it. It takes no options.
+  """
+  @impl PB.Schema.Plugin
+  @spec compile(PB.schema(), keyword) :: PB.schema()
+  def compile(schema, opts) when is_map(schema) do
+    if opts != [] do
+      raise PB.OptionError,
+        kind: :unknown_options,
+        operation: :compile,
+        options: Keyword.keys(opts)
+    end
+
+    schema
+    |> PB.Validate.Compiler.annotate()
+    |> ValidateSchema.attach_standard_rule_schema()
+  end
+
+  @doc """
   Validates `data` as `message_name` using `schema`.
 
   Rule failures return `{:error, %PB.Validate.Error{}}`. Option failures return
   `{:error, %PB.OptionError{}}`, and unknown messages or values that do not
   match the message shape the `PB.Error` struct `PB.encode/4` would. A CEL rule
-  that fails to evaluate returns `{:error, %CEL.Error{}}`.
+  that fails to evaluate returns `{:error, %CEL.Error{}}`. Raises
+  `ArgumentError` if `schema` was not compiled with `plugins: [PB.Validate]`.
 
   Accepted options:
 
@@ -76,7 +110,7 @@ defmodule PB.Validate do
     result =
       with {:ok, opts} <- normalize_opts(opts),
            {:ok, context} <- validation_context(opts) do
-        schema = PB.__compiled__(schema)
+        schema = compiled!(schema)
 
         schema
         |> collect_violations(message_name, data, context)
@@ -124,6 +158,20 @@ defmodule PB.Validate do
 
   def to_proto_violations(violations) when is_list(violations) do
     %{violations: Enum.map(violations, &Violation.to_proto/1)}
+  end
+
+  defp compiled!(schema_source) do
+    schema = PB.__compiled__(schema_source)
+
+    if ValidateSchema.compiled?(schema) do
+      schema
+    else
+      what = if is_atom(schema_source), do: "schema module #{inspect(schema_source)}", else: "schema"
+
+      raise ArgumentError,
+            "the PB #{what} was not compiled for validation; " <>
+              "compile it with `plugins: [PB.Validate]`"
+    end
   end
 
   defp normalize_opts(opts) when is_list(opts) do
@@ -215,7 +263,7 @@ defmodule PB.Validate do
        when is_map(data) and not is_struct(data) do
     validate_message_name!(data, message_name, path)
 
-    if get_in(message, [:validate, :disabled]) == true do
+    if get_in(message, [PB.Validate, :disabled]) == true do
       []
     else
       ctx = message_context(schema, message_name, message, data, path, context)
@@ -242,7 +290,7 @@ defmodule PB.Validate do
   defp validate_message(
          _schema,
          _message_name,
-         %{validate: %{disabled: true}},
+         %{PB.Validate => %{disabled: true}},
          _data,
          _path,
          _context
@@ -317,7 +365,7 @@ defmodule PB.Validate do
   defp field_state(ctx, field), do: Map.fetch!(ctx.fields, field.name)
 
   defp validate_field(ctx, field) do
-    validate = Map.get(field, :validate, %{})
+    validate = Map.get(field, PB.Validate, %{})
 
     cond do
       validate[:ignore] == :IGNORE_ALWAYS ->
@@ -352,7 +400,7 @@ defmodule PB.Validate do
   end
 
   defp validate_field_native(ctx, field) do
-    ops = get_in(field, [:validate, :native]) || []
+    ops = get_in(field, [PB.Validate, :native]) || []
 
     if ops == [] do
       []
@@ -368,7 +416,7 @@ defmodule PB.Validate do
   end
 
   defp validate_field_cel(ctx, field) do
-    ops = get_in(field, [:validate, :cel]) || []
+    ops = get_in(field, [PB.Validate, :cel]) || []
 
     if ops == [] do
       []
@@ -395,7 +443,7 @@ defmodule PB.Validate do
   end
 
   defp validate_message_cel(ctx) do
-    ops = get_in(ctx.schema.messages[ctx.message_name], [:validate, :cel]) || []
+    ops = get_in(ctx.schema.messages[ctx.message_name], [PB.Validate, :cel]) || []
 
     if ops == [] do
       []
@@ -850,13 +898,13 @@ defmodule PB.Validate do
 
   defp repeated_item_field(field), do: Map.put(field, :cardinality, :singular)
 
-  defp repeated_item_rules(%{validate: %{repeated: %{items: items}}}), do: items
+  defp repeated_item_rules(%{PB.Validate => %{repeated: %{items: items}}}), do: items
   defp repeated_item_rules(_field), do: nil
 
-  defp map_key_rules(%{validate: %{map: %{keys: keys}}}), do: keys
+  defp map_key_rules(%{PB.Validate => %{map: %{keys: keys}}}), do: keys
   defp map_key_rules(_field), do: nil
 
-  defp map_value_rules(%{validate: %{map: %{values: values}}}), do: values
+  defp map_value_rules(%{PB.Validate => %{map: %{values: values}}}), do: values
   defp map_value_rules(_field), do: nil
 
   defp raw_zero_value?(_schema, %{type: type}, value) when Field.message_type?(type) do
@@ -880,7 +928,7 @@ defmodule PB.Validate do
   end
 
   defp validate_oneof(ctx, oneof) do
-    if get_in(oneof, [:validate, :required]) == true and not Map.has_key?(ctx.data, oneof.name) do
+    if get_in(oneof, [PB.Validate, :required]) == true and not Map.has_key?(ctx.data, oneof.name) do
       path = ctx.path |> Path.append_oneof(oneof) |> Path.field_path()
       [violation("required", path, nil, "exactly one field is required in oneof")]
     else
@@ -889,7 +937,7 @@ defmodule PB.Validate do
   end
 
   defp validate_message_oneofs(ctx) do
-    message_oneofs = get_in(ctx.message, [:validate, :message_oneofs]) || []
+    message_oneofs = get_in(ctx.message, [PB.Validate, :message_oneofs]) || []
 
     Enum.flat_map(message_oneofs, fn oneof ->
       present =
@@ -927,7 +975,7 @@ defmodule PB.Validate do
 
   defp unset_message_oneof_field?(ctx, field) do
     ctx.message
-    |> get_in([:validate, :message_oneofs])
+    |> get_in([PB.Validate, :message_oneofs])
     |> List.wrap()
     |> Enum.any?(fn oneof ->
       field.name in oneof.fields and
@@ -936,7 +984,7 @@ defmodule PB.Validate do
   end
 
   defp required_missing?(ctx, field) do
-    if get_in(field, [:validate, :required]) == true do
+    if get_in(field, [PB.Validate, :required]) == true do
       state = field_state(ctx, field)
 
       if Features.has_presence?(field) do
@@ -954,8 +1002,8 @@ defmodule PB.Validate do
   end
 
   defp ignore_zero_field?(ctx, field) do
-    get_in(field, [:validate, :ignore]) == :IGNORE_IF_ZERO_VALUE and
-      get_in(field, [:validate, :required]) != true and
+    get_in(field, [PB.Validate, :ignore]) == :IGNORE_IF_ZERO_VALUE and
+      get_in(field, [PB.Validate, :required]) != true and
       not Features.has_presence?(field) and
       field_state(ctx, field).zero?
   end

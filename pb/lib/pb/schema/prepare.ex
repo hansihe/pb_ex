@@ -3,11 +3,12 @@ defmodule PB.Schema.Prepare do
 
   # Prepares a schema for runtime encode/decode.
   #
-  # Preparation is the final schema phase. It assumes the compiler and annotators
-  # have already resolved semantic facts such as presence, cardinality, encoding,
-  # map shape, and validation metadata. It then writes only runtime-facing
-  # metadata: numeric indexes, encoded tags, enum refs, adapter refs,
-  # required/default field lists, and oneof lookup maps.
+  # Preparation is the final core schema phase; only plugins (`PB.Schema.Plugin`)
+  # run after it. It assumes the compiler and projections have already resolved
+  # semantic facts such as presence, cardinality, encoding, and map shape. It
+  # then writes only runtime-facing metadata: numeric indexes, encoded tags, enum
+  # refs, adapter refs, required/default field lists, and oneof lookup maps.
+  # Plugin data is left alone; the transforms drop it before re-preparing.
   #
   # This module is intentionally strict. Missing messages, enums, map-entry
   # fields, or extension maps are compiler/transform bugs, so the code uses
@@ -25,16 +26,12 @@ defmodule PB.Schema.Prepare do
   Returns a runtime-ready schema.
 
   The returned schema is the shape consumed by `PB.Runtime.Encoder`,
-  `PB.Runtime.Decoder`, validation, JSON, CEL, and message equality.
+  `PB.Runtime.Decoder`, plugins, JSON, CEL, and message equality.
   Runtime code should treat prepared metadata as part of the schema contract and
   should not re-derive it on hot paths.
   """
   def prepare(schema) when is_map(schema) do
     schema
-    # Drop any precomputed standard-rule schema (PB.Validate.Schema): it is
-    # derived from this schema, so transforms that re-prepare must not carry a
-    # stale copy. PB.compile/2 reattaches it after this final prepare.
-    |> Map.delete(:standard_rule_schema)
     |> prepare_message_fields()
     |> prepare_map_references()
     |> prepare_schema_extensions()

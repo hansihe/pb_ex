@@ -1,7 +1,6 @@
 defmodule PB.TestSupport.ProtovalidateConformance.Testee do
   @moduledoc false
 
-  alias PB.Schema.Compiler
   alias PB.Schema.Transform
   alias PB.TestSupport.Conformance.Stdio
   alias PB.TestSupport.TestSchema
@@ -49,13 +48,13 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
   defp run_request(%{fdset: descriptor_set} = request) do
     cases = Map.get(request, :cases, %{})
 
-    case compile_base_schemas(descriptor_set) do
-      {:ok, schemas} ->
-        message_types = Map.new(Map.keys(schemas.draft.messages), &{Atom.to_string(&1), &1})
+    case compile_base_schema(descriptor_set) do
+      {:ok, schema} ->
+        message_types = Map.new(Map.keys(schema.messages), &{Atom.to_string(&1), &1})
 
         {results, _schema_cache} =
           Enum.reduce(cases, {%{}, %{}}, fn {case_name, test_case}, {results, schema_cache} ->
-            {result, schema_cache} = run_case(schemas, message_types, schema_cache, test_case)
+            {result, schema_cache} = run_case(schema, message_types, schema_cache, test_case)
             {Map.put(results, case_name, result), schema_cache}
           end)
 
@@ -66,25 +65,24 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
     end
   end
 
-  defp compile_base_schemas(descriptor_set) do
-    draft = Compiler.compile(descriptor_set)
-
-    runtime = PB.Schema.Prepare.prepare(draft)
-
-    {:ok, %{draft: draft, runtime: runtime}}
+  # The base schema is compiled without validation, so a case whose rules don't
+  # compile fails on its own; each case compiles the rules of its message's
+  # slice.
+  defp compile_base_schema(descriptor_set) do
+    {:ok, PB.compile(descriptor_set)}
   rescue
     exception -> {:error, Exception.format(:error, exception, __STACKTRACE__)}
   catch
     kind, reason -> {:error, "caught #{inspect(kind)}: #{inspect(reason)}"}
   end
 
-  defp run_case(schemas, message_types, schema_cache, %{type_url: type_url} = test_case)
+  defp run_case(base_schema, message_types, schema_cache, %{type_url: type_url} = test_case)
        when is_binary(type_url) do
     payload = Map.get(test_case, :value, <<>>)
 
     with {:ok, message_name} <- fetch_message_type(message_types, type_url),
-         {:ok, decoded} <- decode_payload(schemas.runtime, message_name, payload) do
-      case fetch_case_schema(schemas.draft, message_name, schema_cache) do
+         {:ok, decoded} <- decode_payload(base_schema, message_name, payload) do
+      case fetch_case_schema(base_schema, message_name, schema_cache) do
         {:ok, schema, schema_cache} ->
           {validate_case(schema, message_name, decoded), schema_cache}
 
@@ -119,12 +117,14 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
     end
   end
 
-  defp compile_case_schema(base_schema, message_name) do
+  @doc false
+  # Public for the unit test that covers this schema-building path, since the
+  # conformance runner needs Go.
+  def compile_case_schema(base_schema, message_name) do
     schema =
       base_schema
-      |> Transform.slice_draft(roots: [message_name])
-      |> PB.Validate.Compiler.annotate()
-      |> PB.Schema.Prepare.prepare()
+      |> Transform.slice(roots: [message_name])
+      |> PB.Validate.compile([])
 
     {:ok, schema}
   rescue

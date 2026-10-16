@@ -22,18 +22,14 @@ defmodule PB.Validate.Compiler.Context do
   @doc """
   Builds a context for `schema`.
 
-  The merged standard-rule schema is precomputed only when the draft schema
-  carries standard (typed) `buf.validate.field` rules, so encode/decode-only and
-  structural-only schemas pay nothing. `PB.Schema.Main` itself compiles through
-  `PB.compile/2`, so the precompute is also skipped until `Main` is loaded — its
-  own draft never carries standard rules, so this only matters as a guard.
+  The merged standard-rule schema is precomputed only when the schema carries
+  standard (typed) `buf.validate.field` rules, so structural-only schemas pay
+  nothing.
   """
   @spec new(PB.schema()) :: t()
   def new(schema) when is_map(schema) do
     rule_schema =
-      if Code.ensure_loaded?(PB.Schema.Main) and draft_uses_standard_rules?(schema) do
-        ValidateSchema.standard_rule_schema(schema)
-      end
+      if uses_standard_rules?(schema), do: ValidateSchema.standard_rule_schema(schema)
 
     %__MODULE__{user_schema: schema, rule_schema: rule_schema}
   end
@@ -42,7 +38,7 @@ defmodule PB.Validate.Compiler.Context do
   Returns the merged standard-rule schema.
 
   Uses the value precomputed by `new/1` when present and recomputes it otherwise,
-  so the field compilers stay correct even if the draft detector did not flag the
+  so the field compilers stay correct even if the detector did not flag the
   schema.
   """
   @spec rule_schema(t()) :: PB.schema()
@@ -73,9 +69,9 @@ defmodule PB.Validate.Compiler.Context do
 
   # Standard-rule compilation (predefined CEL, native ops, repeated/map nesting)
   # runs only for fields whose buf.validate.field rules carry a typed rule family
-  # (`%{type: {family, value}}`). Detecting that on the draft lets new/1 build the
+  # (`%{type: {family, value}}`). Detecting that up front lets new/1 build the
   # merged schema exactly when those paths will need it.
-  defp draft_uses_standard_rules?(schema) do
+  defp uses_standard_rules?(schema) do
     schema
     |> Map.get(:messages, %{})
     |> Map.values()

@@ -134,7 +134,8 @@ defmodule PB.TermRepresentationTest do
         |> PB.compile(
           projections: [
             {:"validate_phase2.MessageCEL", struct: MessageCELTerm}
-          ]
+          ],
+          plugins: [PB.Validate]
         )
 
       assert :ok =

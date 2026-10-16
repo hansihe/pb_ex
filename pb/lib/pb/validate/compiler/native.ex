@@ -3,8 +3,8 @@ defmodule PB.Validate.Compiler.Native do
 
   # Compiles the standard rules that `PB.Validate` evaluates without CEL: Any
   # `in`/`not_in` type-URL checks and enum `defined_only`. Resolves their rule
-  # paths against the merged standard-rule schema. Owns the `:validate` native-op
-  # merge helper.
+  # paths against the merged standard-rule schema. Owns the native-op merge
+  # helper.
 
   alias PB.Validate.Compiler.Context
   alias PB.Validate.Compiler.Targets
@@ -16,12 +16,13 @@ defmodule PB.Validate.Compiler.Native do
   @enum_rules_message :"buf.validate.EnumRules"
 
   @doc """
-  Merges native ops into an entry's `:validate`, leaving it untouched when empty.
+  Merges native ops into an entry's `PB.Validate` data, leaving it untouched
+  when empty.
   """
   def add_native_ops(entry, []), do: entry
 
   def add_native_ops(entry, ops) do
-    Map.update(entry, :validate, %{native: ops}, fn validate ->
+    Map.update(entry, PB.Validate, %{native: ops}, fn validate ->
       Map.update(validate, :native, ops, &(&1 ++ ops))
     end)
   end

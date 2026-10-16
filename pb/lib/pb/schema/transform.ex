@@ -1,14 +1,10 @@
 defmodule PB.Schema.Transform do
   @moduledoc false
 
-  # Schema transforms that run between draft compilation and preparation.
+  # Transforms that derive a new schema from a compiled one.
   #
-  # The public functions in this module return prepared schemas because callers
-  # use them with runtime encode/decode. The `slice_draft/2` function
-  # deliberately returns a draft schema so `PB.compile/2` can compose all
-  # transforms before the single final `PB.Schema.Prepare.prepare/1` pass.
-  #
-  # The prepared results are compiled schemas in their own right, so the
+  # Both take and return prepared schemas, because callers use them with runtime
+  # encode/decode. The results are compiled schemas in their own right, so the
   # plugins recorded on the input run again on them. Their data is dropped first
   # (see `PB.Schema.Plugin`) because it was compiled for the input schema.
   #
@@ -33,22 +29,14 @@ defmodule PB.Schema.Transform do
 
   @doc """
   Narrows a schema to root messages and returns a prepared schema.
-  """
-  def slice(schema, opts) when is_map(schema) and is_list(opts) do
-    schema
-    |> slice_draft(opts)
-    |> prepare()
-  end
-
-  @doc """
-  Narrows a schema to root messages and returns a draft schema.
 
   The slice keeps the reachable closure of message, enum, and extension
   definitions needed by the selected roots. Extension traversal follows
-  materialized descriptor options as well as field references so validation
-  metadata remains self-contained.
+  materialized descriptor options as well as field references so plugins that
+  read options, such as extension-backed validation rules, find every
+  definition they reference.
   """
-  def slice_draft(schema, opts) when is_map(schema) and is_list(opts) do
+  def slice(schema, opts) when is_map(schema) and is_list(opts) do
     roots = normalize_slice_roots(Keyword.fetch!(opts, :roots))
 
     state =
@@ -83,6 +71,7 @@ defmodule PB.Schema.Transform do
     |> Map.put(:roots, root_fqns)
     |> Map.put(:root_names, root_names)
     |> Map.put(:services, %{})
+    |> prepare()
   end
 
   defp prepare(schema) do

@@ -200,10 +200,11 @@ defmodule PB do
   that can be used with `encode/3` and `decode/3`.
 
   Compilation has explicit phases: descriptor compilation produces a draft
-  schema, validation annotation and projection compilation consume descriptor
-  options, finalization removes those options, and one final preparation pass
-  writes runtime metadata. Runtime encode/decode require the prepared schema
-  shape returned by this function.
+  schema, projection compilation applies projections from descriptor options
+  and the `:projections` option, one final preparation pass writes runtime
+  metadata, and then any `:plugins` compile their own data into the prepared
+  schema. Runtime encode/decode require the prepared schema shape returned by
+  this function.
 
   **Important:** The descriptor set is treated as trusted input. Field names, type
   names, and package names are converted to atoms, which are never garbage collected.
@@ -259,9 +260,6 @@ defmodule PB do
     # resolved, including presence, cardinality, encoding, maps, oneofs,
     # extensions, and effective features.
     |> PB.Schema.Compiler.compile()
-    # Annotate that draft with protovalidate metadata while descriptor
-    # options are still available.
-    |> PB.Validate.Compiler.annotate()
     # Compile all public term projections into the same draft schema shape
     # regardless of whether they came from proto options or caller overrides.
     |> PB.Schema.Projections.apply(opts.projections)
@@ -269,10 +267,6 @@ defmodule PB do
     # indexes, tags, enum refs, adapter refs, and other hot-path metadata as
     # part of the schema contract.
     |> PB.Schema.Prepare.prepare()
-    # Precompute the merged standard-rule schema once (only when predefined CEL
-    # rules are present) so validation does not rebuild it per CEL op. Runs after
-    # prepare so the cached value is itself a prepared schema.
-    |> PB.Validate.Schema.attach_standard_rule_schema()
     # Plugins compile their own data into the final, prepared schema.
     |> PB.Schema.Plugin.__run__(plugins)
   end
