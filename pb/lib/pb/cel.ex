@@ -52,14 +52,13 @@ defmodule PB.CEL do
   alias PB.CEL.Checker
   alias PB.CEL.Env
   alias PB.CEL.Error
+  alias PB.CEL.Options
   alias PB.CEL.Program
   alias PB.CEL.Syntax.MacroExpander
   alias PB.CEL.Syntax.Parser
   alias PB.CEL.Syntax.Source
   alias PB.CEL.Unknown
   alias PB.CEL.Value
-  alias PB.Runtime.Errors, as: RuntimeErrors
-  alias PB.Runtime.Options
 
   @typedoc """
   A parsed expression: a `cel.expr.ParsedExpr` map with `:expr` and
@@ -85,11 +84,7 @@ defmodule PB.CEL do
   """
   @spec parse(String.t(), keyword) :: {:ok, parsed()} | {:error, Error.t()}
   def parse(source, opts \\ []) when is_binary(source) do
-    opts =
-      case Options.validate(opts, @parse_options) do
-        {:ok, opts} -> opts
-        {:error, reason} -> raise RuntimeErrors.to_error(reason)
-      end
+    opts = Options.validate!(opts, @parse_options)
 
     source
     |> Parser.parse(location: opts.location)

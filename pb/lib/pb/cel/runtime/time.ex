@@ -2,7 +2,6 @@ defmodule PB.CEL.Runtime.Time do
   @moduledoc false
 
   alias PB.CEL.Value
-  alias PB.WellKnownTypes.Time, as: WKTTime
 
   @nanos_per_microsecond 1_000
   @nanos_per_millisecond 1_000_000
@@ -16,22 +15,58 @@ defmodule PB.CEL.Runtime.Time do
   @timestamp_min_ns -62_135_596_800 * @nanos_per_second
   @timestamp_max_ns 253_402_300_799 * @nanos_per_second + 999_999_999
 
+  # google.protobuf.Timestamp and Duration bounds, for `from_proto_map/2`: seconds
+  # and nanos are bounded separately (as in protobuf's `time_util.cc`), unlike
+  # CEL's own bounds above.
+  @proto_timestamp_min_seconds -62_135_596_800
+  @proto_timestamp_max_seconds 253_402_300_799
+  @proto_duration_max_seconds 315_576_000_000
+  @proto_nanos_max 999_999_999
+
   @epoch ~D[1970-01-01]
   @timestamp_pattern ~r/\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})\z/
   @duration_component_pattern ~r/\A(\d+(?:\.\d+)?)(h|ms|us|ns|m|s)/
 
+  # The terms PB's well-known-type adapter uses for `google.protobuf.Timestamp`
+  # and `Duration`, so values cross between CEL and protobuf unchanged.
+  @type timestamp :: {:timestamp, integer()}
+  @type duration :: {:duration, integer()}
   @type comparison :: :lt | :eq | :gt
   @type result :: {:ok, Value.t()} | {:error, String.t()} | :error
   @type mfa_result :: {:ok, Value.t()} | {:error, String.t()}
 
-  @spec timestamp(integer()) :: {:ok, WKTTime.timestamp()} | {:error, String.t()}
+  @spec timestamp(integer()) :: {:ok, timestamp()} | {:error, String.t()}
   def timestamp(ns) when is_integer(ns) do
-    if timestamp_ns?(ns), do: {:ok, WKTTime.timestamp(ns)}, else: {:error, "timestamp range"}
+    if timestamp_ns?(ns), do: {:ok, {:timestamp, ns}}, else: {:error, "timestamp range"}
   end
 
-  @spec duration(integer()) :: {:ok, WKTTime.duration()} | {:error, String.t()}
+  @spec duration(integer()) :: {:ok, duration()} | {:error, String.t()}
   def duration(ns) when is_integer(ns) do
-    if duration_ns?(ns), do: {:ok, WKTTime.duration(ns)}, else: {:error, "duration range"}
+    if duration_ns?(ns), do: {:ok, {:duration, ns}}, else: {:error, "duration range"}
+  end
+
+  # A `google.protobuf.Timestamp` or `Duration` as PB decodes it,
+  # `%{seconds: s, nanos: n}` with either key absent when zero. It is checked
+  # against protobuf's bounds, not CEL's, so a duration can come out wider than
+  # CEL's int64 nanoseconds.
+  @spec from_proto_map(:timestamp | :duration, map()) :: {:ok, timestamp() | duration()} | :error
+  def from_proto_map(kind, message) when kind in [:timestamp, :duration] and is_map(message) do
+    seconds = Map.get(message, :seconds, 0)
+    nanos = Map.get(message, :nanos, 0)
+
+    if is_integer(seconds) and is_integer(nanos) and proto_time?(kind, seconds, nanos),
+      do: {:ok, {kind, seconds * @nanos_per_second + nanos}},
+      else: :error
+  end
+
+  defp proto_time?(:timestamp, seconds, nanos) do
+    seconds >= @proto_timestamp_min_seconds and seconds <= @proto_timestamp_max_seconds and
+      nanos >= 0 and nanos <= @proto_nanos_max
+  end
+
+  defp proto_time?(:duration, seconds, nanos) do
+    abs(seconds) <= @proto_duration_max_seconds and abs(nanos) <= @proto_nanos_max and
+      not (seconds > 0 and nanos < 0) and not (seconds < 0 and nanos > 0)
   end
 
   @spec duration_ns?(integer()) :: boolean()
@@ -41,7 +76,7 @@ defmodule PB.CEL.Runtime.Time do
   def timestamp_ns?(ns) when is_integer(ns),
     do: ns >= @timestamp_min_ns and ns <= @timestamp_max_ns
 
-  @spec parse_timestamp(String.t()) :: {:ok, WKTTime.timestamp()} | {:error, String.t()}
+  @spec parse_timestamp(String.t()) :: {:ok, timestamp()} | {:error, String.t()}
   def parse_timestamp(string) when is_binary(string) do
     with [_, year, month, day, hour, minute, second, fraction, zone] <-
            Regex.run(@timestamp_pattern, string),
@@ -56,8 +91,8 @@ defmodule PB.CEL.Runtime.Time do
     end
   end
 
-  @spec parse_duration(String.t()) :: {:ok, WKTTime.duration()} | {:error, String.t()}
-  def parse_duration("0"), do: {:ok, WKTTime.duration(0)}
+  @spec parse_duration(String.t()) :: {:ok, duration()} | {:error, String.t()}
+  def parse_duration("0"), do: {:ok, {:duration, 0}}
 
   def parse_duration(string) when is_binary(string) do
     {sign, rest} =
@@ -77,7 +112,7 @@ defmodule PB.CEL.Runtime.Time do
     end
   end
 
-  @spec format_timestamp(WKTTime.timestamp()) :: {:ok, String.t()} | {:error, String.t()}
+  @spec format_timestamp(timestamp()) :: {:ok, String.t()} | {:error, String.t()}
   def format_timestamp({:timestamp, ns}) when is_integer(ns) do
     if timestamp_ns?(ns) do
       parts = datetime_parts(ns)
@@ -101,7 +136,7 @@ defmodule PB.CEL.Runtime.Time do
     end
   end
 
-  @spec format_duration(WKTTime.duration()) :: {:ok, String.t()} | {:error, String.t()}
+  @spec format_duration(duration()) :: {:ok, String.t()} | {:error, String.t()}
   def format_duration({:duration, ns}) when is_integer(ns) do
     if duration_ns?(ns) do
       sign = if ns < 0, do: "-", else: ""

@@ -27,7 +27,7 @@ defmodule PB.CEL.Value do
   alias PB.CEL.Runtime.NoMessageRuntime
   alias PB.CEL.Runtime.NoMessageSchema
   alias PB.CEL.ProtoType
-  alias PB.WellKnownTypes.Time, as: WKTTime
+  alias PB.CEL.Runtime.Time
 
   @type special_double :: :nan | :infinity | :negative_infinity
   @type double_value :: float | special_double
@@ -40,8 +40,8 @@ defmodule PB.CEL.Value do
           | {:double, double_value}
           | {:string, String.t()}
           | {:bytes, binary}
-          | PB.WellKnownTypes.timestamp()
-          | PB.WellKnownTypes.duration()
+          | Time.timestamp()
+          | Time.duration()
           | {:enum, String.t(), integer}
           | {:object, String.t(), binary}
           | {:list, [t]}
@@ -94,10 +94,10 @@ defmodule PB.CEL.Value do
   def bytes(value) when is_binary(value), do: {:bytes, value}
 
   @spec timestamp(integer) :: t
-  def timestamp(value) when is_integer(value), do: WKTTime.timestamp(value)
+  def timestamp(value) when is_integer(value), do: {:timestamp, value}
 
   @spec duration(integer) :: t
-  def duration(value) when is_integer(value), do: WKTTime.duration(value)
+  def duration(value) when is_integer(value), do: {:duration, value}
 
   @spec enum(String.t(), integer) :: t
   def enum(type, value) when is_binary(type) and is_integer(value), do: {:enum, type, value}
@@ -311,13 +311,13 @@ defmodule PB.CEL.Value do
         {:ok, bytes(value)}
 
       type == CType.timestamp() and is_struct(value, DateTime) ->
-        value |> DateTime.to_unix(:nanosecond) |> PB.CEL.Runtime.Time.timestamp()
+        value |> DateTime.to_unix(:nanosecond) |> Time.timestamp()
 
       type == CType.timestamp() and is_map(value) ->
-        time_message(value, type, &WKTTime.from_proto_timestamp/1)
+        time_message(value, type, :timestamp)
 
       type == CType.duration() and is_map(value) ->
-        time_message(value, type, &WKTTime.from_proto_duration/1)
+        time_message(value, type, :duration)
 
       is_list(value) ->
         case CType.list_elem(type) do
@@ -338,9 +338,9 @@ defmodule PB.CEL.Value do
 
   # A `google.protobuf.Timestamp` or `Duration` as PB decodes it,
   # `%{seconds: s, nanos: n}`, with either key absent when zero.
-  defp time_message(value, type, from_proto) do
+  defp time_message(value, type, kind) do
     with [] <- Map.keys(value) -- [:seconds, :nanos],
-         {:ok, time} <- from_proto.(value) do
+         {:ok, time} <- Time.from_proto_map(kind, value) do
       {:ok, time}
     else
       _invalid -> type_error(value, type)
@@ -422,7 +422,7 @@ defmodule PB.CEL.Value do
 
   Values that have no native Elixir form pass through unchanged in their
   `t:t/0` shape: `timestamp`/`duration` (already the native well-known-type
-  representation — see `PB.WellKnownTypes`) and an un-decoded `object` (an
+  representation, as PB decodes them) and an un-decoded `object` (an
   `Any` that was not resolved against a schema).
 
   ## Examples

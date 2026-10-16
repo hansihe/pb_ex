@@ -12,8 +12,7 @@ defmodule PB.CEL.Env do
   alias PB.CEL.Checker.Literals
   alias PB.CEL.Checker.TypePattern
   alias PB.CEL.Library
-  alias PB.Runtime.Errors, as: RuntimeErrors
-  alias PB.Runtime.Options
+  alias PB.CEL.Options
   alias PB.CEL.Function
   alias PB.CEL.Function.Overload
   alias PB.CEL.Checker.Types, as: CType
@@ -90,10 +89,8 @@ defmodule PB.CEL.Env do
   """
   @spec build(keyword) :: t
   def build(opts \\ []) do
-    case Options.validate(opts, @build_options) do
-      {:ok, _valid} -> from_options(opts)
-      {:error, reason} -> raise RuntimeErrors.to_error(reason)
-    end
+    Options.validate!(opts, @build_options)
+    from_options(opts)
   end
 
   # The checker rebuilds an environment from `env:` plus overrides, so unset
