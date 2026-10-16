@@ -66,8 +66,7 @@ defmodule PB.MixProject do
       groups_for_modules: groups_for_modules(),
       nest_modules_by_prefix: [
         PB.Schema,
-        PB.WellKnownTypes,
-        PB.Validate
+        PB.WellKnownTypes
       ]
     ]
   end
@@ -86,7 +85,6 @@ defmodule PB.MixProject do
       "guides/how-to/structs-and-representation.md",
       "guides/how-to/adapters-and-well-known-types.md",
       "guides/how-to/json.md",
-      "guides/how-to/validation.md",
       "guides/how-to/cel.md",
       "guides/how-to/extensions-and-unknown-fields.md",
       "guides/how-to/introspection.md",
@@ -132,19 +130,13 @@ defmodule PB.MixProject do
       CEL: [
         PB.CEL
       ],
-      Validation: [
-        PB.Validate,
-        PB.Validate.Error,
-        PB.Validate.Violation
-      ],
       Errors: [
         PB.Error,
         PB.SchemaError,
         PB.ValueError,
         PB.DecodeError,
         PB.OptionError,
-        PB.AdapterError,
-        PB.Validate.CompileError
+        PB.AdapterError
       ]
     ]
   end

@@ -1,9 +1,8 @@
 defmodule PB.CoreBoundaryTest do
-  # PB core (everything in `lib/` but protovalidate, `lib/pb/validate.ex` and
-  # `lib/pb/validate/`, and the CEL binding, `lib/pb_cel/`) is on its way to a
-  # project of its own and must not depend on either; protovalidate plugs in
-  # through `PB.Schema.Plugin`. Modules are told apart by the file they are
-  # compiled from. References are read from each core module's abstract code
+  # PB core (everything in `lib/` but the CEL binding, `lib/pb_cel/`) is on its
+  # way to a project of its own and must not depend on the binding;
+  # protovalidate, in pb_validate, already is one. Modules are told apart by the
+  # file they are compiled from. References are read from each core module's abstract code
   # (calls, structs, types, behaviours and module atoms) and, for macros, which
   # leave no trace there, from `mix xref`'s compile-time edges. Separate
   # projects take over once they exist.
@@ -11,10 +10,10 @@ defmodule PB.CoreBoundaryTest do
 
   @root Path.expand("../..", __DIR__)
 
-  test "core modules reference no protovalidate or CEL binding module" do
+  test "core modules reference no CEL binding module" do
     {core, outside} = modules() |> Enum.split_with(&core_file?(source(&1)))
     outside = MapSet.new(outside)
-    assert PB.Schema in core and PB.Validate in outside and PB.CEL.FieldReader in outside
+    assert PB.Schema in core and PB.CEL.FieldReader in outside
 
     violations =
       for module <- Enum.sort(core),
@@ -25,7 +24,7 @@ defmodule PB.CoreBoundaryTest do
     assert violations == []
   end
 
-  test "core needs no protovalidate or CEL binding file at compile time" do
+  test "core needs no CEL binding file at compile time" do
     output =
       ExUnit.CaptureIO.capture_io(fn ->
         Mix.Task.rerun("xref", ["graph", "--format", "json", "--output", "-"])
@@ -53,8 +52,6 @@ defmodule PB.CoreBoundaryTest do
 
   defp lib_file?(path), do: String.starts_with?(path, "lib/")
 
-  defp core_file?("lib/pb/validate.ex"), do: false
-  defp core_file?("lib/pb/validate/" <> _rest), do: false
   defp core_file?("lib/pb_cel/" <> _rest), do: false
   defp core_file?(path), do: lib_file?(path)
 

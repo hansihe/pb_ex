@@ -84,8 +84,8 @@ constraint that fails at runtime raises `CEL.Error`. Match on
 
 ## Conformance
 
-PB passes the full upstream protovalidate conformance suite at its pinned commit.
-See [Conformance status](../reference/conformance.md).
+`PB.Validate` passes the full upstream protovalidate conformance suite at its
+pinned commit. See [Conformance status](conformance.md).
 
 ## CEL expression rules
 

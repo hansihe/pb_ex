@@ -95,31 +95,6 @@ defmodule PB.DescriptorRuntimeTest do
         expected: :"test.Person", got: :"test.PhoneNumber"
       )
     end
-
-    test "validation accepts matching message-name metadata" do
-      schema = PB.compile(Fixtures.person_descriptor_set(), plugins: [PB.Validate])
-
-      assert :ok =
-               PB.Validate.validate(
-                 %{
-                   __message_name__: :"test.Person",
-                   name: "Alice"
-                 },
-                 schema,
-                 :"test.Person"
-               )
-    end
-
-    test "validation rejects mismatched message-name metadata" do
-      schema = PB.compile(Fixtures.person_descriptor_set(), plugins: [PB.Validate])
-      key = :__message_name__
-
-      assert {:error, %PB.ValueError{} = error} =
-               PB.Validate.validate(%{key => :"test.PhoneNumber"}, schema, :"test.Person")
-
-      assert Exception.message(error) =~
-               ~r/message name mismatch .*expected :"test.Person", got :"test.PhoneNumber"/
-    end
   end
 
   describe "decode with defaults: true" do

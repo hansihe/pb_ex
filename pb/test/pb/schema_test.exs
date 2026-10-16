@@ -36,16 +36,11 @@ defmodule PB.SchemaTest.LiteralSchema do
   use PB.Schema, descriptor_set: PB.SchemaTest.Fixtures.descriptor_set()
 end
 
-defmodule PB.SchemaTest.ValidatedSchema do
-  use PB.Schema, descriptor_set: PB.SchemaTest.Fixtures.descriptor_set(), plugins: [PB.Validate]
-end
-
 defmodule PB.SchemaTest do
   use ExUnit.Case, async: true
 
   alias PB.SchemaTest.Fixtures
   alias PB.SchemaTest.LiteralSchema
-  alias PB.SchemaTest.ValidatedSchema
 
   @message :"schema_test.Greeting"
 
@@ -308,23 +303,6 @@ defmodule PB.SchemaTest do
     assert mod.schema() == PB.compile(Fixtures.descriptor_set())
   end
 
-  test "returns the same schema term on every call, also when it holds regexes" do
-    mod = unique_module("WithRegexes")
-
-    [{^mod, _bin}] =
-      Code.compile_quoted(
-        quote do
-          defmodule unquote(mod) do
-            use PB.Schema,
-              descriptor: "test/fixtures/schema/validate_predefined.binpb",
-              plugins: [PB.Validate]
-          end
-        end
-      )
-
-    assert :erts_debug.same(mod.schema(), mod.schema())
-  end
-
   test "descriptor file path may come from a module attribute" do
     path = write_descriptor_file!()
     mod = unique_module("FromModuleAttribute")
@@ -377,33 +355,6 @@ defmodule PB.SchemaTest do
 
       assert {:ok, %{text: "hi", count: 3}} =
                PB.JSON.from_term(json, LiteralSchema, @message)
-    end
-
-    test "PB.Validate.validate accepts a schema module compiled with the plugin" do
-      assert :ok = PB.Validate.validate(%{text: "hi"}, ValidatedSchema, @message)
-      assert ValidatedSchema.schema() == PB.compile(Fixtures.descriptor_set(), plugins: [PB.Validate])
-    end
-
-    test "PB.Validate.validate rejects a schema compiled without the plugin" do
-      assert_raise ArgumentError, ~r/compile it with `plugins: \[PB.Validate\]`/, fn ->
-        PB.Validate.validate(%{text: "hi"}, LiteralSchema, @message)
-      end
-
-      assert_raise ArgumentError, ~r/compile it with `plugins: \[PB.Validate\]`/, fn ->
-        PB.Validate.validate(%{text: "hi"}, PB.compile(Fixtures.descriptor_set()), @message)
-      end
-    end
-
-    test "generated validate/2,3 dispatches to PB.Validate" do
-      assert :ok = ValidatedSchema.validate(%{text: "hi"}, @message)
-      assert :ok = ValidatedSchema.validate!(%{text: "hi"}, @message)
-    end
-
-    test "only schema modules compiled with PB.Validate get validate/2,3" do
-      Code.ensure_loaded!(LiteralSchema)
-      refute function_exported?(LiteralSchema, :validate, 2)
-      refute function_exported?(LiteralSchema, :validate!, 3)
-      assert function_exported?(ValidatedSchema, :validate, 3)
     end
 
     test "a compiled schema map still works" do

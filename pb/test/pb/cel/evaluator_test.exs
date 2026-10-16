@@ -5,7 +5,6 @@ defmodule PB.CEL.EvaluatorTest do
   alias CEL.Error
   alias CEL.ProtoType
   alias CEL.Value
-  alias PB.Validate.CELExtensions
 
   test "evaluates schema-backed optional selects with checked field refs" do
     opts =
@@ -301,13 +300,6 @@ defmodule PB.CEL.EvaluatorTest do
 
     assert CEL.eval!("GlobalEnum.GAZ in [2]", %{}, opts) == Value.bool(true)
     assert CEL.eval!("GlobalEnum.GAZ in [1]", %{}, opts) == Value.bool(false)
-  end
-
-  test "evaluates protovalidate unique extension" do
-    opts = env(functions: CELExtensions.functions())
-
-    assert CEL.eval!(~S|["foo", "Foo"].unique()|, %{}, opts) == Value.bool(true)
-    assert CEL.eval!(~S|unique([1, 2, 1])|, %{}, opts) == Value.bool(false)
   end
 
   test "has() follows CEL presence for stored defaults, as PB.decode(defaults: true) writes" do

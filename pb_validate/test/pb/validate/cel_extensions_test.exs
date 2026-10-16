@@ -7,6 +7,11 @@ defmodule PB.Validate.CELExtensionsTest do
     CEL.eval(source, %{}, CEL.Env.build(functions: CELExtensions.functions()))
   end
 
+  test "evaluates the unique extension" do
+    assert {:ok, {:bool, true}} = eval(~S|["foo", "Foo"].unique()|)
+    assert {:ok, {:bool, false}} = eval(~S|unique([1, 2, 1])|)
+  end
+
   test "validates hostnames" do
     assert {:ok, {:bool, true}} = eval(~s|"example.com".isHostname()|)
     assert {:ok, {:bool, true}} = eval(~s|"a.".isHostname()|)

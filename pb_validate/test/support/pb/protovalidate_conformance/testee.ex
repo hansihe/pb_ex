@@ -2,7 +2,6 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
   @moduledoc false
 
   alias PB.Schema.Transform
-  alias PB.TestSupport.Conformance.Stdio
   alias PB.TestSupport.TestSchema
   alias PB.Validate.CompileError
 
@@ -11,7 +10,8 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
 
   @spec main() :: no_return()
   def main do
-    Stdio.configure!()
+    # The request and response are protobuf bytes, not text.
+    :io.setopts(:standard_io, encoding: :latin1)
 
     input = IO.binread(:stdio, :eof)
     schema = TestSchema.schema()

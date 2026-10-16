@@ -1,6 +1,6 @@
 # Conformance status
 
-PB runs the upstream conformance suites for protobuf, CEL, and protovalidate.
+PB runs the upstream conformance suites for protobuf and CEL.
 This page records the current results and the intentionally unsupported areas.
 The runner scripts and how to fetch testdata are documented in the repository
 (`scripts/`, including `scripts/fetch_cel_conformance.sh`).
@@ -59,10 +59,5 @@ failures.
 
 ## Protovalidate
 
-PB tracks expected failures in
-`test/fixtures/protovalidate_conformance/expected_failures.yaml`. At the pinned
-upstream `bufbuild/protovalidate` commit, the current baseline passes all cases:
-
-```text
-PASS (failed: 0, skipped: 0, passed: 2872, total: 2872)
-```
+The protovalidate conformance suite runs in
+[`pb_validate`](https://hexdocs.pm/pb_validate/conformance.html).

@@ -39,10 +39,6 @@ defmodule PB.TermRepresentationTest do
     defstruct name: nil
   end
 
-  defmodule MessageCELTerm do
-    defstruct value: nil
-  end
-
   defmodule OptionPersonTerm do
     defstruct name: nil, companion: nil
   end
@@ -124,36 +120,6 @@ defmodule PB.TermRepresentationTest do
              ) == {:bool, true}
 
       assert PB.message_equal?(person, person, schema, :"test.Person")
-    end
-
-    test "protovalidate validates represented root terms" do
-      schema =
-        "test/fixtures/schema/validate_phase2.binpb"
-        |> File.read!()
-        |> PB.decode_descriptor_set!()
-        |> PB.compile(
-          projections: [
-            {:"validate_phase2.MessageCEL", struct: MessageCELTerm}
-          ],
-          plugins: [PB.Validate]
-        )
-
-      assert :ok =
-               PB.Validate.validate(
-                 %MessageCELTerm{value: "ok"},
-                 schema,
-                 :"validate_phase2.MessageCEL"
-               )
-
-      assert {:error, %PB.Validate.Error{violations: [violation]}} =
-               PB.Validate.validate(
-                 %MessageCELTerm{value: ""},
-                 schema,
-                 :"validate_phase2.MessageCEL"
-               )
-
-      assert violation.rule_id == "x"
-      assert violation.message == "value must not be empty"
     end
 
     test "identity oneofs reject values that do not identify a member", %{schema: schema} do
