@@ -4,8 +4,8 @@ defmodule PB.CEL.Runtime.NoMessageRuntime do
   # Default `PB.CEL.Message.Runtime` used when no protobuf binding is injected.
   #
   # The CEL subsystem does not depend on PB's protobuf message runtime; a host
-  # that evaluates against protobuf messages (e.g. `PB.Validate`) injects
-  # `PB.Validate.CEL.MessageRuntime` via `PB.CEL.Env`'s `:message_runtime`.
+  # that evaluates against protobuf messages injects the protobuf binding's
+  # `PB.CEL.MessageRuntime` via `PB.CEL.Env`'s `:message_runtime`.
   # Without one, message operations are unsupported: this stub reports that
   # cleanly instead of crashing, while pure-value evaluation (which never reaches
   # a message runtime) keeps working.

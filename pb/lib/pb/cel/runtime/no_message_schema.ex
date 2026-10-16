@@ -4,7 +4,7 @@ defmodule PB.CEL.Runtime.NoMessageSchema do
   # Default `PB.CEL.Message.Schema` used when no schema-reflection provider is
   # injected. The CEL subsystem does not bind to PB's compiled-schema
   # representation; a host that checks/evaluates against a protobuf schema
-  # injects `PB.Validate.CEL.MessageSchema` via `PB.CEL.Env`'s `:message_schema`.
+  # injects `PB.CEL.MessageSchema` via `PB.CEL.Env`'s `:message_schema`.
   #
   # With no provider there are no known message/enum/field types — schema-less
   # CEL (pure values, no message/enum references) still checks and evaluates.
@@ -20,7 +20,7 @@ defmodule PB.CEL.Runtime.NoMessageSchema do
   def normalize(schema) do
     raise ArgumentError,
           "a CEL schema was provided without a :message_schema provider to interpret it; " <>
-            "pass message_schema: PB.Validate.CEL.MessageSchema (or another " <>
+            "pass message_schema: PB.CEL.MessageSchema (or another " <>
             "PB.CEL.Message.Schema implementation). Got: #{inspect(schema)}"
   end
 

@@ -1,17 +1,17 @@
-defmodule PB.Validate.CEL.FieldReader do
+defmodule PB.CEL.FieldReader do
   @moduledoc false
 
   # Schema-backed CEL protobuf field reads.
   #
-  # Read boundary used by `PB.Validate.CEL.MessageRuntime`. Runtime message
+  # Read boundary used by `PB.CEL.MessageRuntime`. Runtime message
   # storage remains presence-preserving: absent fields stay absent in the stored
   # map. `read/5` materializes protobuf/CEL defaults for absent fields,
   # `present?/5` observes stored presence without materializing, and
   # `read_optional/5` wraps a present field value in `optional.some` while leaving
   # absent fields as `optional.none`.
 
-  alias PB.Validate.CEL.MessageRuntime, as: Message
-  alias PB.Validate.CEL.MessageSchema, as: Schema
+  alias PB.CEL.MessageRuntime, as: Message
+  alias PB.CEL.MessageSchema, as: Schema
   alias PB.CEL.Schema.Field
   alias PB.CEL.Value
   alias PB.Runtime.Scalar

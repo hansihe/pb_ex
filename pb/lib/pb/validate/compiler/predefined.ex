@@ -8,8 +8,8 @@ defmodule PB.Validate.Compiler.Predefined do
 
   alias PB.CEL.Schema.Field
   alias PB.CEL.ProtoType
-  alias PB.Validate.CEL.FieldReader
-  alias PB.Validate.CEL.MessageRuntime, as: CELMessage
+  alias PB.CEL.FieldReader
+  alias PB.CEL.MessageRuntime, as: CELMessage
   alias PB.Validate.Compiler.CEL
   alias PB.Validate.Compiler.Context
   alias PB.Validate.CompileError

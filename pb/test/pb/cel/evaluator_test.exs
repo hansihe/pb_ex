@@ -6,7 +6,7 @@ defmodule PB.CEL.EvaluatorTest do
   alias PB.CEL.Error
   alias PB.CEL.ProtoType
   alias PB.CEL.Value
-  alias PB.Validate.CEL.MessageRuntime, as: Message
+  alias PB.CEL.MessageRuntime, as: Message
   alias PB.Validate.CELExtensions
 
   defmodule StubMessageRuntime do
@@ -289,7 +289,7 @@ defmodule PB.CEL.EvaluatorTest do
              }}
         },
         schema: schema,
-        message_schema: PB.Validate.CEL.MessageSchema,
+        message_schema: PB.CEL.MessageSchema,
         message_runtime: Message
       )
 
@@ -754,7 +754,7 @@ defmodule PB.CEL.EvaluatorTest do
   defp env(opts) do
     opts
     |> Keyword.put_new(:message_runtime, Message)
-    |> Keyword.put_new(:message_schema, PB.Validate.CEL.MessageSchema)
+    |> Keyword.put_new(:message_schema, PB.CEL.MessageSchema)
     |> CEL.Env.build()
   end
 

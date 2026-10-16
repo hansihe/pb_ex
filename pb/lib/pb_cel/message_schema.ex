@@ -1,4 +1,4 @@
-defmodule PB.Validate.CEL.MessageSchema do
+defmodule PB.CEL.MessageSchema do
   @moduledoc false
 
   # Protobuf-backed implementation of the `PB.CEL.Message.Schema` behaviour.
@@ -6,9 +6,10 @@ defmodule PB.Validate.CEL.MessageSchema do
   # Schema reflection over PB's compiled-schema representation
   # (`%{messages:, enums:, services:}` + `PB.Schema.Compiled` field structs): the
   # checker and evaluator resolve message/enum/field names and types through this
-  # provider. It lives in `PB.Validate` (root) so the CEL subsystem carries no
-  # concrete protobuf provider; callers inject it via `PB.CEL.Env`'s
-  # `:message_schema`. CEL's own default is the no-op `PB.CEL.Runtime.NoMessageSchema`.
+  # provider. It is part of the protobuf binding (`lib/pb_cel`) so the CEL
+  # subsystem carries no concrete protobuf provider; callers inject it via
+  # `PB.CEL.Env`'s `:message_schema`. CEL's own default is the no-op
+  # `PB.CEL.Runtime.NoMessageSchema`.
 
   alias PB.CEL.Schema.Field
   alias PB.CEL.ProtoType

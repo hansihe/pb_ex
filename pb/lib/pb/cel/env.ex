@@ -22,10 +22,10 @@ defmodule PB.CEL.Env do
 
   # Neither provider has a protobuf binding by default: `message_schema` (checker
   # reflection) and `message_runtime` (evaluator field access) are supplied by a
-  # host that works against protobuf messages — `PB.Validate.CEL.MessageSchema`
-  # and `PB.Validate.CEL.MessageRuntime`. The CEL-side defaults know no types;
-  # supplying a schema without a `:message_schema` provider raises. See
-  # `NoMessageSchema` / `NoMessageRuntime`.
+  # host that works against protobuf messages — the protobuf binding's
+  # `PB.CEL.MessageSchema` and `PB.CEL.MessageRuntime`. The CEL-side defaults
+  # know no types; supplying a schema without a `:message_schema` provider
+  # raises. See `NoMessageSchema` / `NoMessageRuntime`.
   defstruct vars: %{},
             functions: [],
             container: "",
@@ -102,18 +102,23 @@ defmodule PB.CEL.Env do
   @spec from_options(keyword) :: t
   def from_options(opts) when is_list(opts) do
     schema = Keyword.get(opts, :schema)
+
+    # The one remaining reference from CEL to the protobuf binding: `schema:`
+    # defaults the providers to `PB.CEL.MessageSchema`/`MessageRuntime`, which
+    # `PB.CEL.Env.build(schema: ...)` callers rely on. Resolved in step 2 of the
+    # cel_ex/pb_cel split, when the binding gets its own entry point.
     default_provider = fn pb_provider -> if schema, do: pb_provider end
 
     opts
     |> Keyword.get(:env, %__MODULE__{})
     |> put_message_schema(
       Keyword.get_lazy(opts, :message_schema, fn ->
-        default_provider.(PB.Validate.CEL.MessageSchema)
+        default_provider.(PB.CEL.MessageSchema)
       end)
     )
     |> put_message_runtime(
       Keyword.get_lazy(opts, :message_runtime, fn ->
-        default_provider.(PB.Validate.CEL.MessageRuntime)
+        default_provider.(PB.CEL.MessageRuntime)
       end)
     )
     |> put_schema(schema)

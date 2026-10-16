@@ -10,8 +10,8 @@ defmodule PB.TestSupport.CELConformance do
   alias PB.CEL.Function.Overload
   alias PB.CEL.Error
   alias PB.CEL.Value
-  alias PB.Validate.CEL.MessageRuntime
-  alias PB.Validate.CEL.MessageSchema, as: CELSchema
+  alias PB.CEL.MessageRuntime
+  alias PB.CEL.MessageSchema, as: CELSchema
 
   @fixture_root Path.expand("../../fixtures/cel_conformance", __DIR__)
   @schema PB.TestSupport.TestSchema

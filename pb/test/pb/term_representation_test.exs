@@ -120,8 +120,8 @@ defmodule PB.TermRepresentationTest do
                PB.CEL.Env.build(
                  schema: schema,
                  vars: %{"msg" => {:message, "test.Person"}},
-                 message_schema: PB.Validate.CEL.MessageSchema,
-                 message_runtime: PB.Validate.CEL.MessageRuntime
+                 message_schema: PB.CEL.MessageSchema,
+                 message_runtime: PB.CEL.MessageRuntime
                )
              ) == {:bool, true}
 

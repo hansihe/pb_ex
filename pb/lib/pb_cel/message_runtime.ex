@@ -1,4 +1,4 @@
-defmodule PB.Validate.CEL.MessageRuntime do
+defmodule PB.CEL.MessageRuntime do
   @moduledoc false
 
   # Protobuf-backed implementation of the `PB.CEL.Message.Runtime` behaviour.
@@ -6,13 +6,13 @@ defmodule PB.Validate.CEL.MessageRuntime do
   # This is the adapter that binds CEL evaluation to PB's protobuf message
   # representation: schema-backed field access, schema-projection/adapter
   # conversion, well-known-type conversion, raw-field normalization, and `Any`
-  # packing/unpacking. It lives in `PB.Validate` (root) rather than inside the CEL
-  # subsystem so the subsystem keeps no logic edges back to the protobuf runtime;
-  # callers inject it via `PB.CEL.Env`'s `:message_runtime` (and the evaluator's
-  # `:message_runtime` option).
+  # packing/unpacking. It is part of the protobuf binding (`lib/pb_cel`) rather
+  # than the CEL subsystem so the subsystem keeps no logic edges back to the
+  # protobuf runtime; callers inject it via `PB.CEL.Env`'s `:message_runtime`
+  # (and the evaluator's `:message_runtime` option).
 
-  alias PB.Validate.CEL.FieldReader
-  alias PB.Validate.CEL.MessageSchema, as: Schema
+  alias PB.CEL.FieldReader
+  alias PB.CEL.MessageSchema, as: Schema
   alias PB.CEL.Runtime.Time
   alias PB.CEL.Schema.Field
   alias PB.CEL.Value

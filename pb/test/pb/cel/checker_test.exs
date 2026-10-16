@@ -4,7 +4,7 @@ defmodule PB.CEL.CheckerTest do
   alias PB.CEL
   alias PB.CEL.Error
   alias PB.CEL.Checked
-  alias PB.CEL.Proto
+  alias PB.CEL.ProtoCodec
   alias PB.CEL.ProtoType
   alias PB.CEL.Checker.TypePattern
   alias PB.CEL.Checker.Types, as: CType
@@ -15,7 +15,7 @@ defmodule PB.CEL.CheckerTest do
   defmodule WrappedMessageSchema do
     @behaviour PB.CEL.Message.Schema
 
-    alias PB.Validate.CEL.MessageSchema
+    alias PB.CEL.MessageSchema
 
     def normalize({:wrapped, schema}), do: MessageSchema.normalize(schema)
     def normalize(schema), do: MessageSchema.normalize(schema)
@@ -777,15 +777,15 @@ defmodule PB.CEL.CheckerTest do
     checked = CEL.check!("x + 1", env(vars: %{x: :int}))
     proto = Checked.to_proto(checked)
 
-    assert {:ok, iodata} = Proto.encode_checked_expr(proto)
-    assert {:ok, decoded} = Proto.decode_checked_expr(IO.iodata_to_binary(iodata))
+    assert {:ok, iodata} = ProtoCodec.encode_checked_expr(proto)
+    assert {:ok, decoded} = ProtoCodec.decode_checked_expr(IO.iodata_to_binary(iodata))
 
     assert decoded == proto
   end
 
   defp env(opts) do
     opts
-    |> Keyword.put_new(:message_schema, PB.Validate.CEL.MessageSchema)
+    |> Keyword.put_new(:message_schema, PB.CEL.MessageSchema)
     |> CEL.Env.build()
   end
   defp root_type(checked), do: checked.root_type

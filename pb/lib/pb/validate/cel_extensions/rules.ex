@@ -1,8 +1,8 @@
 defmodule PB.Validate.CELExtensions.Rules do
   @moduledoc false
 
-  alias PB.Validate.CEL.FieldReader
-  alias PB.Validate.CEL.MessageSchema, as: Schema
+  alias PB.CEL.FieldReader
+  alias PB.CEL.MessageSchema, as: Schema
 
   @type result :: {:ok, PB.CEL.Value.t()} | {:error, String.t()}
 

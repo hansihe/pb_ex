@@ -21,9 +21,9 @@ defmodule PB.Validate do
 
   alias PB.CEL.Evaluator
   alias PB.CEL.Schema.Field
-  alias PB.Validate.CEL.FieldReader
-  alias PB.Validate.CEL.MessageRuntime, as: CELMessage
-  alias PB.Validate.CEL.MessageSchema, as: CELSchema
+  alias PB.CEL.FieldReader
+  alias PB.CEL.MessageRuntime, as: CELMessage
+  alias PB.CEL.MessageSchema, as: CELSchema
   alias PB.Runtime.Errors, as: RuntimeErrors
   alias PB.Runtime.MessageView
   alias PB.Runtime.Scalar

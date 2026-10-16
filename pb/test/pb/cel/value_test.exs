@@ -5,8 +5,8 @@ defmodule PB.CEL.ValueTest do
 
   alias PB.CEL.ProtoType
   alias PB.CEL.Value
-  alias PB.Validate.CEL.MessageRuntime
-  alias PB.Validate.CEL.MessageSchema
+  alias PB.CEL.MessageRuntime
+  alias PB.CEL.MessageSchema
   alias PB.WellKnownTypes.Codec, as: WKTCodec
   alias PB.WellKnownTypes.Time, as: WKTTime
 
