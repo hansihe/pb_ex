@@ -24,7 +24,7 @@ footprint](#compile-time-and-runtime-footprint) below.
 ## Methodology
 
 Both libraries encode and decode the same schema
-([`bench/proto/pb_bench.proto`](https://github.com/hansihe/pb/blob/main/bench/proto/pb_bench.proto))
+([`bench/proto/pb_bench.proto`](https://github.com/hansihe/pb_ex/blob/main/pb/bench/proto/pb_bench.proto))
 and the same payloads, across four scenarios:
 
 - **person/full** — a nested message with repeated fields, a oneof, and a map.
@@ -41,7 +41,7 @@ PB's native encode output is iodata; the "binary" rows add
 
 ## Results
 
-Captured by [`bench/run.sh`](https://github.com/hansihe/pb/blob/main/bench/run.sh)
+Captured by [`bench/run.sh`](https://github.com/hansihe/pb_ex/blob/main/pb/bench/run.sh)
 on Benchee. Absolute timings depend on hardware; the ratios are the stable part.
 
 <!-- BENCHMARK RESULTS START -->
