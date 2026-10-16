@@ -43,8 +43,8 @@ variable takes what its provider converts, for `PB.CEL.types/1` the map
 Without `:types`, expressions can use CEL's own types only, which include
 timestamps, durations and the other protobuf well-known types. Message and
 enum types come from a `CEL.TypeProvider`, given as `:types`. For protobuf
-messages, the [`pb`](https://hexdocs.pm/pb) package's `PB.CEL.types/1` gives
-an environment the messages and enums of a PB schema:
+messages, the [`pb_cel`](https://hexdocs.pm/pb_cel) package's
+`PB.CEL.types/1` gives an environment the messages and enums of a PB schema:
 
 ```elixir
 pb_env =

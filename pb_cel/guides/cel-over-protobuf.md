@@ -1,8 +1,8 @@
 # CEL over protobuf messages
 
-PB evaluates [CEL](https://cel.dev) expressions with
-[`cel_ex`](https://hexdocs.pm/cel_ex), which knows nothing of protobuf itself.
-`PB.CEL.types/1` connects the two: it is the `CEL.TypeProvider` that makes the
+[`cel_ex`](https://hexdocs.pm/cel_ex) evaluates [CEL](https://cel.dev)
+expressions and knows nothing of protobuf itself. `PB.CEL.types/1` connects it
+to [`pb`](https://hexdocs.pm/pb): it is the `CEL.TypeProvider` that makes the
 messages and enums of a PB schema the types of a `CEL.Env`.
 
 ```elixir
@@ -38,7 +38,7 @@ CEL.Program.eval(program, %{user: user})
 ## Validation
 
 protovalidate's `cel` rules are evaluated with CEL over the same types; see
-[Validating with protovalidate](validation.md).
+[`pb_validate`](https://hexdocs.pm/pb_validate).
 
 ## More
 

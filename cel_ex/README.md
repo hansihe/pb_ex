@@ -67,9 +67,9 @@ given to `CEL.Env.build/1` as `:types`. A provider is a `{module, state}`
 tuple; the module says which types exist, what their fields are, and how to
 read and build their values.
 
-For protobuf messages, the [`pb`](https://hexdocs.pm/pb) package provides one:
-`PB.CEL.types/1` makes the messages and enums of a PB schema the types of an
-environment.
+For protobuf messages, the [`pb_cel`](https://hexdocs.pm/pb_cel) package
+provides one: `PB.CEL.types/1` makes the messages and enums of a
+[`pb`](https://hexdocs.pm/pb) schema the types of an environment.
 
 ```elixir
 env =
@@ -86,9 +86,9 @@ CEL.eval("user.age >= 18", %{user: %{age: 30}}, env)
 ## Conformance
 
 CEL runs the upstream [cel-spec](https://github.com/google/cel-spec) simple
-conformance suite. The runner lives in the `pb` project, because the
-conformance fixtures are protobuf messages; see the CEL section of
-[pb's conformance status](https://github.com/hansihe/pb_ex/blob/main/pb/guides/reference/conformance.md#cel)
+conformance suite. The runner lives in the `pb_cel` project, because the
+conformance fixtures are protobuf messages; see
+[pb_cel's conformance status](https://github.com/hansihe/pb_ex/blob/main/pb_cel/guides/conformance.md)
 for the results and the intentionally unsupported areas.
 
 ## License

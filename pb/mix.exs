@@ -85,7 +85,6 @@ defmodule PB.MixProject do
       "guides/how-to/structs-and-representation.md",
       "guides/how-to/adapters-and-well-known-types.md",
       "guides/how-to/json.md",
-      "guides/how-to/cel.md",
       "guides/how-to/extensions-and-unknown-fields.md",
       "guides/how-to/introspection.md",
       # Reference
@@ -126,9 +125,6 @@ defmodule PB.MixProject do
       "Representation & adapters": [
         PB.Adapter,
         PB.WellKnownTypes
-      ],
-      CEL: [
-        PB.CEL
       ],
       Errors: [
         PB.Error,

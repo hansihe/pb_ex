@@ -1,9 +1,8 @@
 # Conformance status
 
-PB runs the upstream conformance suites for protobuf and CEL.
-This page records the current results and the intentionally unsupported areas.
-The runner scripts and how to fetch testdata are documented in the repository
-(`scripts/`, including `scripts/fetch_cel_conformance.sh`).
+PB runs the upstream protobuf conformance suite. This page records the current
+results and the intentionally unsupported areas. The runner scripts and how to
+fetch testdata are documented in the repository (`scripts/`).
 
 ## Protocol Buffers
 
@@ -25,37 +24,15 @@ Intentional deviations:
   own expected-failure list,
   `test/fixtures/protobuf_conformance/text_format_failures.txt`, which is
   currently empty; the runner fails when a listed case starts passing.
-  Separately, the upstream `.textproto` source of each CEL conformance fixture
-  must decode with `PB.TextFormat` to the same value as its committed
-  `buf convert` output and print back to it, and when `protoc` is installed the
-  test suite checks that `protoc --encode` reads PB's text output as the same
-  value.
+  When `protoc` is installed, the test suite also checks that
+  `protoc --encode` reads PB's text output as the same value. `pb_cel` checks
+  `PB.TextFormat` against the upstream `.textproto` sources of the CEL
+  conformance fixtures.
 
 ## CEL
 
-PB's CEL implementation, [`cel_ex`](https://hexdocs.pm/cel_ex), runs the
-upstream simple conformance suite through parser, checker, and evaluator
-harnesses. The runner lives in pb because the fixtures are protobuf messages,
-and evaluates them with `PB.CEL.types/1`. Intentionally unsupported areas are
-tracked as named buckets in `test/pb/cel/conformance_test.exs`:
-
-- The proto2 extension `proto.getExt`/`proto.hasExt` macro form (the
-  `proto2_ext` fixture) is out of scope. The select form — `` msg.`pkg.ext` ``
-  and `` has(msg.`pkg.ext`) `` — is supported.
-- Optimizer-shaped block tests are out of scope for now (they use test-only
-  macros such as `cel.block`, `cel.index`, `cel.iterVar`).
-- `disable_check` eval cases require an unchecked/dynamic evaluation mode; PB
-  evaluates checked CEL IR.
-- Legacy enum behavior and weak enum field typing are not targeted; PB uses
-  stronger schema-backed enum typing.
-- CEL `==`/`!=` on `google.protobuf.Any` values should unpack both sides and
-  compare the wrapped messages structurally. PB passes the upstream
-  `any_unpack` cases because an `Any` literal is unpacked when evaluated and
-  packed again canonically, but it does not unpack `Any` fields when comparing
-  messages, so ones decoded from differently serialized bytes compare unequal.
-
-Check-only conformance cases are used for checker coverage and are not evaluator
-failures.
+CEL over protobuf messages, and with it the upstream CEL conformance suite,
+lives in [`pb_cel`](https://hexdocs.pm/pb_cel/conformance.html).
 
 ## Protovalidate
 

@@ -110,15 +110,6 @@ defmodule PB.TermRepresentationTest do
         companion: %PetTerm{name: "Rex"}
       }
 
-      assert CEL.eval!(
-               "msg.name == 'Alice' && msg.pet.name == 'Rex' && has(msg.pet) && !has(msg.fish)",
-               %{"msg" => person},
-               CEL.Env.build(
-                 types: PB.CEL.types(schema),
-                 vars: %{"msg" => {:message, "test.Person"}}
-               )
-             ) == {:bool, true}
-
       assert PB.message_equal?(person, person, schema, :"test.Person")
     end
 

@@ -30,9 +30,11 @@ defmodule PBValidate.MixProject do
   defp deps do
     [
       # PB.Validate uses internals of pb (the prepared schema and its runtime
-      # modules) and of cel_ex, so pb_validate will pin both to an exact version
-      # (`== x.y.z`) when published.
+      # modules), pb_cel (its CEL message runtime) and cel_ex (the evaluator),
+      # so pb_validate will pin all three to an exact version (`== x.y.z`) when
+      # published.
       {:pb, path: "../pb"},
+      {:pb_cel, path: "../pb_cel"},
       {:cel_ex, path: "../cel_ex"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false}
