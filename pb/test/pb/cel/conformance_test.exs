@@ -1,4 +1,4 @@
-defmodule CEL.ConformanceTest do
+defmodule PB.CEL.ConformanceTest do
   use ExUnit.Case, async: true
 
   alias PB.TestSupport.CELConformance

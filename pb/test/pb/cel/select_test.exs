@@ -1,4 +1,4 @@
-defmodule CEL.SelectTest do
+defmodule PB.CEL.SelectTest do
   use ExUnit.Case, async: true
 
   @msg "cel.expr.conformance.proto3.TestAllTypes"

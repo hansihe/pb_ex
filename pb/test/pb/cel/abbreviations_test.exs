@@ -1,4 +1,4 @@
-defmodule CEL.AbbreviationsTest do
+defmodule PB.CEL.AbbreviationsTest do
   # Mirrors cel-go's common/containers/container_test.go and the TestAbbrevs*
   # tests in cel/cel_test.go.
   use ExUnit.Case, async: true
