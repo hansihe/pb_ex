@@ -23,8 +23,10 @@
 #
 # The library split built these sets with it (run from pb/), from copies of the
 # pre-split `pb/priv/main.binpb`, `pb/priv/bootstrap.binpb` and
-# `pb/test/fixtures/schema/test.binpb` in /tmp. Each project's
-# `build_protos.sh` rebuilds them with buf.
+# `pb/test/fixtures/schema/test.binpb` in /tmp, as buf's dependencies were not
+# at hand. Each project's `build_protos.sh` rebuilds them with buf. The
+# pre-split files are at the split's base commit, as in
+# `git show 24d3d9b:pb/priv/main.binpb > /tmp/main.binpb`.
 #
 #     mix run scripts/subset_descriptor_set.exs /tmp/main.binpb proto/main.proto priv/main.binpb --proto-dir .
 #     mix run scripts/subset_descriptor_set.exs /tmp/bootstrap.binpb proto/bootstrap.proto priv/bootstrap.binpb --proto-dir . --exclude-source-info
@@ -34,13 +36,8 @@
 #     mix run scripts/subset_descriptor_set.exs /tmp/main.binpb proto/validate.proto ../pb_validate/priv/validate.binpb --proto-dir ../pb_validate
 #     mix run scripts/subset_descriptor_set.exs /tmp/test.binpb proto/test.proto ../pb_validate/test/fixtures/schema/test.binpb --proto-dir ../pb_validate
 #
-# and pb_validate's fixtures for descriptor sets built without
-# `--include_imports`, from its own fixtures:
-#
-#     cd ../pb_validate/test/fixtures/schema
-#     mix run ../../../../pb/scripts/subset_descriptor_set.exs ...
-#
-# (see pb_validate's build_protos.sh for the exact `--drop` lists).
+# pb_validate's build_protos.sh also uses it, with `--drop`, for its fixtures
+# of descriptor sets built without `--include_imports`.
 
 defmodule SubsetDescriptorSet do
   # Files are kept as their raw bytes, so only the set's `file` field and a

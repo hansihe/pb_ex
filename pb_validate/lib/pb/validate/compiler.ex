@@ -4,7 +4,8 @@ defmodule PB.Validate.Compiler do
   # Compiles protovalidate descriptor options into schema validation metadata.
   #
   # This compiler runs on the prepared schema, whose descriptor options are kept
-  # and materialized. It annotates message, field, oneof, and extension entries
+  # and materialized; `PB.Validate.Compiler.Options` materializes the rules of
+  # a descriptor set that does not define buf.validate itself. It annotates message, field, oneof, and extension entries
   # with plain validation data under `PB.Validate`, in the places
   # `PB.Schema.Plugin` lets a plugin write to: `:fields_by_name`,
   # `:extensions_by_name`, and `:oneofs`, not the runtime index copies such as
@@ -24,6 +25,7 @@ defmodule PB.Validate.Compiler do
   alias PB.Validate.Compiler.Context
   alias PB.Validate.Compiler.Extensions
   alias PB.Validate.Compiler.Fields
+  alias PB.Validate.Compiler.Options
 
   @doc """
   Annotates a prepared schema with precompiled protovalidate validation ops.
@@ -32,6 +34,7 @@ defmodule PB.Validate.Compiler do
   def annotate(schema) when is_map(schema) do
     schema =
       schema
+      |> Options.materialize()
       |> annotate_schema_extensions()
       |> annotate_message_extension_definitions()
 

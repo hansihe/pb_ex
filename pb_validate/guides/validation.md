@@ -20,8 +20,10 @@ message Person {
 }
 ```
 
-Generate the descriptor set with `--include_imports` so the validation
-descriptors travel with it.
+Generate the descriptor set with `--include_imports`, as for any schema. A set
+built without it lacks `buf/validate/validate.proto`, so `PB.compile/2` leaves
+the rules undecoded in the descriptor options; `PB.Validate` then decodes them
+with its own copy of `validate.proto`.
 
 ## Compile the rules
 

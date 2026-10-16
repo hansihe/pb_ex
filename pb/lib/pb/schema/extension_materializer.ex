@@ -39,8 +39,17 @@ defmodule PB.Schema.ExtensionMaterializer do
     # prepare so option decoding can look them up without re-preparing the
     # whole schema per extendee. The synthetic messages stay in `decode_schema`
     # only; the returned draft below is built from the original `schema`.
-    decode_schema = schema |> with_synthetic_extendees() |> Prepare.prepare()
+    materialize(schema, schema |> with_synthetic_extendees() |> Prepare.prepare())
+  end
 
+  @doc """
+  Rewrites the `:options` fields of `schema` with structured extension values,
+  decoding them with the prepared `decode_schema`.
+
+  Used by `materialize/1` with a decode aid built from `schema` itself, and by
+  libraries that decode options through extension definitions of their own.
+  """
+  def materialize(schema, decode_schema) when is_map(schema) and is_map(decode_schema) do
     schema
     |> Map.update!(:extensions_by_name, fn extensions ->
       Map.new(extensions, fn {name, extension} ->
