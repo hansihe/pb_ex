@@ -82,4 +82,6 @@ tuple — write a custom adapter, as in the contract example above.
 Because validation reads through the same adapters as encode, protovalidate rules
 see the value you actually hand to `PB.encode/4`. CEL unwraps adapted messages
 lazily and shallowly: the adapter's `to_proto` runs only when an expression
-selects into that message. See [Validation](validation.md).
+selects into that message. See
+[Validating with protovalidate](https://hexdocs.pm/pb_validate/validation.html)
+and [CEL over protobuf messages](https://hexdocs.pm/pb_cel/cel-over-protobuf.html).

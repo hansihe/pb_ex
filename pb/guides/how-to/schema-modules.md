@@ -68,7 +68,8 @@ See [Decoding into structs](structs-and-representation.md) and
 
 The optional `:plugins` value is passed to `PB.compile/2` too. A plugin compiles
 its own data into the embedded schema, and may add functions to the module.
-With `PB.Validate`, the module gets `validate/2,3` and `validate!/2,3`:
+With [`PB.Validate`](https://hexdocs.pm/pb_validate/PB.Validate.html), from
+pb_validate, the module gets `validate/2,3` and `validate!/2,3`:
 
 ```elixir
 defmodule MyApp.Schema do
@@ -78,7 +79,8 @@ end
 :ok = MyApp.Schema.validate(%{name: "Alice"}, :"mypackage.Person")
 ```
 
-See [Validating with protovalidate](validation.md) and `PB.Schema.Plugin`.
+See [Validating with protovalidate](https://hexdocs.pm/pb_validate/validation.html)
+and `PB.Schema.Plugin`.
 
 ## Hand-authored schemas (tests, fixtures)
 

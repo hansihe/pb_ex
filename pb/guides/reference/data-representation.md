@@ -118,7 +118,8 @@ PB.encode(%{name: "Alice", typo: 1}, schema, :"mypackage.Person")
 Pass `unknown_fields: :ignore` to drop unknown keys. Presence is controlled by
 map keys: a missing key is absent, and a key set to `nil` is the same as a
 missing one, for every kind of field (for oneofs, no selected variant). This
-holds across encoding, ProtoJSON and text format, `PB.Validate` and
+holds across encoding, ProtoJSON and text format,
+[`PB.Validate`](https://hexdocs.pm/pb_validate/PB.Validate.html) and
 `PB.message_equal?/4`. The exception is a message field whose type has an
 adapter: `nil` goes to the adapter, which may read it as a value (a
 `google.protobuf.Value` field holding JSON `null`). Implicit-presence fields

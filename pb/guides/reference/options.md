@@ -14,7 +14,7 @@ keeps unknown fields, as protobuf requires.
 | Option | Values | Default | Notes |
 |--------|--------|---------|-------|
 | `:projections` | list of `{fqn, opts}` | `[]` | Message-level adapters and structural representation. See below. |
-| `:plugins` | list of `module \| {module, opts}` | `[]` | `PB.Schema.Plugin`s that compile their own data into the schema, such as `PB.Validate`. |
+| `:plugins` | list of `module \| {module, opts}` | `[]` | `PB.Schema.Plugin`s that compile their own data into the schema, such as [`PB.Validate`](https://hexdocs.pm/pb_validate/PB.Validate.html). |
 
 Each `:projections` entry pairs a fully-qualified message name with a keyword
 list. `adapter:` is mutually exclusive with the structural keys:
@@ -78,12 +78,3 @@ See [Decoding into structs](../how-to/structs-and-representation.md) and
 | `:print_unknown_fields` | `boolean` | `true` |
 
 `use PB.Schema` accepts `:projections` and `:plugins` with the same meaning.
-
-## `PB.Validate.validate/4`
-
-The schema must be compiled with `plugins: [PB.Validate]`.
-
-| Option | Values | Notes |
-|--------|--------|-------|
-| `:context` | `keyword \| map \| %PB.Validate.Context{}` | Runtime context for CEL evaluation. |
-| `:now` | `integer \| DateTime.t() \| {:timestamp, unix_nanoseconds}` | Value bound to the `now` variable in CEL rules when `:context` is not supplied. |

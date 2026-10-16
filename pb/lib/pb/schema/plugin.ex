@@ -1,7 +1,7 @@
 defmodule PB.Schema.Plugin do
   @moduledoc """
   Behaviour for libraries that compile their own data into a PB schema, such as
-  protovalidate rules (e.g. `PB.Validate`).
+  the protovalidate rules of [pb_validate](https://hexdocs.pm/pb_validate).
 
   Plugins are listed in the `:plugins` option of `PB.compile/2` and
   `use PB.Schema`. Each entry is a module or a `{module, opts}` tuple:

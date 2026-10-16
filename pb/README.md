@@ -1,8 +1,8 @@
 # PB
 
 Data-driven protobuf toolkit for Elixir. Runtime usage needs no code generation,
-no build step, and no dependencies beyond [`cel_ex`](https://hexdocs.pm/cel_ex):
-PB reads standard `protoc` descriptor sets as data. For stable schemas, PB can
+no build step, and no dependencies: PB reads standard `protoc` descriptor sets
+as data. For stable schemas, PB can
 also embed the compiled schema in a BEAM module at Elixir compile time.
 
 ## Installation
@@ -60,12 +60,17 @@ walkthrough.
   values, and map messages to native Elixir values with adapters.
 - **ProtoJSON** — `PB.JSON`.
 - **Text format** — `PB.TextFormat`.
-- **protovalidate** validation — `PB.Validate`, a schema plugin
-  (`plugins: [PB.Validate]`).
-- **CEL** expressions over protobuf messages — `PB.CEL`, a type provider for
-  [`cel_ex`](https://hexdocs.pm/cel_ex)'s `CEL`.
 - **Schema introspection** for messages, enums, services, and extensions —
   `PB.Schema`.
+- **Schema plugins** that compile a library's own data into the schema —
+  `PB.Schema.Plugin`.
+
+Two companion packages build on it:
+
+- [`pb_validate`](https://hexdocs.pm/pb_validate): **protovalidate**
+  validation, a schema plugin (`plugins: [PB.Validate]`).
+- [`pb_cel`](https://hexdocs.pm/pb_cel): **CEL** expressions over protobuf
+  messages, a type provider for [`cel_ex`](https://hexdocs.pm/cel_ex).
 
 ## Documentation
 
@@ -83,12 +88,12 @@ The full documentation is organised along the
 - [Decoding into structs and sum types](guides/how-to/structs-and-representation.md)
 - [Adapters and well-known types](guides/how-to/adapters-and-well-known-types.md)
 - [Encoding and decoding JSON](guides/how-to/json.md)
-- [Validating with protovalidate](guides/how-to/validation.md)
-- [CEL over protobuf messages](guides/how-to/cel.md)
 - [Extensions and unknown fields](guides/how-to/extensions-and-unknown-fields.md)
 - [Introspecting a schema](guides/how-to/introspection.md)
 
-For CEL itself, see [`cel_ex`'s documentation](https://hexdocs.pm/cel_ex).
+For protovalidate and CEL, see the documentation of
+[`pb_validate`](https://hexdocs.pm/pb_validate) and
+[`pb_cel`](https://hexdocs.pm/pb_cel).
 
 **Reference**
 
@@ -109,11 +114,12 @@ The codegen implementation is not part of the production library surface. It liv
 under `test/support` and is loaded by `bench/codegen_vs_runtime.exs` only to
 compare the runtime path against the old generated-code reference.
 
-The upstream conformance suites are run with `scripts/run_protobuf_conformance.sh`
-and `scripts/run_protovalidate_conformance.sh`; CEL conformance fixtures are
-fetched with `scripts/fetch_cel_conformance.sh`.
-Current results and intentional deviations are documented in
-[Conformance status](guides/reference/conformance.md).
+The upstream protobuf conformance suite is run with
+`scripts/run_protobuf_conformance.sh`. Current results and intentional
+deviations are documented in [Conformance status](guides/reference/conformance.md).
+`build_protos.sh` rebuilds the bundled descriptors and the test fixtures with
+`buf`; `scripts/subset_descriptor_set.exs` builds descriptor sets from the files
+of another set without it.
 
 `mix dialyzer` should report no warnings; it catches broken typespecs that
 would otherwise only show up in a consumer's Dialyzer run.

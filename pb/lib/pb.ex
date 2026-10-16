@@ -29,9 +29,10 @@ defmodule PB do
 
   ## Plugins
 
-  Libraries can compile their own data into a schema, such as protovalidate
-  rules (e.g. `PB.Validate`), as plugins listed in the `:plugins` option of
-  `compile/2` and `use PB.Schema`; see `PB.Schema.Plugin`.
+  Libraries can compile their own data into a schema, such as the protovalidate
+  rules of [pb_validate](https://hexdocs.pm/pb_validate), as plugins listed in
+  the `:plugins` option of `compile/2` and `use PB.Schema`; see
+  `PB.Schema.Plugin`.
 
   ## Schema
 

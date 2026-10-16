@@ -74,6 +74,17 @@ represented structs, identity oneofs, unwrapped messages, and adapted values are
 each projected one message layer at a time before field, message, and CEL rules
 read protobuf fields.
 
+## Options
+
+`PB.Validate.validate/4` and the schema module functions accept:
+
+| Option | Values | Notes |
+|--------|--------|-------|
+| `:context` | `keyword \| map \| %PB.Validate.Context{}` | Runtime context for CEL evaluation. |
+| `:now` | `integer \| DateTime.t() \| {:timestamp, unix_nanoseconds}` | Value bound to the `now` variable in CEL rules when `:context` is not supplied. |
+
+Unknown options are rejected with a `PB.OptionError`.
+
 ## Errors vs violations
 
 A *violation* (a rule that the message failed) is data: it comes back in
