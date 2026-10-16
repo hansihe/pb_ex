@@ -47,9 +47,10 @@ tracked as named buckets in `test/pb/cel/conformance_test.exs`:
 - Legacy enum behavior and weak enum field typing are not targeted; PB uses
   stronger schema-backed enum typing.
 - CEL `==`/`!=` on `google.protobuf.Any` values should unpack both sides and
-  compare the wrapped messages structurally; PB does not implement that
-  unpack-on-equality step yet (4 `any_unpack` eval cases). Packing and field
-  access on `Any` are otherwise supported.
+  compare the wrapped messages structurally. PB passes the upstream
+  `any_unpack` cases because an `Any` literal is unpacked when evaluated and
+  packed again canonically, but it does not unpack `Any` fields when comparing
+  messages, so ones decoded from differently serialized bytes compare unequal.
 
 Check-only conformance cases are used for checker coverage and are not evaluator
 failures.

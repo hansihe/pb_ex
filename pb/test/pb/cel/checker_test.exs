@@ -501,58 +501,8 @@ defmodule CEL.CheckerTest do
              {:message_literal,
               %{
                 message: "google.protobuf.Int32Value",
-                wkt_unwrap?: true,
-                fields: [%{field: "value", value_id: 1, optional?: false, assignment: :eval}]
+                fields: [%{field: "value", value_id: 1, optional?: false}]
               }}
-  end
-
-  test "records message literal field assignment policy" do
-    opts =
-      env(
-        container: "cel.expr.conformance.proto2",
-        schema: PB.TestSupport.TestSchema
-      )
-
-    checked = CEL.check!("TestAllTypes{single_any: google.protobuf.Int32Value{value: 1}}", opts)
-
-    assert {:message_literal, %{fields: [field]}} = Checked.op(checked, checked.expr)
-    assert field.field == :single_any
-
-    assert field.field_ref == %{
-             message: :"cel.expr.conformance.proto2.TestAllTypes",
-             field: :single_any
-           }
-
-    assert field.cardinality == :singular
-    assert field.optional? == false
-    assert field.assignment == :raw_message_literal
-
-    assert {:message_literal, child_op} = Checked.op(checked, field.value_id)
-    assert child_op.wkt_unwrap? == false
-
-    checked =
-      CEL.check!("TestAllTypes{single_value: google.protobuf.BoolValue{value: true}}", opts)
-
-    assert {:message_literal, %{fields: [field]}} = Checked.op(checked, checked.expr)
-    assert {:message_literal, child_op} = Checked.op(checked, field.value_id)
-    assert child_op.wkt_unwrap? == false
-
-    checked =
-      CEL.check!(
-        "TestAllTypes{single_bool_wrapper: google.protobuf.BoolValue{value: true}}",
-        opts
-      )
-
-    assert {:message_literal, %{fields: [field]}} = Checked.op(checked, checked.expr)
-    assert {:message_literal, child_op} = Checked.op(checked, field.value_id)
-    assert child_op.wkt_unwrap? == false
-
-    checked =
-      CEL.check!("TestAllTypes{single_bool: google.protobuf.BoolValue{value: true}}", opts)
-
-    assert {:message_literal, %{fields: [field]}} = Checked.op(checked, checked.expr)
-    assert {:message_literal, child_op} = Checked.op(checked, field.value_id)
-    assert child_op.wkt_unwrap? == true
   end
 
   test "records special checked ops" do

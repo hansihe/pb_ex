@@ -156,15 +156,12 @@ defmodule CEL.Checked do
            }}
 
   @typedoc false
-  @type message_literal_field_assignment :: :eval | :raw_message_literal
-  @typedoc false
   @type message_literal_field_cardinality :: :singular | :repeated | :map | :oneof
   @typedoc false
   @type message_literal_field :: %{
           required(:field) => atom() | String.t(),
           required(:value_id) => expr_id,
           required(:optional?) => boolean(),
-          required(:assignment) => message_literal_field_assignment(),
           optional(:field_ref) => CEL.Message.Schema.field_ref(),
           optional(:cardinality) => message_literal_field_cardinality(),
           optional(:oneof_name) => atom()
@@ -175,7 +172,6 @@ defmodule CEL.Checked do
           {:message_literal,
            %{
              required(:message) => atom() | String.t(),
-             required(:wkt_unwrap?) => boolean(),
              required(:fields) => [message_literal_field()]
            }}
 

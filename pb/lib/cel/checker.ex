@@ -728,7 +728,19 @@ defmodule CEL.Checker do
     |> Map.new()
   end
 
+  # Literals of the well-known types are CEL's own, whatever the schema says.
   defp message_literal_op(expr, message_name, entries, value_types, state) do
+    if WellKnownTypes.literal_message?(message_name) do
+      with {:ok, fields, state} <-
+             well_known_literal_fields(message_name, entries, value_types, state) do
+        {:ok, {:message_literal, %{message: message_name, fields: fields}}, state}
+      end
+    else
+      schema_message_literal_op(expr, message_name, entries, value_types, state)
+    end
+  end
+
+  defp schema_message_literal_op(expr, message_name, entries, value_types, state) do
     message_schema = state.env.message_schema
 
     case message_schema.resolve_message(state.env.schema, message_name) do
@@ -748,17 +760,49 @@ defmodule CEL.Checker do
                  message_schema.required_fields(state.env.schema, message),
                  fields
                ) do
-          {:ok, {:message_literal, %{message: message, wkt_unwrap?: true, fields: fields}}, state}
+          {:ok, {:message_literal, %{message: message, fields: fields}}, state}
         end
 
       :error ->
-        {:ok,
-         {:message_literal,
-          %{
-            message: message_name,
-            wkt_unwrap?: true,
-            fields: unchecked_message_literal_fields(entries)
-          }}, state}
+        error(expr, "unknown message type #{message_name}")
+    end
+  end
+
+  defp well_known_literal_fields(message_name, entries, value_types, state) do
+    entries
+    |> Enum.zip(value_types)
+    |> Enum.reduce_while({:ok, [], state}, fn
+      {%{key_kind: {:field_key, field}, value: %{id: value_id} = value} = entry, type},
+      {:ok, fields, state} ->
+        with {:ok, field_type} <- well_known_literal_field_type(message_name, field, value),
+             {:ok, state} <-
+               expect_assignable(
+                 CType.from_input(field_type),
+                 type,
+                 state,
+                 value,
+                 "message field #{inspect(field)}"
+               ) do
+          optional? = Map.get(entry, :optional_entry, false)
+          field = %{field: field, value_id: value_id, optional?: optional?}
+          {:cont, {:ok, [field | fields], state}}
+        else
+          {:error, %Error{} = error} -> {:halt, {:error, error}}
+        end
+
+      {_entry, _type}, {:ok, fields, state} ->
+        {:cont, {:ok, fields, state}}
+    end)
+    |> case do
+      {:ok, fields, state} -> {:ok, Enum.reverse(fields), state}
+      {:error, %Error{} = error} -> {:error, error}
+    end
+  end
+
+  defp well_known_literal_field_type(message_name, field, value) do
+    case WellKnownTypes.literal_field_type(message_name, field) do
+      {:ok, type} -> {:ok, type}
+      :error -> error(value, "no such field #{inspect(field)}")
     end
   end
 
@@ -795,12 +839,9 @@ defmodule CEL.Checker do
                   field_ref: %{message: message, field: field_ref_name},
                   value_id: value_id,
                   optional?: Map.get(entry, :optional_entry, false),
-                  assignment: message_field_assignment(literal, entry, value),
                   cardinality: literal.cardinality
                 }
                 |> maybe_put_oneof_name(literal)
-
-              state = maybe_preserve_message_literal_identity(state, literal, value)
 
               {:cont, {:ok, [field | fields], state}}
             else
@@ -848,84 +889,6 @@ defmodule CEL.Checker do
   end
 
   defp message_literal_enum_int_assignable(_literal, _expected, _actual, _state), do: :error
-
-  defp unchecked_message_literal_fields(entries) do
-    entries
-    |> Enum.flat_map(fn
-      %{key_kind: {:field_key, field}, value: %{id: value_id}} = entry ->
-        [
-          %{
-            field: field,
-            value_id: value_id,
-            optional?: Map.get(entry, :optional_entry, false),
-            assignment: :eval
-          }
-        ]
-
-      _entry ->
-        []
-    end)
-  end
-
-  defp message_field_assignment(literal, entry, value) do
-    if not Map.get(entry, :optional_entry, false) and
-         message_literal_expr?(value) and
-         any_field?(literal) do
-      :raw_message_literal
-    else
-      :eval
-    end
-  end
-
-  defp message_literal_expr?(%{expr_kind: {:struct_expr, %{message_name: message_name}}}) do
-    message_name not in ["", nil]
-  end
-
-  defp message_literal_expr?(_expr), do: false
-
-  defp maybe_preserve_message_literal_identity(state, literal, value) do
-    if message_literal_expr?(value) and
-         preserve_message_identity_field?(state.env, literal, value) do
-      put_message_literal_wkt_unwrap(state, value.id, false)
-    else
-      state
-    end
-  end
-
-  defp preserve_message_identity_field?(_env, %{message_type: nil}, _value), do: false
-
-  defp preserve_message_identity_field?(env, %{message_type: message_type}, value) do
-    message_type in ["google.protobuf.Any", "google.protobuf.Value"] or
-      message_literal_name(value, env) == message_type
-  end
-
-  defp message_literal_name(
-         %{expr_kind: {:struct_expr, %{message_name: message_name}}},
-         env
-       )
-       when message_name not in ["", nil] do
-    NameResolution.resolve_message_name(message_name, env)
-  end
-
-  defp message_literal_name(_value, _env), do: nil
-
-  defp put_message_literal_wkt_unwrap(%State{ops: ops} = state, id, wkt_unwrap?) do
-    case Map.fetch(ops, id) do
-      {:ok, {:message_literal, op}} ->
-        %{
-          state
-          | ops: Map.put(ops, id, {:message_literal, Map.put(op, :wkt_unwrap?, wkt_unwrap?)})
-        }
-
-      _other ->
-        state
-    end
-  end
-
-  defp any_field?(%{cardinality: cardinality, message_type: "google.protobuf.Any"}),
-    do: cardinality in [:singular, :oneof]
-
-  defp any_field?(_literal), do: false
 
   defp maybe_put_oneof_name(field, %{oneof_name: nil}), do: field
   defp maybe_put_oneof_name(field, %{oneof_name: name}), do: Map.put(field, :oneof_name, name)

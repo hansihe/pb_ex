@@ -351,21 +351,6 @@ defmodule PB.TestSupport.CELConformance do
 
   defp strong_enum_type_case?(_case), do: false
 
-  defp any_unpack_equality_case?(%{
-         fixture: "simple/comparisons.binpb",
-         section: section,
-         name: name
-       })
-       when {section, name} in [
-              {"eq_wrapper", "eq_proto2_any_unpack_equal"},
-              {"eq_wrapper", "eq_proto3_any_unpack_equal"},
-              {"ne_literal", "ne_proto2_any_unpack"},
-              {"ne_literal", "ne_proto3_any_unpack"}
-            ],
-       do: true
-
-  defp any_unpack_equality_case?(_case), do: false
-
   defp put_unsupported_check_reason(case),
     do: Map.put(case, :unsupported_reason, check_unsupported_reason(case))
 
@@ -424,9 +409,6 @@ defmodule PB.TestSupport.CELConformance do
 
       unsupported_type_env?(case.type_env) ->
         :type_env
-
-      any_unpack_equality_case?(case) and current_eval_unsupported_reason(case) ->
-        :any_unpack_equality
 
       legacy_enum_semantics_case?(case) and current_eval_unsupported_reason(case) ->
         :legacy_enum_semantics

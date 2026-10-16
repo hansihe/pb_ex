@@ -48,8 +48,9 @@ defmodule CEL.Runtime.NoMessageRuntime do
   @impl true
   def equal?(_schema, _left, _right), do: :not_applicable
 
+  # With no runtime to unpack it, an `Any` stays an object value.
   @impl true
-  def from_any(_schema, _type_url, _value), do: @error
+  def from_any(_schema, type_url, value), do: {:ok, CEL.Value.object(type_url, value)}
 
   @impl true
   def to_any(_schema, _value), do: @error

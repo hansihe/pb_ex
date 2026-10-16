@@ -48,10 +48,9 @@ defmodule CEL.ConformanceTest do
   test "tracks evaluator cases outside this slice" do
     unsupported = CELConformance.unsupported_eval_cases()
 
-    assert length(CELConformance.supported_eval_cases()) == 2097
+    assert length(CELConformance.supported_eval_cases()) == 2101
 
     assert CELConformance.unsupported_reason_summary(unsupported) == %{
-             any_unpack_equality: 4,
              check_only: 25,
              disable_check: 141,
              legacy_enum_semantics: 21,

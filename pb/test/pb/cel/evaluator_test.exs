@@ -346,11 +346,13 @@ defmodule CEL.EvaluatorTest do
                 }
               }}
 
+    # A wrapper literal is its CEL value, so it packs as that value does, as in
+    # cel-go.
     assert CEL.eval!("TestAllTypes{single_any: google.protobuf.Int32Value{value: 1}}", %{}, opts) ==
              {:message, :"cel.expr.conformance.proto2.TestAllTypes",
               %{
                 single_any: %{
-                  type_url: "type.googleapis.com/google.protobuf.Int32Value",
+                  type_url: "type.googleapis.com/google.protobuf.Int64Value",
                   value: <<8, 1>>
                 }
               }}
@@ -709,12 +711,63 @@ defmodule CEL.EvaluatorTest do
              CEL.Program.eval(program, %{"value" => "a"})
   end
 
+  def failing([_value]), do: {:error, :no_such_thing}
+
   test "error messages are strings, with the runtime reason in details" do
+    function = %CEL.Function{
+      name: "fail",
+      overloads: [%CEL.Function.Overload{id: "fail_int", args: [:int], result: :int, eval: {__MODULE__, :failing}}]
+    }
+
     assert {:error,
             %Error{
-              message: "no message runtime",
-              details: %{reason: :no_message_runtime}
-            }} = CEL.eval("google.protobuf.Int32Value{value: 1}", %{})
+              message: "no such thing",
+              details: %{reason: :no_such_thing}
+            }} = CEL.eval("fail(1)", %{}, env(functions: [function]))
+  end
+
+  test "evaluates well-known type literals without a schema" do
+    assert CEL.eval!("google.protobuf.Int64Value{value: 1}") == Value.int(1)
+    assert CEL.eval!("google.protobuf.Int32Value{}") == Value.int(0)
+    assert CEL.eval!("google.protobuf.FloatValue{value: 1.1}") == Value.double(1.100000023841858)
+    assert CEL.eval!("google.protobuf.StringValue{value: 'a'} == 'a'") == Value.bool(true)
+    assert CEL.eval!("google.protobuf.Value{number_value: 1.5}") == Value.double(1.5)
+    assert CEL.eval!("google.protobuf.Value{}") == Value.null()
+    assert CEL.eval!("google.protobuf.ListValue{values: [1, 'a']}") ==
+             Value.list([Value.int(1), Value.string("a")])
+
+    assert CEL.eval!("google.protobuf.Struct{fields: {'a': 1}}") ==
+             Value.map(%{Value.string("a") => Value.int(1)})
+
+    assert CEL.eval!("google.protobuf.Timestamp{seconds: 1, nanos: 2}") ==
+             Value.timestamp(1_000_000_002)
+
+    assert CEL.eval!("google.protobuf.Duration{seconds: -1}") == Value.duration(-1_000_000_000)
+
+    assert CEL.eval!("Int64Value{value: 1}", %{}, env(container: "google.protobuf")) ==
+             Value.int(1)
+
+    # An `Any` it has no schema to unpack stays an object value.
+    assert CEL.eval!("google.protobuf.Any{type_url: 'x/pkg.M', value: b'1'}") ==
+             Value.object("x/pkg.M", "1")
+
+    assert CEL.Checked.type(CEL.check!("google.protobuf.Int64Value{value: 1}")) == :int
+    assert CEL.Checked.type(CEL.check!("google.protobuf.Timestamp{}")) == :timestamp
+
+    assert {:error, %Error{phase: :check, message: "no such field \"nope\""}} =
+             CEL.check("google.protobuf.Int64Value{nope: 1}")
+
+    assert {:error, %Error{phase: :check, message: "message field \"value\"" <> _}} =
+             CEL.check("google.protobuf.Int64Value{value: 'a'}")
+
+    assert {:error, %Error{phase: :eval, message: "int32 value out of range"}} =
+             CEL.eval("google.protobuf.Int32Value{value: 2147483648}")
+
+    assert {:error, %Error{phase: :eval, message: "uint32 value out of range"}} =
+             CEL.eval("google.protobuf.UInt32Value{value: 4294967296u}")
+
+    assert {:error, %Error{phase: :check, message: "unknown message type pkg.Nope"}} =
+             CEL.check("pkg.Nope{}")
   end
 
   test "evaluates string format extension" do

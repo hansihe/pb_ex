@@ -3,11 +3,13 @@ defmodule CEL.WellKnownTypes do
 
   # How CEL treats the protobuf well-known types by name: the CEL types of
   # wrapper, `Timestamp`, `Duration`, `Any`, `Struct`, `Value` and `ListValue`
-  # fields, and the values of their message literals. Packing and unpacking
-  # `Any` payloads needs protobuf, so it goes through the message runtime
-  # (`CEL.Message.Runtime`'s `from_any/3` and `to_any/2`).
+  # fields, and their message literals, which CEL checks and evaluates itself,
+  # with or without a schema. Packing and unpacking `Any` payloads needs
+  # protobuf, so it goes through the message runtime (`CEL.Message.Runtime`'s
+  # `from_any/3` and `to_any/2`).
 
   alias CEL.ProtoType
+  alias CEL.Runtime.Time
   alias CEL.Value
 
   @timestamp_type "google.protobuf.Timestamp"
@@ -37,18 +39,43 @@ defmodule CEL.WellKnownTypes do
     "google.protobuf.BytesValue" => {:bytes, ""}
   }
 
-  @literal_messages MapSet.new(
-                      Map.keys(@wrapper_types) ++
-                        [
-                          "google.protobuf.Any",
-                          "google.protobuf.ListValue",
-                          "google.protobuf.Struct",
-                          "google.protobuf.Value"
-                        ]
-                    )
+  # The fields a literal of each well-known type may set, with their CEL types.
+  @literal_fields Map.merge(
+                    Map.new(@wrapper_types, fn {name, type} -> {name, %{"value" => type}} end),
+                    %{
+                      "google.protobuf.Any" => %{"type_url" => :string, "value" => :bytes},
+                      "google.protobuf.ListValue" => %{"values" => {:list, :dyn}},
+                      "google.protobuf.Struct" => %{"fields" => {:map, :string, :dyn}},
+                      "google.protobuf.Value" => %{
+                        "null_value" => :dyn,
+                        "number_value" => :double,
+                        "string_value" => :string,
+                        "bool_value" => :bool,
+                        "struct_value" => {:map, :string, :dyn},
+                        "list_value" => {:list, :dyn}
+                      },
+                      @timestamp_type => %{"seconds" => :int, "nanos" => :int},
+                      @duration_type => %{"seconds" => :int, "nanos" => :int}
+                    }
+                  )
 
-  @spec literal_message?(String.t()) :: boolean
-  def literal_message?(name) when is_binary(name), do: MapSet.member?(@literal_messages, name)
+  @min_int32 -2_147_483_648
+  @max_int32 2_147_483_647
+  @max_uint32 4_294_967_295
+  @nanos_per_second 1_000_000_000
+
+  @spec literal_message?(term) :: boolean
+  def literal_message?(name), do: is_map_key(@literal_fields, name)
+
+  @doc """
+  The CEL type of a field a literal of the well-known type `message_name` sets.
+  """
+  @spec literal_field_type(String.t(), String.t()) :: {:ok, CEL.Type.t()} | :error
+  def literal_field_type(message_name, field) do
+    with {:ok, fields} <- Map.fetch(@literal_fields, message_name) do
+      Map.fetch(fields, field)
+    end
+  end
 
   @spec field_type(String.t()) :: {:ok, ProtoType.t()} | :error
   def field_type(name) when is_binary(name) do
@@ -94,22 +121,28 @@ defmodule CEL.WellKnownTypes do
       message_name == "google.protobuf.Value" ->
         {:ok, value_literal_type(fields)}
 
+      message_name == "google.protobuf.Any" ->
+        {:ok, ProtoType.dyn()}
+
+      message_name == @timestamp_type ->
+        {:ok, ProtoType.timestamp()}
+
+      message_name == @duration_type ->
+        {:ok, ProtoType.duration()}
+
       true ->
         :error
     end
   end
 
   @spec literal_value(String.t(), %{String.t() => Value.t()}) ::
-          {:ok, Value.t()} | {:error, String.t()} | :error
+          {:ok, Value.t()} | {:error, String.t()}
   def literal_value(message_name, fields) do
     cond do
       Map.has_key?(@wrapper_defaults, message_name) ->
-        value =
-          fields
-          |> Map.get("value", Map.fetch!(@wrapper_defaults, message_name))
-          |> maybe_float32_wrapper(message_name)
-
-        {:ok, value}
+        fields
+        |> Map.get("value", Map.fetch!(@wrapper_defaults, message_name))
+        |> wrapper_literal_value(message_name)
 
       message_name == "google.protobuf.ListValue" ->
         {:ok, Map.get(fields, "values", Value.list([]))}
@@ -123,8 +156,11 @@ defmodule CEL.WellKnownTypes do
       message_name == "google.protobuf.Any" ->
         any_literal_value(fields)
 
-      true ->
-        :error
+      message_name == @timestamp_type ->
+        with {:ok, ns} <- time_literal_nanos(fields), do: Time.timestamp(ns)
+
+      message_name == @duration_type ->
+        with {:ok, ns} <- time_literal_nanos(fields), do: Time.duration(ns)
     end
   end
 
@@ -204,15 +240,31 @@ defmodule CEL.WellKnownTypes do
   end
 
   # A `FloatValue` holds a float32: round as encoding one would, a double out of
-  # float32 range becoming an infinity.
-  defp maybe_float32_wrapper({:double, value}, "google.protobuf.FloatValue")
+  # float32 range becoming an infinity. `Int32Value` and `UInt32Value` reject
+  # what does not fit their 32 bits, as encoding them would.
+  defp wrapper_literal_value({:double, value}, "google.protobuf.FloatValue")
        when is_float(value) do
     case <<value::little-float-32>> do
-      <<0, 0, 128, 127>> -> Value.double(:infinity)
-      <<0, 0, 128, 255>> -> Value.double(:negative_infinity)
-      <<rounded::little-float-32>> -> Value.double(rounded)
+      <<0, 0, 128, 127>> -> {:ok, Value.double(:infinity)}
+      <<0, 0, 128, 255>> -> {:ok, Value.double(:negative_infinity)}
+      <<rounded::little-float-32>> -> {:ok, Value.double(rounded)}
     end
   end
 
-  defp maybe_float32_wrapper(value, _message_name), do: value
+  defp wrapper_literal_value({:int, value}, "google.protobuf.Int32Value")
+       when value < @min_int32 or value > @max_int32,
+       do: {:error, "int32 value out of range"}
+
+  defp wrapper_literal_value({:uint, value}, "google.protobuf.UInt32Value")
+       when value > @max_uint32,
+       do: {:error, "uint32 value out of range"}
+
+  defp wrapper_literal_value(value, _message_name), do: {:ok, value}
+
+  defp time_literal_nanos(fields) do
+    case {Map.get(fields, "seconds", Value.int(0)), Map.get(fields, "nanos", Value.int(0))} do
+      {{:int, seconds}, {:int, nanos}} -> {:ok, seconds * @nanos_per_second + nanos}
+      _other -> {:error, "invalid time literal"}
+    end
+  end
 end

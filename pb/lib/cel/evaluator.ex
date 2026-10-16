@@ -132,7 +132,7 @@ defmodule CEL.Evaluator do
   end
 
   defp eval_op(id, {:message_literal, op}, state) do
-    eval_message_literal(expr_ref(id), op, state, :normal)
+    eval_message_literal(expr_ref(id), op, state)
   end
 
   defp eval_op(id, {:comprehension, op}, state) do
@@ -397,12 +397,12 @@ defmodule CEL.Evaluator do
     end
   end
 
-  defp eval_message_literal(expr, %{message: message_name, fields: fields} = op, state, mode) do
+  defp eval_message_literal(expr, %{message: message_name, fields: fields}, state) do
     case eval_message_fields(fields, [], nil, state) do
       {:ok, fields, state} ->
-        case message_value(mode, message_name, fields, state, Map.get(op, :wkt_unwrap?, true)) do
+        case message_value(message_name, fields, state) do
+          {:ok, value} -> {:ok, value, state}
           {:error, reason} -> error(expr, reason)
-          value -> {:ok, value, state}
         end
 
       {:error, reason} when is_binary(reason) ->
@@ -417,7 +417,7 @@ defmodule CEL.Evaluator do
   defp eval_message_fields([], _fields, %Unknown{} = unknown, _state), do: {:unknown, unknown}
 
   defp eval_message_fields([field | rest], fields, unknown, state) do
-    case eval_message_field_value(field, state) do
+    case eval_id(field.value_id, state) do
       {:ok, value, state} ->
         case optional_entry({field.field, value}, field.optional?) do
           {:ok, nil} ->
@@ -435,22 +435,6 @@ defmodule CEL.Evaluator do
 
       {:error, %Error{}} = error ->
         error
-    end
-  end
-
-  defp eval_message_field_value(%{assignment: :raw_message_literal, value_id: value_id}, state) do
-    eval_raw_message_literal_id(value_id, state)
-  end
-
-  defp eval_message_field_value(%{value_id: value_id}, state), do: eval_id(value_id, state)
-
-  defp eval_raw_message_literal_id(value_id, state) do
-    case Checked.op(state.checked, value_id) do
-      {:message_literal, op} ->
-        eval_message_literal(expr_ref(value_id), op, state, :raw)
-
-      _op ->
-        error(expr_ref(value_id), "raw assignment requires message literal")
     end
   end
 
@@ -550,41 +534,23 @@ defmodule CEL.Evaluator do
     error(expr, "enum constructor requires exactly one argument")
   end
 
-  defp message_value(:normal, message_name, fields, state, wkt_unwrap?) do
-    case state.message_runtime.from_literal(state.schema, message_name, fields, wkt_unwrap?) do
-      {:ok, value} ->
-        value
+  # An `Any` literal unpacks when the message runtime knows its type.
+  defp message_value(message_name, fields, state) do
+    if WellKnownTypes.literal_message?(message_name) do
+      case WellKnownTypes.literal_value(message_name, Map.new(fields, &{&1.field, &1.value})) do
+        {:ok, {:object, type_url, value}} ->
+          state.message_runtime.from_any(state.schema, type_url, value)
 
-      :unknown ->
-        well_known_message_value(message_name, message_field_values(fields), wkt_unwrap?)
-
-      {:error, reason} ->
-        {:error, reason}
+        result ->
+          result
+      end
+    else
+      case state.message_runtime.from_literal(state.schema, message_name, fields, true) do
+        {:ok, value} -> {:ok, value}
+        :unknown -> {:error, "unknown message #{inspect(message_name)}"}
+        {:error, reason} -> {:error, reason}
+      end
     end
-  end
-
-  defp message_value(:raw, message_name, fields, state, _wkt_unwrap?) do
-    case state.message_runtime.from_literal_message(state.schema, message_name, fields) do
-      {:ok, value} -> value
-      :unknown -> {:error, "unknown message #{inspect(message_name)}"}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp well_known_message_value(message_name, fields, false), do: {:message, message_name, fields}
-
-  defp well_known_message_value(message_name, fields, true) do
-    message_name = if is_atom(message_name), do: Atom.to_string(message_name), else: message_name
-
-    case WellKnownTypes.literal_value(message_name, fields) do
-      {:ok, value} -> value
-      {:error, reason} -> {:error, reason}
-      :error -> {:message, message_name, fields}
-    end
-  end
-
-  defp message_field_values(fields) do
-    Map.new(fields, fn field -> {field.field, field.value} end)
   end
 
   defp eval_loop(_expr, _op, [], state), do: {:ok, state}
