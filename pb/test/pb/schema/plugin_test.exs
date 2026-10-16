@@ -26,6 +26,13 @@ defmodule PB.Schema.PluginTest.Counter do
     |> Map.put_new(__MODULE__, %{count: count, opts: opts, prepared?: prepared?(schema)})
   end
 
+  @impl true
+  def schema_functions(opts) do
+    quote do
+      def plugin_count, do: {__pb_schema__()[unquote(__MODULE__)].count, unquote(opts)}
+    end
+  end
+
   defp prepared?(schema) do
     Enum.all?(schema.messages, fn {_name, message} -> Map.has_key?(message, :fields_by_number) end)
   end
@@ -41,9 +48,16 @@ defmodule PB.Schema.PluginTest.Follower do
   end
 end
 
+defmodule PB.Schema.PluginTest.CountedSchema do
+  use PB.Schema,
+    descriptor_set: PB.TestSupport.Fixtures.person_descriptor_set(),
+    plugins: [{PB.Schema.PluginTest.Counter, mode: :y}, PB.Schema.PluginTest.Follower]
+end
+
 defmodule PB.Schema.PluginTest do
   use ExUnit.Case, async: true
 
+  alias PB.Schema.PluginTest.CountedSchema
   alias PB.Schema.PluginTest.Counter
   alias PB.Schema.PluginTest.Follower
   alias PB.Schema.Transform
@@ -103,6 +117,13 @@ defmodule PB.Schema.PluginTest do
 
     assert projected.plugins == [{Counter, []}]
     assert projected[Counter].prepared?
+  end
+
+  test "schema modules compile with the plugins and get their schema functions" do
+    schema = PB.compile(Fixtures.person_descriptor_set(), plugins: [{Counter, mode: :y}, Follower])
+
+    assert CountedSchema.schema() == schema
+    assert CountedSchema.plugin_count() == {map_size(schema.messages), [mode: :y]}
   end
 
   test "rejects plugin entries that are not loaded plugin modules" do

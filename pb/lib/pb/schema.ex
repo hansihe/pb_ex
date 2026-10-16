@@ -206,21 +206,7 @@ defmodule PB.Schema do
         PB.decode!(binary, __pb_schema__(), message_name, opts)
       end
 
-      @doc "Validates `data` as `message_name` using the schema embedded in this module."
-      @spec validate(term, PB.message_name()) ::
-              :ok | {:error, PB.Validate.Error.t()}
-      @spec validate(term, PB.message_name(), keyword) ::
-              :ok | {:error, PB.Validate.Error.t()}
-      def validate(data, message_name, opts \\ []) do
-        PB.Validate.validate(data, __pb_schema__(), message_name, opts)
-      end
-
-      @doc "Validates `data` as `message_name` using the schema embedded in this module, raising on rule failures."
-      @spec validate!(term, PB.message_name()) :: :ok
-      @spec validate!(term, PB.message_name(), keyword) :: :ok
-      def validate!(data, message_name, opts \\ []) do
-        PB.Validate.validate!(data, __pb_schema__(), message_name, opts)
-      end
+      unquote(plugin_functions_ast(plugins))
     end
   end
 
@@ -508,6 +494,12 @@ defmodule PB.Schema do
     end)
 
     PB.Schema.Plugin.__entries__!(plugins)
+  end
+
+  defp plugin_functions_ast(plugins) do
+    for {module, opts} <- plugins, function_exported?(module, :schema_functions, 1) do
+      module.schema_functions(opts)
+    end
   end
 
   defp schema_ast(opts, plugins) do

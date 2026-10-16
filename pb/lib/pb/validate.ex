@@ -90,6 +90,33 @@ defmodule PB.Validate do
   end
 
   @doc """
+  Returns the functions `use PB.Schema` adds to a schema module compiled with
+  this plugin: `validate/2,3` and `validate!/2,3`, which call `validate/4` and
+  `validate!/4` with the module's schema.
+  """
+  @impl PB.Schema.Plugin
+  @spec schema_functions(keyword) :: Macro.t()
+  def schema_functions(_opts) do
+    quote do
+      @doc "Validates `data` as `message_name` using the schema embedded in this module."
+      @spec validate(term, PB.message_name()) ::
+              :ok | {:error, PB.Validate.Error.t()}
+      @spec validate(term, PB.message_name(), keyword) ::
+              :ok | {:error, PB.Validate.Error.t()}
+      def validate(data, message_name, opts \\ []) do
+        PB.Validate.validate(data, __pb_schema__(), message_name, opts)
+      end
+
+      @doc "Validates `data` as `message_name` using the schema embedded in this module, raising on rule failures."
+      @spec validate!(term, PB.message_name()) :: :ok
+      @spec validate!(term, PB.message_name(), keyword) :: :ok
+      def validate!(data, message_name, opts \\ []) do
+        PB.Validate.validate!(data, __pb_schema__(), message_name, opts)
+      end
+    end
+  end
+
+  @doc """
   Validates `data` as `message_name` using `schema`.
 
   Rule failures return `{:error, %PB.Validate.Error{}}`. Option failures return

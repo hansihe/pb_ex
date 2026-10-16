@@ -399,6 +399,13 @@ defmodule PB.SchemaTest do
       assert :ok = ValidatedSchema.validate!(%{text: "hi"}, @message)
     end
 
+    test "only schema modules compiled with PB.Validate get validate/2,3" do
+      Code.ensure_loaded!(LiteralSchema)
+      refute function_exported?(LiteralSchema, :validate, 2)
+      refute function_exported?(LiteralSchema, :validate!, 3)
+      assert function_exported?(ValidatedSchema, :validate, 3)
+    end
+
     test "a compiled schema map still works" do
       schema = PB.compile(Fixtures.descriptor_set())
       {:ok, bin} = PB.encode(%{text: "hi"}, schema, @message)
