@@ -56,6 +56,8 @@ defmodule PB.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
+      # The project lives in the pb/ subdirectory of the repository.
+      source_url_pattern: "#{@source_url}/blob/v#{@version}/pb/%{path}#L%{line}",
       extras: extras(),
       groups_for_extras: groups_for_extras(),
       groups_for_modules: groups_for_modules(),
