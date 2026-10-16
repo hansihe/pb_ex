@@ -80,11 +80,18 @@ defmodule PB.Schema do
     * `decode/2,3` and `decode!/2,3` — call `PB.decode/4` and `PB.decode!/4`.
     * `normalize/2,3` and `normalize!/2,3` — call `PB.normalize/4` and
       `PB.normalize!/4`.
-    * `validate/2,3` and `validate!/2,3` — call `PB.Validate.validate/4` and
-      `PB.Validate.validate!/4`.
 
-  The top-level `PB`, `PB.Validate`, `PB.JSON`, and `PB.TextFormat` entry
-  points accept the schema module directly in place of a compiled schema map.
+  The top-level `PB`, `PB.JSON`, and `PB.TextFormat` entry points accept the
+  schema module directly in place of a compiled schema map.
+
+  ## Plugins
+
+  Add `:plugins` to compile `PB.Schema.Plugin` data into the embedded schema,
+  as with `PB.compile/2`. A plugin may also add functions to the schema module:
+
+      defmodule MyApp.Schema do
+        use PB.Schema, descriptor: "priv/proto/schema.binpb", plugins: [MyPlugin]
+      end
 
   The schema is built once when the module is loaded and kept in
   `:persistent_term`, so a schema module cannot declare its own `@on_load`.

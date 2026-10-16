@@ -8,7 +8,7 @@ defmodule PB.WellKnownTypes.Any do
   # through the schema's native representation so projected types work.
   #
   # Which type URLs a format accepts is the format's own rule: ProtoJSON, CEL
-  # and PB.Validate take any host and read the last path segment, as Go does,
+  # and protovalidate take any host and read the last path segment, as Go does,
   # while C++ text format only takes the prefixes in `google_prefixes/0`.
 
   alias PB.Runtime.Errors

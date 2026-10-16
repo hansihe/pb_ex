@@ -35,7 +35,13 @@ defmodule PB.Error do
   @typedoc "Path element used to locate the offending field in `:path`."
   @type path_element :: atom | {:index, non_neg_integer} | {:key, term}
 
-  @typedoc "The operation that produced an error."
+  @typedoc """
+  The operation that produced an error.
+
+  PB's own entry points report the operations listed here. Libraries built on
+  PB may report PB errors from their own entry points under their own operation
+  atoms, such as `:validate`.
+  """
   @type operation ::
           :compile
           | :encode
@@ -45,9 +51,9 @@ defmodule PB.Error do
           | :json_decode
           | :text_decode
           | :text_encode
-          | :validate
           | :message_equal
           | :introspect
+          | atom()
 
   @typedoc "Any PB error struct returned by `{:error, _}` or raised by a bang API."
   @type t ::

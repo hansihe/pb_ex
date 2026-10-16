@@ -27,7 +27,11 @@ defmodule PB do
     * `PB.TextFormat` — protobuf text format, as used by `.textproto` files
       and debugging output.
 
-  Validation against protovalidate rules lives in `PB.Validate`.
+  ## Plugins
+
+  Libraries can compile their own data into a schema, such as protovalidate
+  rules (e.g. `PB.Validate`), as plugins listed in the `:plugins` option of
+  `compile/2` and `use PB.Schema`; see `PB.Schema.Plugin`.
 
   ## Schema
 
@@ -77,8 +81,8 @@ defmodule PB do
   @type schema :: map()
 
   @typedoc """
-  Schema source accepted by public encode/decode/normalize/validate, JSON, and
-  text format APIs.
+  Schema source accepted by public encode/decode/normalize, JSON, and text
+  format APIs.
 
   Either a compiled schema map or a module that `use PB.Schema`. Module
   values are resolved by calling `__pb_schema__/0`.

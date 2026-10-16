@@ -8,6 +8,10 @@ defmodule PB.Schema.Compiled do
   # encode/decode, validation, JSON, CEL, and message equality consume these
   # resolved structures directly instead of re-deriving descriptor semantics on
   # hot paths.
+  #
+  # Plugins (`PB.Schema.Plugin`) run on this shape and keep their data under
+  # their own module key on the schema, messages, fields, extensions, oneofs,
+  # and enums: the `optional(module()) => term()` entries below.
 
   @typedoc "Prepared compiled PB schema."
   @type t :: %{
@@ -16,7 +20,9 @@ defmodule PB.Schema.Compiled do
           required(:services) => %{optional(service_name()) => service()},
           required(:extensions_by_name) => %{optional(extension_name()) => field()},
           optional(:roots) => [message_name()],
-          optional(:root_names) => %{optional(message_name()) => atom()}
+          optional(:root_names) => %{optional(message_name()) => atom()},
+          optional(:plugins) => [{module(), keyword()}],
+          optional(module()) => term()
         }
 
   @typedoc "Fully-qualified protobuf message name."
@@ -72,7 +78,8 @@ defmodule PB.Schema.Compiled do
           required(:by_number) => %{optional(integer()) => atom()},
           required(:default) => atom() | integer(),
           required(:features) => map(),
-          optional(:package) => atom() | nil
+          optional(:package) => atom() | nil,
+          optional(module()) => term()
         }
 
   @typedoc "Compiled protobuf oneof metadata."
@@ -80,7 +87,8 @@ defmodule PB.Schema.Compiled do
           required(:name) => field_name(),
           required(:fields) => [field_name()],
           optional(:term_by_struct) => %{optional(module()) => field_name()},
-          optional(:options) => map()
+          optional(:options) => map(),
+          optional(module()) => term()
         }
 
   @typedoc "Compiled extension range metadata."
@@ -115,8 +123,8 @@ defmodule PB.Schema.Compiled do
           optional(:adapter) => PB.Adapter.t(),
           optional(:enum) => enum(),
           optional(:packed_tag) => iodata(),
-          optional(:validate) => term(),
-          optional(:options) => map()
+          optional(:options) => map(),
+          optional(module()) => term()
         }
 
   @typedoc "Compiled protobuf message metadata."
@@ -141,8 +149,8 @@ defmodule PB.Schema.Compiled do
           optional(:reserved_names) => [binary()],
           optional(:reserved_ranges) => [extension_range()],
           optional(:projection) => PB.Schema.Projection.t(),
-          optional(:validate) => term(),
-          optional(:options) => map()
+          optional(:options) => map(),
+          optional(module()) => term()
         }
 
   @typedoc "Compiled protobuf service method metadata."
