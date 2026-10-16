@@ -56,6 +56,29 @@ defmodule CEL.ProgramTest do
     end
   end
 
+  test "Env.build/1 rejects message and enum types it cannot resolve, with or without :types" do
+    args = [{:list, {:enum, "pkg.E"}}]
+    overload = %CEL.Function.Overload{id: "f_list", args: args, result: :int}
+    function = %CEL.Function{name: "f", overloads: [overload]}
+
+    for types <- [[], [types: PB.CEL.types(PB.TestSupport.TestSchema)]] do
+      for {opts, pattern} <- [
+            {[vars: [x: {:message, "pkg.Nope"}]],
+             ~r/:vars: unknown message or enum type pkg.Nope in variable "x"/},
+            {[vars: %{"m" => {:map, :string, {:message, :"pkg.M"}}}],
+             ~r/:vars: unknown message or enum type pkg.M in variable "m"/},
+            {[functions: [function]],
+             ~r/:functions: unknown message or enum type pkg.E in "f" overload "f_list"/}
+          ] do
+        assert_raise CEL.OptionError, pattern, fn -> Env.build(types ++ opts) end
+      end
+    end
+
+    vars = [t: {:message, "google.protobuf.Timestamp"}, s: {:message, :"google.protobuf.Struct"}]
+    builtins = [t: :timestamp, s: {:map, :string, :dyn}]
+    assert Env.build(vars: vars).vars == Env.build(vars: builtins).vars
+  end
+
   test "Env.build/1 with only :types reads PB messages" do
     env =
       Env.build(

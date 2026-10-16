@@ -200,18 +200,6 @@ defmodule CEL.CheckerTest do
     assert ref(checked, checked.expr.id).overload_id == ["select_map"]
   end
 
-  test "keeps unchecked message selects on the dynamic path" do
-    checked = CEL.check!("msg.field", env(vars: %{"msg" => CType.message("example.Unknown")}))
-
-    assert root_type(checked) == CType.dyn()
-    assert ref(checked, checked.expr.id).overload_id == ["select_dyn"]
-
-    assert {:select, op} = Checked.op(checked, checked.expr)
-    assert op.kind == :dyn_field
-    refute Map.has_key?(op, :message)
-    refute Map.has_key?(op, :cel_field)
-  end
-
   test "uses schema-backed protobuf field types" do
     msg_type = CType.message("cel.expr.conformance.proto3.TestAllTypes")
 

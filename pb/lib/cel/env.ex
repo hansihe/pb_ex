@@ -20,13 +20,11 @@ defmodule CEL.Env do
   alias CEL.TypeProvider
   alias CEL.WellKnownTypes
 
-  @no_types {TypeProvider.Empty, nil}
-
   defstruct vars: %{},
             functions: [],
             container: "",
             abbreviations: %{},
-            types: @no_types,
+            types: {TypeProvider.Empty, nil},
             validate_literals: []
 
   @typedoc "An environment; build one with `build/1`."
@@ -64,7 +62,9 @@ defmodule CEL.Env do
       `t:CEL.TypeProvider.t/0`, such as `PB.CEL.types/1` returns for a
       protobuf schema. Without it there are none. Message and enum names in
       `:vars` and `:functions` may be atoms or strings; each is resolved
-      through the provider, and an unknown one raises.
+      through the provider, and an unknown one raises, with or without a
+      provider. The well-known types CEL builds in, such as
+      `google.protobuf.Timestamp`, need no provider.
     * `:container` — the package names are resolved in, as with `container`
       in other CEL implementations: with `"my.pkg"`, `User` resolves to
       `my.pkg.User`.
@@ -188,36 +188,38 @@ defmodule CEL.Env do
           invalid_option!(:vars, type, "#{inspect(name)} has no CEL.Type: #{inspect(type)}")
       end
 
-    resolve_names!(env, :vars, type)
+    resolve_names!(env, {:vars, "variable #{inspect(normalize_name(name))}"}, type)
   end
 
   # Message and enum names a declaration spells as atoms or strings become the
-  # provider's, and the well-known types CEL's own. With no provider, names are
-  # left as written.
-  defp resolve_names!(env, option, {tag, name}) when tag in [:message, :enum] do
-    cond do
-      builtin = WellKnownTypes.builtin_type(to_string(name)) -> CType.from_input(builtin)
-      env.types == @no_types -> {tag, name}
-      true -> {tag, resolve_name!(env, option, name)}
+  # provider's, and the well-known types CEL's own. `decl` is the option and
+  # the declaration an unknown name is reported in.
+  defp resolve_names!(env, decl, {tag, name}) when tag in [:message, :enum] do
+    case WellKnownTypes.builtin_type(to_string(name)) do
+      nil -> {tag, resolve_name!(env, decl, name)}
+      builtin -> CType.from_input(builtin)
     end
   end
 
-  defp resolve_names!(env, option, types) when is_list(types),
-    do: Enum.map(types, &resolve_names!(env, option, &1))
+  defp resolve_names!(env, decl, types) when is_list(types),
+    do: Enum.map(types, &resolve_names!(env, decl, &1))
 
-  defp resolve_names!(env, option, type) when is_tuple(type) do
+  defp resolve_names!(env, decl, type) when is_tuple(type) do
     type
     |> Tuple.to_list()
-    |> Enum.map(&resolve_names!(env, option, &1))
+    |> Enum.map(&resolve_names!(env, decl, &1))
     |> List.to_tuple()
   end
 
-  defp resolve_names!(_env, _option, type), do: type
+  defp resolve_names!(_env, _decl, type), do: type
 
-  defp resolve_name!(env, option, name) do
+  defp resolve_name!(env, {option, declaration}, name) do
     case find_type(env, to_string(name)) do
-      {:ok, _kind, resolved} -> resolved
-      :error -> invalid_option!(option, name, "unknown message or enum type #{name}")
+      {:ok, _kind, resolved} ->
+        resolved
+
+      :error ->
+        invalid_option!(option, name, "unknown message or enum type #{name} in #{declaration}")
     end
   end
 
@@ -326,10 +328,12 @@ defmodule CEL.Env do
       invalid_signature!(function, overload, :result, overload.result)
     end
 
+    decl = {:functions, "#{inspect(function.name)} overload #{inspect(overload.id)}"}
+
     overload = %{
       overload
-      | args: resolve_names!(env, :functions, overload.args),
-        result: resolve_names!(env, :functions, overload.result)
+      | args: resolve_names!(env, decl, overload.args),
+        result: resolve_names!(env, decl, overload.result)
     }
 
     normalize_overload(overload, function)

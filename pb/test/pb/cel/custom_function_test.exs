@@ -139,7 +139,7 @@ defmodule CEL.CustomFunctionTest do
       overloads: [%Overload{id: "f_msg", args: [{:message, "pkg.Nope"}], result: :int}]
     }
 
-    assert_raise CEL.OptionError, ~r/:functions: unknown message or enum type pkg.Nope/, fn ->
+    assert_raise CEL.OptionError, ~r/:functions: unknown message or enum type pkg.Nope in "f" overload "f_msg"/, fn ->
       env(types: types, functions: [function])
     end
   end

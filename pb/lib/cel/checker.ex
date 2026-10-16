@@ -656,10 +656,10 @@ defmodule CEL.Checker do
     {:error, "field selection is not defined for #{CType.format(type)}"}
   end
 
-  # A message type the provider does not know, such as one declared without a
-  # provider, or a well-known type, is selected from as `dyn`. A
-  # backtick-quoted, fully-qualified selector (`msg.`pkg.ext_name``) names a
-  # proto2 extension, which the provider finds by that name.
+  # A message type the provider does not know, such as a well-known type, is
+  # selected from as `dyn`. A backtick-quoted, fully-qualified selector
+  # (`msg.`pkg.ext_name``) names a proto2 extension, which the provider finds
+  # by that name.
   defp message_field(state, message, field) do
     with false <- WellKnownTypes.literal_message?(message),
          :error <- Env.find_field(state.env, message, field),
