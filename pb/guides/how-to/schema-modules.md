@@ -2,7 +2,7 @@
 
 For a stable schema — the common case — define a **schema module** to compile and
 embed it when your application compiles. This is the path most applications should
-use: you get the full encode/decode/validate API without reading and compiling a
+use: you get the full encode/decode API without reading and compiling a
 descriptor set at runtime. Runtime schema maps (`PB.compile/1`) remain available
 and are the right choice when a schema is loaded or selected dynamically.
 
@@ -32,8 +32,8 @@ source `.proto` files.
 
 ## Use it
 
-The module exposes the encode/decode/validate API with the schema baked in, so
-you only pass the message name:
+The module exposes the encode/decode API with the schema baked in, so you only
+pass the message name:
 
 ```elixir
 {:ok, binary} = MyApp.Schema.encode(%{name: "Alice", id: 42}, :"mypackage.Person")
@@ -42,8 +42,8 @@ you only pass the message name:
 
 The generated functions are `schema/0`, `__pb_schema__/0`, `encode/2,3`,
 `encode!/2,3`, `encode_iodata/2,3`, `encode_iodata!/2,3`, `decode/2,3`,
-`decode!/2,3`, `normalize/2,3`, `normalize!/2,3`, `validate/2,3`, and
-`validate!/2,3`.
+`decode!/2,3`, `normalize/2,3`, and `normalize!/2,3`. Plugins may add more; see
+below.
 
 The top-level `PB.encode/4` and `PB.decode/4` also accept a schema module
 directly in place of a compiled schema map, so library code can stay agnostic
@@ -63,6 +63,22 @@ the two things proto source can't carry: **adapters** (they need code, like the
 
 See [Decoding into structs](structs-and-representation.md) and
 [Adapters and well-known types](adapters-and-well-known-types.md).
+
+## Plugins
+
+The optional `:plugins` value is passed to `PB.compile/2` too. A plugin compiles
+its own data into the embedded schema, and may add functions to the module.
+With `PB.Validate`, the module gets `validate/2,3` and `validate!/2,3`:
+
+```elixir
+defmodule MyApp.Schema do
+  use PB.Schema, descriptor: "priv/proto/schema.binpb", plugins: [PB.Validate]
+end
+
+:ok = MyApp.Schema.validate(%{name: "Alice"}, :"mypackage.Person")
+```
+
+See [Validating with protovalidate](validation.md) and `PB.Schema.Plugin`.
 
 ## Hand-authored schemas (tests, fixtures)
 

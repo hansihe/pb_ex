@@ -21,7 +21,30 @@ message Person {
 ```
 
 Generate the descriptor set with `--include_imports` so the validation
-descriptors travel with it, then compile as usual.
+descriptors travel with it.
+
+## Compile the rules
+
+`PB.Validate` is a schema plugin (`PB.Schema.Plugin`): list it in `:plugins`
+when you compile the schema, and it compiles the rules into the schema once,
+type-checking every CEL expression:
+
+```elixir
+schema = PB.compile(descriptor_set, plugins: [PB.Validate])
+```
+
+or, for a schema module:
+
+```elixir
+defmodule MyApp.Schema do
+  use PB.Schema, descriptor: "priv/proto/schema.binpb", plugins: [PB.Validate]
+end
+```
+
+Rules that don't fit the schema, such as CEL that doesn't type-check or string
+rules on an integer field, raise `PB.Validate.CompileError` there. A schema
+compiled without the plugin can still encode and decode, but `PB.Validate`
+rejects it with an `ArgumentError`.
 
 ## Validate a message
 
@@ -37,7 +60,12 @@ end
 ```
 
 `validate/3` returns `:ok` or `{:error, %PB.Validate.Error{}}`. A bang variant
-`validate!/3` raises on violations. Schema modules expose `validate/2,3` directly.
+`validate!/3` raises on violations. Schema modules compiled with the plugin
+expose `validate/2,3` and `validate!/2,3` directly:
+
+```elixir
+:ok = MyApp.Schema.validate(person, :"mypackage.Person")
+```
 
 The input is the same public term shape accepted by `PB.encode/4`: canonical maps,
 represented structs, identity oneofs, unwrapped messages, and adapted values are

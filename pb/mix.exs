@@ -122,7 +122,8 @@ defmodule PB.MixProject do
       "Schema & introspection": [
         PB.Schema,
         PB.Schema.Info,
-        PB.Schema.Projection
+        PB.Schema.Projection,
+        PB.Schema.Plugin
       ],
       "Representation & adapters": [
         PB.Adapter,

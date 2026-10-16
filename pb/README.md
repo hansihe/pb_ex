@@ -60,7 +60,8 @@ walkthrough.
   values, and map messages to native Elixir values with adapters.
 - **ProtoJSON** — `PB.JSON`.
 - **Text format** — `PB.TextFormat`.
-- **protovalidate** validation — `PB.Validate`.
+- **protovalidate** validation — `PB.Validate`, a schema plugin
+  (`plugins: [PB.Validate]`).
 - **CEL** expressions over protobuf messages — `PB.CEL`, a type provider for
   [`cel_ex`](https://hexdocs.pm/cel_ex)'s `CEL`.
 - **Schema introspection** for messages, enums, services, and extensions —

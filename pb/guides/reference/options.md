@@ -14,6 +14,7 @@ keeps unknown fields, as protobuf requires.
 | Option | Values | Default | Notes |
 |--------|--------|---------|-------|
 | `:projections` | list of `{fqn, opts}` | `[]` | Message-level adapters and structural representation. See below. |
+| `:plugins` | list of `module \| {module, opts}` | `[]` | `PB.Schema.Plugin`s that compile their own data into the schema, such as `PB.Validate`. |
 
 Each `:projections` entry pairs a fully-qualified message name with a keyword
 list. `adapter:` is mutually exclusive with the structural keys:
@@ -76,7 +77,11 @@ See [Decoding into structs](../how-to/structs-and-representation.md) and
 | `:short_repeated` | `boolean` | `false` |
 | `:print_unknown_fields` | `boolean` | `true` |
 
+`use PB.Schema` accepts `:projections` and `:plugins` with the same meaning.
+
 ## `PB.Validate.validate/4`
+
+The schema must be compiled with `plugins: [PB.Validate]`.
 
 | Option | Values | Notes |
 |--------|--------|-------|
