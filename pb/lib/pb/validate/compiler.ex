@@ -18,7 +18,7 @@ defmodule PB.Validate.Compiler do
   # `PB.Validate.Compiler.Context` (the user schema plus the once-built merged
   # standard-rule schema) through the field compiler.
 
-  alias PB.CEL.ProtoType
+  alias CEL.ProtoType
   alias PB.Validate.Compiler.CEL
   alias PB.Validate.Compiler.Context
   alias PB.Validate.Compiler.Extensions

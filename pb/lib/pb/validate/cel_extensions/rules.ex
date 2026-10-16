@@ -4,9 +4,9 @@ defmodule PB.Validate.CELExtensions.Rules do
   alias PB.CEL.FieldReader
   alias PB.CEL.MessageSchema, as: Schema
 
-  @type result :: {:ok, PB.CEL.Value.t()} | {:error, String.t()}
+  @type result :: {:ok, CEL.Value.t()} | {:error, String.t()}
 
-  @spec get_field([PB.CEL.Value.t()], PB.schema()) :: result
+  @spec get_field([CEL.Value.t()], PB.schema()) :: result
   def get_field([{:message, message, fields}, {:string, field}], schema) do
     with {:ok, msg} <- Schema.fetch_message(schema, message),
          {:ok, field_name, info} <- fetch_field(msg, field),
@@ -20,9 +20,9 @@ defmodule PB.Validate.CELExtensions.Rules do
 
   def get_field(_values, _schema), do: {:error, "no such overload"}
 
-  @spec unique([PB.CEL.Value.t()], PB.schema()) :: result
+  @spec unique([CEL.Value.t()], PB.schema()) :: result
   def unique([{:list, values}], schema) do
-    {:ok, PB.CEL.Value.bool(unique_values?(values, schema))}
+    {:ok, CEL.Value.bool(unique_values?(values, schema))}
   end
 
   def unique(_values, _schema), do: {:error, "no such overload"}
@@ -40,7 +40,7 @@ defmodule PB.Validate.CELExtensions.Rules do
 
   defp unique_value?(value, rest, schema) do
     Enum.all?(rest, fn candidate ->
-      not PB.CEL.Runtime.Core.equal?(value, candidate, schema)
+      not CEL.Runtime.Core.equal?(value, candidate, schema)
     end)
   end
 end

@@ -1,7 +1,6 @@
 defmodule PB.Validate.CELExtensionsTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
   alias PB.Validate.CELExtensions
 
   defp eval(source) do

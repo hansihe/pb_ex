@@ -12,14 +12,14 @@ defmodule PB.Validate do
   message shape, and projection failures return the `PB.Error` struct
   `PB.encode/4` would (`PB.SchemaError` or `PB.ValueError`, with
   `operation: :validate`); a CEL rule that fails to evaluate returns
-  `PB.CEL.Error`. Those are errors rather than protovalidate violations, so
+  `CEL.Error`. Those are errors rather than protovalidate violations, so
   they are not `PB.Validate.Error`s.
 
   Schemas may be supplied either as a compiled schema map or as a module that
   `use PB.Schema`.
   """
 
-  alias PB.CEL.Evaluator
+  alias CEL.Evaluator
   alias PB.CEL.Schema.Field
   alias PB.CEL.FieldReader
   alias PB.CEL.MessageRuntime, as: CELMessage
@@ -39,7 +39,7 @@ defmodule PB.Validate do
 
   @message_name_key :__message_name__
 
-  @type result :: :ok | {:error, Error.t() | PB.Error.t() | PB.CEL.Error.t()}
+  @type result :: :ok | {:error, Error.t() | PB.Error.t() | CEL.Error.t()}
   @typep validation_result :: :ok | {:error, Error.t()}
   @typep message_context :: %{
            required(:schema) => PB.schema(),
@@ -63,7 +63,7 @@ defmodule PB.Validate do
   Rule failures return `{:error, %PB.Validate.Error{}}`. Option failures return
   `{:error, %PB.OptionError{}}`, and unknown messages or values that do not
   match the message shape the `PB.Error` struct `PB.encode/4` would. A CEL rule
-  that fails to evaluate returns `{:error, %PB.CEL.Error{}}`.
+  that fails to evaluate returns `{:error, %CEL.Error{}}`.
 
   Accepted options:
 
@@ -87,7 +87,7 @@ defmodule PB.Validate do
     RuntimeErrors.normalize_result(result, :validate, message_name)
   rescue
     # Rules are evaluated by raising on the first error; the API returns it.
-    error in [PB.SchemaError, PB.ValueError, PB.AdapterError, PB.CEL.Error] ->
+    error in [PB.SchemaError, PB.ValueError, PB.AdapterError, CEL.Error] ->
       {:error, RuntimeErrors.to_error(error, :validate, message_name)}
   end
 
@@ -614,7 +614,7 @@ defmodule PB.Validate do
         ]
 
       {:ok, other} ->
-        raise PB.CEL.Error,
+        raise CEL.Error,
           phase: :eval,
           message: "validation rule #{inspect(op.id)} returned non-boolean #{inspect(other)}"
 

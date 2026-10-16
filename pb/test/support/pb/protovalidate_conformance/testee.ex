@@ -181,7 +181,7 @@ defmodule PB.TestSupport.ProtovalidateConformance.Testee do
   defp validation_result({:error, %PB.Validate.Error{} = error}),
     do: %{result: {:validation_error, PB.Validate.to_proto_violations(error)}}
 
-  defp validation_result({:error, %PB.CEL.Error{} = error}),
+  defp validation_result({:error, %CEL.Error{} = error}),
     do: runtime_error(Exception.message(error))
 
   defp validation_result({:error, error}), do: unexpected_error(Exception.message(error))

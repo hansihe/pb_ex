@@ -64,7 +64,7 @@ defmodule PB.MixProject do
       nest_modules_by_prefix: [
         PB.Schema,
         PB.WellKnownTypes,
-        PB.CEL,
+        CEL,
         PB.Validate
       ]
     ]
@@ -128,27 +128,27 @@ defmodule PB.MixProject do
         PB.WellKnownTypes
       ],
       CEL: [
-        PB.CEL,
-        PB.CEL.Env,
-        PB.CEL.Program,
-        PB.CEL.Checked,
-        PB.CEL.Expr,
-        PB.CEL.Function,
-        PB.CEL.Function.Overload,
-        PB.CEL.Type,
-        PB.CEL.Value,
-        PB.CEL.Unknown
+        CEL,
+        CEL.Env,
+        CEL.Program,
+        CEL.Checked,
+        CEL.Expr,
+        CEL.Function,
+        CEL.Function.Overload,
+        CEL.Type,
+        CEL.Value,
+        CEL.Unknown
       ],
       "CEL expression view": [
-        PB.CEL.Expr.Const,
-        PB.CEL.Expr.Ident,
-        PB.CEL.Expr.Select,
-        PB.CEL.Expr.Call,
-        PB.CEL.Expr.MacroCall,
-        PB.CEL.Expr.ListLiteral,
-        PB.CEL.Expr.MapLiteral,
-        PB.CEL.Expr.MessageLiteral,
-        PB.CEL.Expr.Comprehension
+        CEL.Expr.Const,
+        CEL.Expr.Ident,
+        CEL.Expr.Select,
+        CEL.Expr.Call,
+        CEL.Expr.MacroCall,
+        CEL.Expr.ListLiteral,
+        CEL.Expr.MapLiteral,
+        CEL.Expr.MessageLiteral,
+        CEL.Expr.Comprehension
       ],
       Validation: [
         PB.Validate,
@@ -162,7 +162,7 @@ defmodule PB.MixProject do
         PB.DecodeError,
         PB.OptionError,
         PB.AdapterError,
-        PB.CEL.Error,
+        CEL.Error,
         PB.Validate.CompileError
       ]
     ]

@@ -1,5 +1,5 @@
-defmodule PB.CEL.LeafBoundaryTest do
-  # The CEL leaf (`lib/pb/cel.ex` and `lib/pb/cel/`) is on its way to its own
+defmodule CEL.LeafBoundaryTest do
+  # The CEL leaf (`lib/cel.ex` and `lib/cel/`) is on its way to its own
   # project and must not depend on protobuf: its modules may only reference each
   # other, the Elixir and Erlang standard libraries, and the allowlist below.
   # Leaf modules are told from the protobuf binding's `PB.CEL.*` modules
@@ -12,19 +12,19 @@ defmodule PB.CEL.LeafBoundaryTest do
   # {leaf module, referenced module} => why the reference stays for now.
   @allowed %{
     # `schema:` defaults the providers to the protobuf binding, which
-    # `PB.CEL.Env.build/1` callers rely on; resolved in step 2 of the split.
-    {PB.CEL.Env, PB.CEL.MessageSchema} => :env_schema_default,
-    {PB.CEL.Env, PB.CEL.MessageRuntime} => :env_schema_default,
+    # `CEL.Env.build/1` callers rely on; resolved in step 2 of the split.
+    {CEL.Env, PB.CEL.MessageSchema} => :env_schema_default,
+    {CEL.Env, PB.CEL.MessageRuntime} => :env_schema_default,
     # Option errors are raised as `PB.OptionError`, as documented.
-    {PB.CEL.Env, PB.OptionError} => :public_exception,
-    {PB.CEL.Options, PB.OptionError} => :public_exception
+    {CEL.Env, PB.OptionError} => :public_exception,
+    {CEL.Options, PB.OptionError} => :public_exception
   }
 
   @root Path.expand("../../..", __DIR__)
 
   test "the CEL leaf references only itself, the standard library and the allowlist" do
     leaf = leaf_modules()
-    assert PB.CEL in leaf and PB.CEL.Value in leaf
+    assert CEL in leaf and CEL.Value in leaf
     refute PB.CEL.MessageRuntime in leaf
 
     violations =
@@ -74,8 +74,8 @@ defmodule PB.CEL.LeafBoundaryTest do
     Path.relative_to(source, @root)
   end
 
-  defp leaf_file?("lib/pb/cel.ex"), do: true
-  defp leaf_file?("lib/pb/cel/" <> _rest), do: true
+  defp leaf_file?("lib/cel.ex"), do: true
+  defp leaf_file?("lib/cel/" <> _rest), do: true
   defp leaf_file?(_path), do: false
 
   defp references(module) do

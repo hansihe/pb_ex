@@ -1,12 +1,11 @@
-defmodule PB.CEL.AbbreviationsTest do
+defmodule CEL.AbbreviationsTest do
   # Mirrors cel-go's common/containers/container_test.go and the TestAbbrevs*
   # tests in cel/cel_test.go.
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Checked
-  alias PB.CEL.Env
-  alias PB.CEL.Expr.Ident
+  alias CEL.Checked
+  alias CEL.Env
+  alias CEL.Expr.Ident
 
   @proto3 "cel.expr.conformance.proto3"
 
@@ -103,7 +102,7 @@ defmodule PB.CEL.AbbreviationsTest do
         assert resolved_name("GlobalEnum", env) == "#{@proto3}.GlobalEnum"
         assert CEL.eval!("GlobalEnum(2) == GlobalEnum.GAZ", %{}, env) == {:bool, true}
 
-        assert %PB.CEL.Expr.Call{function: "#{@proto3}.GlobalEnum"} =
+        assert %CEL.Expr.Call{function: "#{@proto3}.GlobalEnum"} =
                  "GlobalEnum(2)" |> CEL.check!(env) |> Checked.expr()
       end
     end
@@ -123,7 +122,7 @@ defmodule PB.CEL.AbbreviationsTest do
     test "an abbreviated message literal" do
       env = env(abbreviations: ["#{@proto3}.TestAllTypes"])
 
-      assert %PB.CEL.Expr.MessageLiteral{message: "#{@proto3}.TestAllTypes"} =
+      assert %CEL.Expr.MessageLiteral{message: "#{@proto3}.TestAllTypes"} =
                "TestAllTypes{}" |> CEL.check!(env) |> Checked.expr()
     end
   end

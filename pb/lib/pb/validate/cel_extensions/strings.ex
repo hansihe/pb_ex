@@ -1,7 +1,7 @@
 defmodule PB.Validate.CELExtensions.Strings do
   @moduledoc false
 
-  alias PB.CEL.Value
+  alias CEL.Value
   import Bitwise, only: [<<<: 2]
 
   @type result :: {:ok, Value.t()} | {:error, String.t()}

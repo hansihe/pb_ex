@@ -1,10 +1,10 @@
-defmodule PB.CEL.ValueTest do
+defmodule CEL.ValueTest do
   use ExUnit.Case, async: true
 
-  doctest PB.CEL.Value
+  doctest CEL.Value
 
-  alias PB.CEL.ProtoType
-  alias PB.CEL.Value
+  alias CEL.ProtoType
+  alias CEL.Value
   alias PB.CEL.MessageRuntime
   alias PB.CEL.MessageSchema
   alias PB.WellKnownTypes.Codec, as: WKTCodec
@@ -14,8 +14,8 @@ defmodule PB.CEL.ValueTest do
     assert Value.infer(%{"a" => [1, nil]}) ==
              {:ok, Value.map(%{Value.string("a") => Value.list([Value.int(1), Value.null()])})}
 
-    env = PB.CEL.Env.build(vars: %{x: :dyn})
-    assert PB.CEL.eval(~S|x.a + x["b"]|, %{x: %{"a" => 1, "b" => 2}}, env) == {:ok, Value.int(3)}
+    env = CEL.Env.build(vars: %{x: :dyn})
+    assert CEL.eval(~S|x.a + x["b"]|, %{x: %{"a" => 1, "b" => 2}}, env) == {:ok, Value.int(3)}
   end
 
   test "decodes cel.expr.ExprValue and cel.expr.Value scalars" do
@@ -202,7 +202,7 @@ defmodule PB.CEL.ValueTest do
 
     test "turns a type value into its name" do
       assert Value.to_native({:type, ProtoType.null()}) == "null_type"
-      assert Value.to_native(PB.CEL.eval!("[type(1), type(optional.of(1))]")) ==
+      assert Value.to_native(CEL.eval!("[type(1), type(optional.of(1))]")) ==
                ["int", "optional_type"]
     end
   end
@@ -224,13 +224,13 @@ defmodule PB.CEL.ValueTest do
             {"type(timestamp(0))", "google.protobuf.Timestamp"},
             {"type(duration('1s'))", "google.protobuf.Duration"}
           ] do
-        assert source |> PB.CEL.eval!() |> Value.type_name() == name, source
+        assert source |> CEL.eval!() |> Value.type_name() == name, source
       end
     end
 
     test "gives a message's or enum's full name" do
       env =
-        PB.CEL.Env.build(
+        CEL.Env.build(
           schema: PB.TestSupport.TestSchema,
           container: "cel.expr.conformance.proto3"
         )
@@ -239,7 +239,7 @@ defmodule PB.CEL.ValueTest do
             {"type(TestAllTypes{})", "cel.expr.conformance.proto3.TestAllTypes"},
             {"type(GlobalEnum.GAZ)", "cel.expr.conformance.proto3.GlobalEnum"}
           ] do
-        assert source |> PB.CEL.eval!(%{}, env) |> Value.type_name() == name
+        assert source |> CEL.eval!(%{}, env) |> Value.type_name() == name
       end
     end
 
@@ -251,10 +251,10 @@ defmodule PB.CEL.ValueTest do
             "type({1: 'a'}) == map",
             "[type(optional.of('a'))].exists(t, t == optional_type)"
           ] do
-        assert PB.CEL.eval!(source) == {:bool, true}, source
+        assert CEL.eval!(source) == {:bool, true}, source
       end
 
-      assert PB.CEL.eval!("type(1) == type(1u)") == {:bool, false}
+      assert CEL.eval!("type(1) == type(1u)") == {:bool, false}
     end
   end
 end

@@ -51,7 +51,7 @@ A *violation* (a rule that the message failed) is data: it comes back in
 raised instead — an unknown validation message, a message-name metadata mismatch,
 non-map input, or a projection failure raises a `PB.Error`
 (`PB.SchemaError`/`PB.ValueError`) with `operation: :validate`, and a CEL
-constraint that fails at runtime raises `PB.CEL.Error`. Match on
+constraint that fails at runtime raises `CEL.Error`. Match on
 `%PB.Validate.Violation{}` for rule results; let contract errors surface.
 
 ## Conformance

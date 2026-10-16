@@ -1,12 +1,11 @@
-defmodule PB.CEL.UnknownTest do
+defmodule CEL.UnknownTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Error
-  alias PB.CEL.Function
-  alias PB.CEL.Function.Overload
-  alias PB.CEL.Unknown
-  alias PB.CEL.Value
+  alias CEL.Error
+  alias CEL.Function
+  alias CEL.Function.Overload
+  alias CEL.Unknown
+  alias CEL.Value
 
   defmodule Handlers do
     def lookup([{:string, "missing"}]), do: {:unknown, :not_fetched}

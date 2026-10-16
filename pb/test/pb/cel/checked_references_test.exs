@@ -1,11 +1,10 @@
-defmodule PB.CEL.CheckedReferencesTest do
+defmodule CEL.CheckedReferencesTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Checked
-  alias PB.CEL.Function
-  alias PB.CEL.Function.Overload
-  alias PB.CEL.Value
+  alias CEL.Checked
+  alias CEL.Function
+  alias CEL.Function.Overload
+  alias CEL.Value
 
   defp env do
     udf = %Function{

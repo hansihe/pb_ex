@@ -10,17 +10,17 @@ For evaluating expressions, see [Evaluating CEL expressions](cel.md).
 
 ## Declare and register
 
-A function is a `PB.CEL.Function` with one or more `PB.CEL.Function.Overload`s.
+A function is a `CEL.Function` with one or more `CEL.Function.Overload`s.
 Each overload carries its argument and result types plus an optional `:eval`
 target. The target must be a `{Module, function}` tuple; closures and
 anonymous functions are rejected, so environments stay introspectable.
 
 ```elixir
-alias PB.CEL.Function
-alias PB.CEL.Function.Overload
+alias CEL.Function
+alias CEL.Function.Overload
 
 defmodule MyHandlers do
-  # Receives the list of evaluated PB.CEL.Value arguments.
+  # Receives the list of evaluated CEL.Value arguments.
   def greet([{:string, name}]), do: {:ok, {:string, "Hello, " <> name}}
 end
 
@@ -36,8 +36,8 @@ function = %Function{
   ]
 }
 
-env = PB.CEL.Env.build(functions: [function])
-{:ok, value} = PB.CEL.eval(~s|greet("world")|, %{}, env)
+env = CEL.Env.build(functions: [function])
+{:ok, value} = CEL.eval(~s|greet("world")|, %{}, env)
 # => {:ok, {:string, "Hello, world"}}
 ```
 
@@ -46,7 +46,7 @@ env = PB.CEL.Env.build(functions: [function])
 `:modes` says how expressions call the function: `:global` (`greet(x)`, the
 default), `:receiver` (`x.greet()`, with `x` as the first argument) or
 `{:namespace, "ns"}` (`ns.greet(x)`). Argument and result types are
-`PB.CEL.Type` shorthand; `{:param, "T"}` is a type parameter that must be the
+`CEL.Type` shorthand; `{:param, "T"}` is a type parameter that must be the
 same type everywhere it appears:
 
 ```elixir
@@ -67,31 +67,31 @@ same type everywhere it appears:
 
 ## Results
 
-Results come back as tagged `PB.CEL.Value` terms (so `int`/`uint` and
-`string`/`bytes` stay distinct). Call `PB.CEL.Value.to_native/1` when you just
+Results come back as tagged `CEL.Value` terms (so `int`/`uint` and
+`string`/`bytes` stay distinct). Call `CEL.Value.to_native/1` when you just
 want a plain Elixir value:
 
 ```elixir
-PB.CEL.Value.to_native(value)
+CEL.Value.to_native(value)
 # => "Hello, world"
 ```
 
 ## The eval contract
 
-- The target receives **one argument**: the list of evaluated `PB.CEL.Value`
+- The target receives **one argument**: the list of evaluated `CEL.Value`
   arguments. For receiver-mode calls (`x.greet(y)`) the target value is prepended
   to that list.
 - It must return `{:ok, value} | {:unknown, reason} | {:error, reason}`, with
-  `value` a `PB.CEL.Value` of the declared result type. Nothing checks the
+  `value` a `CEL.Value` of the declared result type. Nothing checks the
   value against that type, so build it with the constructors: an `{:enum,
-  "pkg.Enum"}` result is `PB.CEL.Value.enum("pkg.Enum", number)`, which is
+  "pkg.Enum"}` result is `CEL.Value.enum("pkg.Enum", number)`, which is
   also how enum arguments arrive.
   `{:unknown, reason}` makes the call's result unknown; `reason` is any term and
-  is reported in the `PB.CEL.Unknown` entry `{{:call, name, expr_id}, reason}`.
+  is reported in the `CEL.Unknown` entry `{{:call, name, expr_id}, reason}`.
 - The function is not called when an argument is an error or unknown; the call
   returns that error or unknown instead. Set `strict: false` on the overload to
-  be called anyway: such arguments then arrive as `{:error, %PB.CEL.Error{}}` and
-  `{:unknown, %PB.CEL.Unknown{}}`, and returning one of them passes it through
+  be called anyway: such arguments then arrive as `{:error, %CEL.Error{}}` and
+  `{:unknown, %CEL.Unknown{}}`, and returning one of them passes it through
   unchanged. A non-strict
   function that turns an unknown into a value decides the result without that
   input, so the result no longer reflects that the input was unknown.
@@ -123,7 +123,7 @@ PB.CEL.Value.to_native(value)
   function, the overload the checker chose and the call site, so one handler
   can serve several registered functions. `name` includes the namespace for
   namespaced calls (`ns.fn`). `expr_id` is the call's expression id, the same
-  one `PB.CEL.Checked.references/1` reports for the call and `PB.CEL.Unknown`
+  one `CEL.Checked.references/1` reports for the call and `CEL.Unknown`
   uses in `{:call, name, expr_id}`, so results computed per call site before
   evaluation can be looked up by it.
   Context arguments follow in the order the list gives them:
@@ -157,7 +157,7 @@ PB.CEL.Value.to_native(value)
 
 ## Using the function in validation
 
-The same `PB.CEL.Env` mechanism backs protovalidate `cel` rules. Register your
+The same `CEL.Env` mechanism backs protovalidate `cel` rules. Register your
 functions on the environment PB uses to evaluate validation expressions, then
 reference them by name in your `(buf.validate.field).cel` expressions. See
 [Validating with protovalidate](validation.md).

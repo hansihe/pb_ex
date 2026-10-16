@@ -1,7 +1,5 @@
-defmodule PB.CEL.SelectTest do
+defmodule CEL.SelectTest do
   use ExUnit.Case, async: true
-
-  alias PB.CEL
 
   @msg "cel.expr.conformance.proto3.TestAllTypes"
 

@@ -5,10 +5,9 @@ defmodule PB.Validate.Compiler.CEL do
   # Owns parsing, type-checking against a compile-time env, rule-path assignment
   # for user `cel`/`cel_expression` rules, and the `:validate` cel-op merge helper.
 
-  alias PB.CEL
-  alias PB.CEL.Checker.Types, as: CType
-  alias PB.CEL.Checked
-  alias PB.CEL.Regexes
+  alias CEL.Checker.Types, as: CType
+  alias CEL.Checked
+  alias CEL.Regexes
   alias PB.Validate.CELExtensions
   alias PB.Validate.CompileError
   alias PB.Validate.Schema, as: ValidateSchema

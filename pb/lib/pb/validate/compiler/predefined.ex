@@ -7,7 +7,7 @@ defmodule PB.Validate.Compiler.Predefined do
   # All schema lookups run against the merged standard-rule schema.
 
   alias PB.CEL.Schema.Field
-  alias PB.CEL.ProtoType
+  alias CEL.ProtoType
   alias PB.CEL.FieldReader
   alias PB.CEL.MessageRuntime, as: CELMessage
   alias PB.Validate.Compiler.CEL

@@ -1,8 +1,8 @@
-defmodule PB.CEL.Runtime.NumberTest do
+defmodule CEL.Runtime.NumberTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL.Runtime.Number
-  alias PB.CEL.Value
+  alias CEL.Runtime.Number
+  alias CEL.Value
 
   test "handles CEL special double arithmetic" do
     assert Number.arithmetic(:/, Value.double(1.0), Value.double(0.0)) ==

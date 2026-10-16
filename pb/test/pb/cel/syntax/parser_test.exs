@@ -1,8 +1,7 @@
-defmodule PB.CEL.Syntax.ParserTest do
+defmodule CEL.Syntax.ParserTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Error
+  alias CEL.Error
   alias PB.CEL.ProtoCodec
 
   test "parses binary operators with CEL precedence" do

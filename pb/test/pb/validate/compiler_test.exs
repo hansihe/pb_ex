@@ -1,7 +1,7 @@
 defmodule PB.Validate.CompilerTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL.Checked
+  alias CEL.Checked
   alias PB.Validate.CompileError
   alias PB.Validate.Schema.CELOp
   alias PB.Validate.Schema.MapRules

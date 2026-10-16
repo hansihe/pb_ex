@@ -46,7 +46,7 @@ defmodule PB.Validate.Schema do
     # no extra bindings. Predefined rules bind `"rules"` to the containing rules
     # message and `"rule"` to the concrete rule field value.
 
-    alias PB.CEL.Checked
+    alias CEL.Checked
 
     @type kind :: :message_cel | :field_cel | :predefined
     @type field_path :: PB.Validate.Path.field_path()

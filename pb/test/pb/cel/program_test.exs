@@ -1,10 +1,9 @@
-defmodule PB.CEL.ProgramTest do
+defmodule CEL.ProgramTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Env
-  alias PB.CEL.Program
-  alias PB.CEL.Value
+  alias CEL.Env
+  alias CEL.Program
+  alias CEL.Value
 
   test "check accepts an Env positionally" do
     env = Env.build(vars: %{"name" => :string})
@@ -31,21 +30,21 @@ defmodule PB.CEL.ProgramTest do
   end
 
   test "parse validates its options" do
-    assert {:ok, %{source_info: %{macro_calls: calls}}} = PB.CEL.parse("[1].all(x, x > 0)")
+    assert {:ok, %{source_info: %{macro_calls: calls}}} = CEL.parse("[1].all(x, x > 0)")
     assert map_size(calls) == 1
-    assert {:ok, %{source_info: %{macro_calls: %{}}}} = PB.CEL.parse("f(x)", macros: false)
+    assert {:ok, %{source_info: %{macro_calls: %{}}}} = CEL.parse("f(x)", macros: false)
 
     assert_raise PB.OptionError, ~r/unknown option/, fn ->
-      PB.CEL.parse("1", disable_macros: true)
+      CEL.parse("1", disable_macros: true)
     end
   end
 
   test "Env.build/1 validates its options" do
     for {opts, pattern} <- [
           {[bogus: 1], ~r/unknown option\(s\): \[:bogus\]/},
-          {[vars: [x: :nope]], ~r/:vars: :x has no PB.CEL.Type: :nope/},
+          {[vars: [x: :nope]], ~r/:vars: :x has no CEL.Type: :nope/},
           {[vars: :nope], ~r/:vars: expected a keyword list or map/},
-          {[functions: [:nope]], ~r/:functions: expected a %PB.CEL.Function\{\}/},
+          {[functions: [:nope]], ~r/:functions: expected a %CEL.Function\{\}/},
           {[container: :pkg], ~r/:container: expected a string/},
           {[message_schema: Enum], ~r/:message_schema: expected a provider module/}
         ] do
@@ -60,10 +59,10 @@ defmodule PB.CEL.ProgramTest do
         container: "cel.expr.conformance.proto3",
         vars: [n: :int]
       )
-    assert {:ok, {:bool, true}} = PB.CEL.eval("n == 1", %{n: 1}, env)
+    assert {:ok, {:bool, true}} = CEL.eval("n == 1", %{n: 1}, env)
 
     {:ok, value} =
-      PB.CEL.eval("TestAllTypes{single_int64: 3}.single_int64", %{}, env)
+      CEL.eval("TestAllTypes{single_int64: 3}.single_int64", %{}, env)
 
     assert value == {:int, 3}
   end

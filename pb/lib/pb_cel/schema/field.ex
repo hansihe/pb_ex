@@ -1,8 +1,8 @@
 defmodule PB.CEL.Schema.Field do
   @moduledoc false
 
-  alias PB.CEL.ProtoType
-  alias PB.CEL.WellKnownTypes
+  alias CEL.ProtoType
+  alias CEL.WellKnownTypes
 
   @signed_int_types [
     :TYPE_INT32,
@@ -24,7 +24,7 @@ defmodule PB.CEL.Schema.Field do
   defguard float_type?(type) when type in @float_types
   defguard message_type?(type) when type in @message_types
 
-  @spec cel_type(PB.CEL.Message.Schema.schema(), t()) :: {:ok, ProtoType.t()} | {:error, String.t()}
+  @spec cel_type(CEL.Message.Schema.schema(), t()) :: {:ok, ProtoType.t()} | {:error, String.t()}
   def cel_type(schema, %{cardinality: :map, map_key: key, map_value: value}) do
     with {:ok, key_type} <- singular_cel_type(schema, key),
          {:ok, value_type} <- singular_cel_type(schema, value) do
@@ -40,7 +40,7 @@ defmodule PB.CEL.Schema.Field do
 
   def cel_type(schema, field), do: singular_cel_type(schema, field)
 
-  @spec singular_cel_type(PB.CEL.Message.Schema.schema(), t()) ::
+  @spec singular_cel_type(CEL.Message.Schema.schema(), t()) ::
           {:ok, ProtoType.t()} | {:error, String.t()}
   def singular_cel_type(_schema, %{type: type}) when signed_int_type?(type),
     do: {:ok, ProtoType.int()}

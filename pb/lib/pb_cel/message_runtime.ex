@@ -1,22 +1,22 @@
 defmodule PB.CEL.MessageRuntime do
   @moduledoc false
 
-  # Protobuf-backed implementation of the `PB.CEL.Message.Runtime` behaviour.
+  # Protobuf-backed implementation of the `CEL.Message.Runtime` behaviour.
   #
   # This is the adapter that binds CEL evaluation to PB's protobuf message
   # representation: schema-backed field access, schema-projection/adapter
   # conversion, well-known-type conversion, raw-field normalization, and `Any`
   # packing/unpacking. It is part of the protobuf binding (`lib/pb_cel`) rather
   # than the CEL subsystem so the subsystem keeps no logic edges back to the
-  # protobuf runtime; callers inject it via `PB.CEL.Env`'s `:message_runtime`
+  # protobuf runtime; callers inject it via `CEL.Env`'s `:message_runtime`
   # (and the evaluator's `:message_runtime` option).
 
   alias PB.CEL.FieldReader
   alias PB.CEL.MessageSchema, as: Schema
-  alias PB.CEL.Runtime.Time
+  alias CEL.Runtime.Time
   alias PB.CEL.Schema.Field
-  alias PB.CEL.Value
-  alias PB.CEL.WellKnownTypes
+  alias CEL.Value
+  alias CEL.WellKnownTypes
   alias PB.Runtime.Codec
   alias PB.Runtime.Errors
   alias PB.Runtime.MessageView
@@ -30,7 +30,7 @@ defmodule PB.CEL.MessageRuntime do
 
   require Field
 
-  @behaviour PB.CEL.Message.Runtime
+  @behaviour CEL.Message.Runtime
 
   @nanos_per_second 1_000_000_000
   @json_exact_integer_limit 9_007_199_254_740_992

@@ -1,11 +1,10 @@
-defmodule PB.CEL.PositionTest do
+defmodule CEL.PositionTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Checked
-  alias PB.CEL.Env
-  alias PB.CEL.Error
-  alias PB.CEL.Expr
+  alias CEL.Checked
+  alias CEL.Env
+  alias CEL.Error
+  alias CEL.Expr
 
   defp env, do: Env.build(vars: [x: :int, l: {:list, :int}])
 

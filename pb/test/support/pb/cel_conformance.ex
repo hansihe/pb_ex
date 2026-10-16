@@ -1,15 +1,15 @@
 defmodule PB.TestSupport.CELConformance do
   @moduledoc false
 
-  alias PB.CEL.Call
-  alias PB.CEL.Checker.NameResolution
-  alias PB.CEL.Checker.TypePattern
-  alias PB.CEL.Env
-  alias PB.CEL.Library
-  alias PB.CEL.Function
-  alias PB.CEL.Function.Overload
-  alias PB.CEL.Error
-  alias PB.CEL.Value
+  alias CEL.Call
+  alias CEL.Checker.NameResolution
+  alias CEL.Checker.TypePattern
+  alias CEL.Env
+  alias CEL.Library
+  alias CEL.Function
+  alias CEL.Function.Overload
+  alias CEL.Error
+  alias CEL.Value
   alias PB.CEL.MessageRuntime
   alias PB.CEL.MessageSchema, as: CELSchema
 
@@ -214,7 +214,7 @@ defmodule PB.TestSupport.CELConformance do
     with {:ok, binding_vars} <- binding_vars(case.bindings),
          {:ok, env_vars, functions} <- type_env_decls(case.type_env) do
       {:ok,
-       PB.CEL.Env.build(
+       CEL.Env.build(
          vars: Map.merge(binding_vars, env_vars),
          functions: functions,
          container: case.container,
@@ -449,12 +449,12 @@ defmodule PB.TestSupport.CELConformance do
   end
 
   defp current_check_unsupported_reason(case) do
-    with {:ok, parsed} <- PB.CEL.parse(case.expr, parse_opts(case)),
+    with {:ok, parsed} <- CEL.parse(case.expr, parse_opts(case)),
          {:ok, env} <- check_env(case),
-         {:ok, checked} <- PB.CEL.check(parsed, env) do
+         {:ok, checked} <- CEL.check(parsed, env) do
       case expected_check_type(case) do
         {:ok, type} ->
-          actual = PB.CEL.Checked.proto_type(checked, checked.expr.id)
+          actual = CEL.Checked.proto_type(checked, checked.expr.id)
           if actual == type, do: nil, else: :checker_type
 
         :ignore ->
@@ -466,9 +466,9 @@ defmodule PB.TestSupport.CELConformance do
   end
 
   defp current_eval_unsupported_reason(case) do
-    with {:ok, parsed} <- PB.CEL.parse(case.expr, parse_opts(case)),
+    with {:ok, parsed} <- CEL.parse(case.expr, parse_opts(case)),
          {:ok, env} <- check_env(case),
-         {:ok, checked} <- PB.CEL.check(parsed, env),
+         {:ok, checked} <- CEL.check(parsed, env),
          {:ok, bindings} <- eval_bindings(case),
          {:ok, expected} <- expected_eval_result(case) do
       case match_eval_result(expected, safe_eval(checked, bindings, env)) do
@@ -483,8 +483,8 @@ defmodule PB.TestSupport.CELConformance do
   end
 
   defp safe_eval(checked, bindings, env) do
-    program = PB.CEL.Program.new(checked, env)
-    PB.CEL.Program.eval(program, bindings)
+    program = CEL.Program.new(checked, env)
+    CEL.Program.eval(program, bindings)
   rescue
     exception -> {:error, exception}
   end
@@ -545,7 +545,7 @@ defmodule PB.TestSupport.CELConformance do
   end
 
   defp unsupported_calls(case) do
-    case PB.CEL.parse(case.expr, macros: not case.disable_macros) do
+    case CEL.parse(case.expr, macros: not case.disable_macros) do
       {:ok, parsed} ->
         supported_calls = Library.supported_call_names()
         env = call_resolution_env(case)

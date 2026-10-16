@@ -3,8 +3,8 @@ defmodule PB.Validate.Context do
 
   # Runtime context for protovalidate evaluation.
 
-  alias PB.CEL.Runtime.Time, as: RuntimeTime
-  alias PB.CEL.Value
+  alias CEL.Runtime.Time, as: RuntimeTime
+  alias CEL.Value
 
   @type t :: %__MODULE__{
           now: Value.t()

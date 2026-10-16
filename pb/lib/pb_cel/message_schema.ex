@@ -1,22 +1,22 @@
 defmodule PB.CEL.MessageSchema do
   @moduledoc false
 
-  # Protobuf-backed implementation of the `PB.CEL.Message.Schema` behaviour.
+  # Protobuf-backed implementation of the `CEL.Message.Schema` behaviour.
   #
   # Schema reflection over PB's compiled-schema representation
   # (`%{messages:, enums:, services:}` + `PB.Schema.Compiled` field structs): the
   # checker and evaluator resolve message/enum/field names and types through this
   # provider. It is part of the protobuf binding (`lib/pb_cel`) so the CEL
   # subsystem carries no concrete protobuf provider; callers inject it via
-  # `PB.CEL.Env`'s `:message_schema`. CEL's own default is the no-op
-  # `PB.CEL.Runtime.NoMessageSchema`.
+  # `CEL.Env`'s `:message_schema`. CEL's own default is the no-op
+  # `CEL.Runtime.NoMessageSchema`.
 
   alias PB.CEL.Schema.Field
-  alias PB.CEL.ProtoType
+  alias CEL.ProtoType
 
   require Field
 
-  @behaviour PB.CEL.Message.Schema
+  @behaviour CEL.Message.Schema
 
   @type schema :: PB.schema() | nil
   @type message_ref :: PB.Schema.Compiled.message_name()
@@ -218,7 +218,7 @@ defmodule PB.CEL.MessageSchema do
   def field_type(schema, field), do: Field.cel_type(schema, field)
 
   @spec literal_field(schema, message_ref, PB.Schema.Compiled.field()) ::
-          PB.CEL.Message.Schema.literal_field()
+          CEL.Message.Schema.literal_field()
   def literal_field(schema, message, info) do
     %{
       cardinality: if(info.presence == :oneof, do: :oneof, else: info.cardinality),

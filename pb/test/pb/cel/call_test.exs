@@ -1,8 +1,8 @@
-defmodule PB.CEL.CallTest do
+defmodule CEL.CallTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL.Call
-  alias PB.CEL.Env
+  alias CEL.Call
+  alias CEL.Env
 
   test "classifies namespace calls without treating the namespace as a value target" do
     call =

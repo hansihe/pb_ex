@@ -15,7 +15,7 @@ defmodule PB.WellKnownTypes.Spec do
   #
   # Keeping the ranges/sign rules here means those two cannot drift apart.
   #
-  # NOTE: CEL (`PB.CEL.Runtime.Time`) deliberately uses *different* bounds
+  # NOTE: CEL (`CEL.Runtime.Time`) deliberately uses *different* bounds
   # (int64-nanosecond durations per the CEL spec), so it does not consume this
   # module.
 

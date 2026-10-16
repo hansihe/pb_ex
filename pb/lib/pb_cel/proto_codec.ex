@@ -2,7 +2,7 @@ defmodule PB.CEL.ProtoCodec do
   @moduledoc false
 
   # Protobuf codecs for the CEL expression protos (`cel.expr.*`) whose map
-  # shapes `PB.CEL.Proto` names.
+  # shapes `CEL.Proto` names.
 
   @roots [
     parsed_expr: :"cel.expr.ParsedExpr",

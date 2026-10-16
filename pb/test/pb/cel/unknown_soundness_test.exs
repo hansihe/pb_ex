@@ -1,12 +1,11 @@
-defmodule PB.CEL.UnknownSoundnessTest do
+defmodule CEL.UnknownSoundnessTest do
   # Partial evaluation is sound when a known result with one unknown input is
   # the result for every concrete value of that input, and an unknown result
   # names only that input. Expressions are generated from a seeded random
   # grammar so failures reproduce with `mix test --seed`.
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Unknown
+  alias CEL.Unknown
 
   @expressions 400
   @samples 12

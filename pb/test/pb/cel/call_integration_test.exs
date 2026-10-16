@@ -1,13 +1,12 @@
-defmodule PB.CEL.CallIntegrationTest do
+defmodule CEL.CallIntegrationTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Checked
-  alias PB.CEL.Error
-  alias PB.CEL.Library
-  alias PB.CEL.Function
-  alias PB.CEL.Checker.Types, as: CType
-  alias PB.CEL.Value
+  alias CEL.Checked
+  alias CEL.Error
+  alias CEL.Library
+  alias CEL.Function
+  alias CEL.Checker.Types, as: CType
+  alias CEL.Value
 
   test "checker treats namespace call targets as namespaces, not value identifiers" do
     assert_namespace_call(

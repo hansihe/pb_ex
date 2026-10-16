@@ -62,7 +62,7 @@ walkthrough.
 - **Text format** — `PB.TextFormat`.
 - **protovalidate** validation — `PB.Validate`.
 - **CEL** expressions over variables and protobuf messages, with custom
-  functions and unknown inputs — `PB.CEL`.
+  functions and unknown inputs — `CEL`.
 - **Schema introspection** for messages, enums, services, and extensions —
   `PB.Schema`.
 

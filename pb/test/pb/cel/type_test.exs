@@ -1,10 +1,9 @@
-defmodule PB.CEL.TypeTest do
+defmodule CEL.TypeTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Expr
+  alias CEL.Expr
 
-  doctest PB.CEL.Type
+  doctest CEL.Type
 
   test "the same shorthand declares variables and comes back from checking" do
     env =

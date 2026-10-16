@@ -1,10 +1,9 @@
-defmodule PB.CEL.CustomFunctionTest do
+defmodule CEL.CustomFunctionTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Function
-  alias PB.CEL.Function.Overload
-  alias PB.CEL.Value
+  alias CEL.Function
+  alias CEL.Function.Overload
+  alias CEL.Value
 
   defmodule Handlers do
     def greet([{:string, name}]), do: {:ok, Value.string("Hello, " <> name)}
@@ -100,9 +99,9 @@ defmodule PB.CEL.CustomFunctionTest do
              CEL.eval("boom()", %{}, env(functions: [boom_function()]))
   end
 
-  test "rejects signatures that are not PB.CEL.Type shorthand at registration" do
+  test "rejects signatures that are not CEL.Type shorthand at registration" do
     for {overload, pattern} <- [
-          {[args: [:nonsense]], ~r/"bad" overload "bad_x" :args must be PB.CEL.Type shorthand/},
+          {[args: [:nonsense]], ~r/"bad" overload "bad_x" :args must be CEL.Type shorthand/},
           {[args: [{:list, :nope}]], ~r/:args must be/},
           {[args: [{:wrapper, :timestamp}]], ~r/:args must be/},
           {[args: [{:enum, :"pkg.Enum"}]], ~r/:args must be/},

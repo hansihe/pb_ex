@@ -1,19 +1,18 @@
-defmodule PB.CEL.CheckerTest do
+defmodule CEL.CheckerTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Error
-  alias PB.CEL.Checked
+  alias CEL.Error
+  alias CEL.Checked
   alias PB.CEL.ProtoCodec
-  alias PB.CEL.ProtoType
-  alias PB.CEL.Checker.TypePattern
-  alias PB.CEL.Checker.Types, as: CType
-  alias PB.CEL.Function
-  alias PB.CEL.Function.Overload
-  alias PB.CEL.Runtime.Core, as: RuntimeCore
+  alias CEL.ProtoType
+  alias CEL.Checker.TypePattern
+  alias CEL.Checker.Types, as: CType
+  alias CEL.Function
+  alias CEL.Function.Overload
+  alias CEL.Runtime.Core, as: RuntimeCore
 
   defmodule WrappedMessageSchema do
-    @behaviour PB.CEL.Message.Schema
+    @behaviour CEL.Message.Schema
 
     alias PB.CEL.MessageSchema
 
@@ -470,7 +469,7 @@ defmodule PB.CEL.CheckerTest do
               %{
                 kind: :type,
                 name: "cel.expr.conformance.proto3.GlobalEnum",
-                denotation: PB.CEL.ProtoType.message("cel.expr.conformance.proto3.GlobalEnum"),
+                denotation: CEL.ProtoType.message("cel.expr.conformance.proto3.GlobalEnum"),
                 value: %{kind: {:type_value, "cel.expr.conformance.proto3.GlobalEnum"}}
               }}
 

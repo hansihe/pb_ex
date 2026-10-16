@@ -114,10 +114,10 @@ defmodule PB.TermRepresentationTest do
         companion: %PetTerm{name: "Rex"}
       }
 
-      assert PB.CEL.eval!(
+      assert CEL.eval!(
                "msg.name == 'Alice' && msg.pet.name == 'Rex' && has(msg.pet) && !has(msg.fish)",
                %{"msg" => person},
-               PB.CEL.Env.build(
+               CEL.Env.build(
                  schema: schema,
                  vars: %{"msg" => {:message, "test.Person"}},
                  message_schema: PB.CEL.MessageSchema,

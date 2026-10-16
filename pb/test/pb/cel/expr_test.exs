@@ -1,19 +1,18 @@
-defmodule PB.CEL.ExprTest do
+defmodule CEL.ExprTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Checked
-  alias PB.CEL.Expr
-  alias PB.CEL.Expr.Call
-  alias PB.CEL.Expr.Comprehension
-  alias PB.CEL.Expr.Const
-  alias PB.CEL.Expr.Ident
-  alias PB.CEL.Expr.ListLiteral
-  alias PB.CEL.Expr.MacroCall
-  alias PB.CEL.Expr.MapLiteral
-  alias PB.CEL.Expr.Select
-  alias PB.CEL.Function
-  alias PB.CEL.Function.Overload
+  alias CEL.Checked
+  alias CEL.Expr
+  alias CEL.Expr.Call
+  alias CEL.Expr.Comprehension
+  alias CEL.Expr.Const
+  alias CEL.Expr.Ident
+  alias CEL.Expr.ListLiteral
+  alias CEL.Expr.MacroCall
+  alias CEL.Expr.MapLiteral
+  alias CEL.Expr.Select
+  alias CEL.Function
+  alias CEL.Function.Overload
   alias PB.TestSupport.CELConformance
 
   defp env do

@@ -1,8 +1,8 @@
-defmodule PB.CEL.Runtime.TimeTest do
+defmodule CEL.Runtime.TimeTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL.Runtime.Time
-  alias PB.CEL.Value
+  alias CEL.Runtime.Time
+  alias CEL.Value
 
   test "parses and formats timestamps with nanosecond precision" do
     assert {:ok, timestamp} = Time.parse_timestamp("9999-12-31T23:59:59.999999999Z")

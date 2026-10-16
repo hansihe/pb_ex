@@ -1,4 +1,4 @@
-defmodule PB.CEL.ConformanceTest do
+defmodule CEL.ConformanceTest do
   use ExUnit.Case, async: true
 
   alias PB.TestSupport.CELConformance
@@ -110,7 +110,7 @@ defmodule PB.CEL.ConformanceTest do
   end
 
   defp parse_case(case) do
-    case PB.CEL.parse(case.expr, macros: not case.disable_macros) do
+    case CEL.parse(case.expr, macros: not case.disable_macros) do
       {:ok, parsed} when is_map(parsed.expr) and is_map(parsed.source_info) ->
         {:ok, parsed}
 
@@ -120,18 +120,18 @@ defmodule PB.CEL.ConformanceTest do
   end
 
   defp check_case(case) do
-    with {:ok, parsed} <- PB.CEL.parse(case.expr, CELConformance.parse_opts(case)),
+    with {:ok, parsed} <- CEL.parse(case.expr, CELConformance.parse_opts(case)),
          {:ok, env} <- CELConformance.check_env(case),
-         {:ok, checked} <- PB.CEL.check(parsed, env),
+         {:ok, checked} <- CEL.check(parsed, env),
          :ok <- assert_expected_check_type(case, checked) do
       {:ok, checked}
     end
   end
 
   defp eval_case(case) do
-    with {:ok, parsed} <- PB.CEL.parse(case.expr, CELConformance.parse_opts(case)),
+    with {:ok, parsed} <- CEL.parse(case.expr, CELConformance.parse_opts(case)),
          {:ok, env} <- CELConformance.check_env(case),
-         {:ok, checked} <- PB.CEL.check(parsed, env),
+         {:ok, checked} <- CEL.check(parsed, env),
          {:ok, bindings} <- CELConformance.eval_bindings(case),
          {:ok, expected} <- CELConformance.expected_eval_result(case) do
       CELConformance.match_eval_result(expected, safe_eval(checked, bindings, env))
@@ -141,7 +141,7 @@ defmodule PB.CEL.ConformanceTest do
   defp assert_expected_check_type(case, checked) do
     case CELConformance.expected_check_type(case) do
       {:ok, type} ->
-        actual = PB.CEL.Checked.proto_type(checked, checked.expr.id)
+        actual = CEL.Checked.proto_type(checked, checked.expr.id)
 
         if actual == type do
           :ok
@@ -155,8 +155,8 @@ defmodule PB.CEL.ConformanceTest do
   end
 
   defp safe_eval(checked, bindings, env) do
-    program = PB.CEL.Program.new(checked, env)
-    PB.CEL.Program.eval(program, bindings)
+    program = CEL.Program.new(checked, env)
+    CEL.Program.eval(program, bindings)
   rescue
     exception -> {:error, exception}
   end

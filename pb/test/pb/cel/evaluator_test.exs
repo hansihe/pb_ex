@@ -1,16 +1,15 @@
-defmodule PB.CEL.EvaluatorTest do
+defmodule CEL.EvaluatorTest do
   use ExUnit.Case, async: true
 
-  alias PB.CEL
-  alias PB.CEL.Checked
-  alias PB.CEL.Error
-  alias PB.CEL.ProtoType
-  alias PB.CEL.Value
+  alias CEL.Checked
+  alias CEL.Error
+  alias CEL.ProtoType
+  alias CEL.Value
   alias PB.CEL.MessageRuntime, as: Message
   alias PB.Validate.CELExtensions
 
   defmodule StubMessageRuntime do
-    @behaviour PB.CEL.Message.Runtime
+    @behaviour CEL.Message.Runtime
 
     defdelegate from_decoded(schema, message, value), to: Message
     defdelegate from_literal(schema, message, fields, wkt_unwrap?), to: Message

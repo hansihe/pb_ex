@@ -13,7 +13,7 @@ defmodule PB.CEL.FieldReader do
   alias PB.CEL.MessageRuntime, as: Message
   alias PB.CEL.MessageSchema, as: Schema
   alias PB.CEL.Schema.Field
-  alias PB.CEL.Value
+  alias CEL.Value
   alias PB.Runtime.Scalar
   alias PB.UnknownField
 
