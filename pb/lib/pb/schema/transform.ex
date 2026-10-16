@@ -8,12 +8,17 @@ defmodule PB.Schema.Transform do
   # deliberately returns a draft schema so `PB.compile/2` can compose all
   # transforms before the single final `PB.Schema.Prepare.prepare/1` pass.
   #
+  # The prepared results are compiled schemas in their own right, so the
+  # plugins recorded on the input run again on them. Their data is dropped first
+  # (see `PB.Schema.Plugin`) because it was compiled for the input schema.
+  #
   # Transforms are strict schema edits. They reject unknown targets, duplicate
   # bindings, and map-entry targets instead of preserving fallback behavior. If
   # the schema shape is invalid, the caller should get a clear error before
   # runtime use.
 
   alias PB.Schema.ExtensionMaterializer
+  alias PB.Schema.Plugin
   alias PB.Schema.Prepare
   alias PB.Schema.Projections
 
@@ -23,7 +28,7 @@ defmodule PB.Schema.Transform do
   def projections(schema, projections) when is_map(schema) and is_list(projections) do
     schema
     |> Projections.apply(projections)
-    |> Prepare.prepare()
+    |> prepare()
   end
 
   @doc """
@@ -32,7 +37,7 @@ defmodule PB.Schema.Transform do
   def slice(schema, opts) when is_map(schema) and is_list(opts) do
     schema
     |> slice_draft(opts)
-    |> Prepare.prepare()
+    |> prepare()
   end
 
   @doc """
@@ -78,6 +83,13 @@ defmodule PB.Schema.Transform do
     |> Map.put(:roots, root_fqns)
     |> Map.put(:root_names, root_names)
     |> Map.put(:services, %{})
+  end
+
+  defp prepare(schema) do
+    schema
+    |> Plugin.__strip__()
+    |> Prepare.prepare()
+    |> Plugin.__run__(Map.get(schema, :plugins, []))
   end
 
   defp normalize_slice_roots(roots) when is_list(roots) do

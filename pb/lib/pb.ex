@@ -236,6 +236,10 @@ defmodule PB do
       not own. Compile-time `:projections` entries conflict if they disagree
       with proto-source options for the same target.
 
+    * `:plugins` — list of `PB.Schema.Plugin` modules, or `{module, opts}`
+      tuples, that compile their own data into the schema, in order, once it
+      is otherwise complete.
+
   ## Errors
 
   Raises `PB.OptionError` for options or `:projections` entries that are not
@@ -248,6 +252,7 @@ defmodule PB do
   @spec compile(descriptor_set, keyword) :: schema
   def compile(descriptor_set, opts \\ []) do
     opts = compile_opts!(opts)
+    plugins = PB.Schema.Plugin.__entries__!(opts.plugins)
 
     descriptor_set
     # Compile descriptors into a draft schema with semantic field facts
@@ -268,6 +273,8 @@ defmodule PB do
     # rules are present) so validation does not rebuild it per CEL op. Runs after
     # prepare so the cached value is itself a prepared schema.
     |> PB.Validate.Schema.attach_standard_rule_schema()
+    # Plugins compile their own data into the final, prepared schema.
+    |> PB.Schema.Plugin.__run__(plugins)
   end
 
   @doc """
@@ -486,7 +493,7 @@ defmodule PB do
   end
 
   defp compile_opts!(opts) do
-    case PB.Runtime.Options.validate(opts, projections: {:list, []}) do
+    case PB.Runtime.Options.validate(opts, projections: {:list, []}, plugins: {:list, []}) do
       {:ok, opts} -> opts
       {:error, reason} -> raise PB.Runtime.Errors.to_error(reason, :compile)
     end
