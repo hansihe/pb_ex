@@ -32,6 +32,42 @@ defmodule PB.Schema.Compiler do
     |> ExtensionMaterializer.materialize()
   end
 
+  @doc """
+  Returns `descriptor_set`, raising `PB.SchemaError` when one of its files
+  imports a file the set doesn't contain, as in a set built without
+  `--include_imports`.
+
+  Weak imports are exempt. Every missing import is reported at once.
+  """
+  def check_imports!(descriptor_set) do
+    files = descriptor_set[:file] || []
+    names = MapSet.new(files, & &1[:name])
+
+    missing =
+      Enum.flat_map(files, fn file ->
+        case missing_imports(file, names) do
+          [] -> []
+          imports -> [{file[:name], imports}]
+        end
+      end)
+
+    if missing != [] do
+      raise PB.SchemaError, kind: :missing_imports, operation: :compile, reason: missing
+    end
+
+    descriptor_set
+  end
+
+  # `weak_dependency` holds indexes into `dependency`.
+  defp missing_imports(file, names) do
+    weak = file[:weak_dependency] || []
+
+    for {import, index} <- Enum.with_index(file[:dependency] || []),
+        index not in weak,
+        not MapSet.member?(names, import),
+        do: import
+  end
+
   defp do_compile(descriptor_set) do
     (descriptor_set[:file] || [])
     |> Enum.reduce(%{messages: %{}, enums: %{}, services: %{}, extensions_by_name: %{}}, fn file,

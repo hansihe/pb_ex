@@ -15,6 +15,7 @@ keeps unknown fields, as protobuf requires.
 |--------|--------|---------|-------|
 | `:projections` | list of `{fqn, opts}` | `[]` | Message-level adapters and structural representation. See below. |
 | `:plugins` | list of `module \| {module, opts}` | `[]` | `PB.Schema.Plugin`s that compile their own data into the schema, such as [`PB.Validate`](https://hexdocs.pm/pb_validate/PB.Validate.html). |
+| `:allow_missing_imports` | `boolean` | `false` | Compile a descriptor set that lacks some of the files its files import, leaving the options they define undecoded. See [Missing imports](../how-to/descriptor-sets.md#missing-imports). |
 
 Each `:projections` entry pairs a fully-qualified message name with a keyword
 list. `adapter:` is mutually exclusive with the structural keys:
@@ -77,4 +78,5 @@ See [Decoding into structs](../how-to/structs-and-representation.md) and
 | `:short_repeated` | `boolean` | `false` |
 | `:print_unknown_fields` | `boolean` | `true` |
 
-`use PB.Schema` accepts `:projections` and `:plugins` with the same meaning.
+`use PB.Schema` accepts `:projections`, `:plugins` and `:allow_missing_imports`
+with the same meaning.

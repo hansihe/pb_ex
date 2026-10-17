@@ -12,8 +12,9 @@ protoc --descriptor_set_out=schema.binpb --include_imports your.proto
 
 - `--descriptor_set_out` writes the binary `FileDescriptorSet`.
 - `--include_imports` makes the set self-contained by including imported `.proto`
-  files. Always pass it unless you have a specific reason not to — PB needs every
-  referenced type present to resolve fields.
+  files. Always pass it: PB needs every imported file, both to resolve the types
+  it defines and to decode the custom options it defines, so `PB.compile/2`
+  rejects a set that lacks one (see [Missing imports](#missing-imports)).
 
 Load and compile it:
 
@@ -32,7 +33,35 @@ If you use [buf](https://buf.build), produce a descriptor set (an "image") with:
 buf build -o schema.binpb
 ```
 
-buf images are `FileDescriptorSet`-compatible and load the same way.
+buf images are `FileDescriptorSet`-compatible and load the same way. They
+include the imported files unless you pass `--exclude-imports`.
+
+## Missing imports
+
+`PB.compile/2` raises a `PB.SchemaError` (`kind: :missing_imports`) when a file
+in the set imports a file the set doesn't contain, listing every missing import:
+
+```text
+PB failed to compile: descriptor set is missing imported files: "orders.proto"
+imports "buf/validate/validate.proto". Build the set with its imports ...
+```
+
+Without the imported file, the custom options it defines — such as the
+`buf.validate` rules that [pb_validate](https://hexdocs.pm/pb_validate) reads —
+could only stay undecoded, so rebuilding the set with its imports is almost
+always the fix. Weak imports may be missing.
+
+If the set deliberately leaves out imports that nothing needs, such as an
+option-only import like `google/api/annotations.proto` whose HTTP annotations
+you don't use, compile it with `allow_missing_imports: true`:
+
+```elixir
+schema = PB.compile(descriptor_set, allow_missing_imports: true)
+```
+
+`use PB.Schema` takes the same option. The options a missing file defines then
+stay unknown fields (`:__unknown_fields__`) of the descriptor options, and a
+field whose type a missing file defines still fails to compile.
 
 ## Custom representation options in proto source
 

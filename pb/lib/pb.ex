@@ -167,9 +167,10 @@ defmodule PB do
   Uses PB's bundled main schema, which knows `descriptor.proto` and the
   well-known types. Custom options, which are extensions of the descriptor
   options messages, stay unknown fields in the decoded options; `compile/2`
-  decodes those whose extensions the descriptor set defines, such as the
-  `buf.validate` rules of a set built with `--include_imports`, into the
-  options' `:__extensions__` map.
+  decodes them, through the extensions the descriptor set defines, into the
+  options' `:__extensions__` map. It needs the set to contain the files that
+  define them, as a set built with `--include_imports` does (see "Imports" in
+  `compile/2`).
   """
   @spec decode_descriptor_set(binary) :: {:ok, descriptor_set} | {:error, error}
   def decode_descriptor_set(binary) do
@@ -246,13 +247,32 @@ defmodule PB do
       tuples, that compile their own data into the schema, in order, once it
       is otherwise complete.
 
+    * `:allow_missing_imports` — compile a descriptor set that lacks some of
+      the files its files import (default `false`). See "Imports" below.
+
+  ## Imports
+
+  The descriptor set must contain every file its files import, as a set built
+  with `protoc --include_imports` or `buf build` does. Without the imported
+  files, the types they define can't be resolved, and the custom options they
+  define can't be decoded, so `compile/2` raises a `PB.SchemaError` with
+  `kind: :missing_imports` that lists every missing import. Weak imports may
+  be missing.
+
+  Pass `allow_missing_imports: true` for a set that deliberately leaves out
+  imports nothing needs, such as option-only imports like
+  `google/api/annotations.proto`. Options defined by a missing file then stay
+  unknown fields (`:__unknown_fields__`) of the descriptor options, while a
+  field whose type a missing file defines still fails to compile.
+
   ## Errors
 
   Raises `PB.OptionError` for options or `:projections` entries that are not
-  well-formed, and `PB.SchemaError` when the schema is invalid: a projection
-  that does not fit the message it targets (a struct missing fields, `unwrap`
-  on a message without exactly one field, an unknown message), conflicting
-  projections, or an invalid `elixir.pb.v1` option in the proto source.
+  well-formed, and `PB.SchemaError` when the schema is invalid: a missing
+  import (see "Imports"), a projection that does not fit the message it
+  targets (a struct missing fields, `unwrap` on a message without exactly one
+  field, an unknown message), conflicting projections, or an invalid
+  `elixir.pb.v1` option in the proto source.
   """
   @spec compile(descriptor_set) :: schema
   @spec compile(descriptor_set, keyword) :: schema
@@ -261,6 +281,9 @@ defmodule PB do
     plugins = PB.Schema.Plugin.__entries__!(opts.plugins)
 
     descriptor_set
+    # Reject a set without the files its own files import, unless allowed:
+    # their types can't be resolved, nor their options decoded.
+    |> check_imports!(opts.allow_missing_imports)
     # Compile descriptors into a draft schema with semantic field facts
     # resolved, including presence, cardinality, encoding, maps, oneofs,
     # extensions, and effective features.
@@ -492,9 +515,20 @@ defmodule PB do
   end
 
   defp compile_opts!(opts) do
-    case PB.Runtime.Options.validate(opts, projections: {:list, []}, plugins: {:list, []}) do
+    spec = [
+      projections: {:list, []},
+      plugins: {:list, []},
+      allow_missing_imports: {:boolean, false}
+    ]
+
+    case PB.Runtime.Options.validate(opts, spec) do
       {:ok, opts} -> opts
       {:error, reason} -> raise PB.Runtime.Errors.to_error(reason, :compile)
     end
   end
+
+  defp check_imports!(descriptor_set, true = _allow_missing_imports), do: descriptor_set
+
+  defp check_imports!(descriptor_set, false),
+    do: PB.Schema.Compiler.check_imports!(descriptor_set)
 end

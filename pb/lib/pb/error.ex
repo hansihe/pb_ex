@@ -8,7 +8,7 @@ defmodule PB.Error do
 
     * `PB.SchemaError` — schema-resolution / introspection failures
       (`unknown_message`, `unknown_enum`, `unknown_service`,
-      `unknown_extension`, `invalid_schema`).
+      `unknown_extension`, `invalid_schema`, `missing_imports`).
     * `PB.ValueError` — input value/shape failures (`invalid_value`,
       `value_out_of_range`, `unknown_field`, `invalid_oneof`, enum-value
       problems, `missing_required`, `message_name_mismatch`, strict-projection

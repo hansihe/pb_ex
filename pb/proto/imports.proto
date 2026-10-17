@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package imports;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "proto/imports_options.proto";
+
+message Event {
+  option (imports.note) = "an event";
+
+  google.protobuf.Timestamp at = 1;
+  google.protobuf.Duration took = 2;
+}

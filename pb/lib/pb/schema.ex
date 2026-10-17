@@ -96,6 +96,12 @@ defmodule PB.Schema do
   The schema is built once when the module is loaded and kept in
   `:persistent_term`, so a schema module cannot declare its own `@on_load`.
 
+  ## Missing imports
+
+  The descriptor set must contain the files its files import. Pass
+  `allow_missing_imports: true` to compile one that deliberately lacks some,
+  as with `PB.compile/2` (see "Imports" there).
+
   ## Introspection
 
   This module also exposes lookup helpers that return public `PB.Schema.Info`
@@ -471,7 +477,14 @@ defmodule PB.Schema do
     # `:descriptor` and should not be surfaced in the public moduledoc.
     unknown =
       Keyword.keys(opts) --
-        [:descriptor, :descriptor_set, :projections, :plugins, :with_schema]
+        [
+          :descriptor,
+          :descriptor_set,
+          :projections,
+          :plugins,
+          :allow_missing_imports,
+          :with_schema
+        ]
 
     if unknown != [] do
       raise ArgumentError, "unknown PB.Schema option(s): #{inspect(unknown)}"
@@ -512,7 +525,8 @@ defmodule PB.Schema do
   defp schema_ast(opts, plugins) do
     compile_opts = [
       projections: Keyword.get(opts, :projections, []),
-      plugins: Macro.escape(plugins)
+      plugins: Macro.escape(plugins),
+      allow_missing_imports: Keyword.get(opts, :allow_missing_imports, false)
     ]
 
     source_ast =

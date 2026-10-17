@@ -28,7 +28,7 @@ defmodule PB.Validate.DescriptorImportsTest do
   end
 
   test "without validate.proto in the set, PB.compile/2 leaves the rules unknown fields" do
-    options = required_value_options(compile(@structural_no_imports))
+    options = required_value_options(compile(@structural_no_imports, allow_missing_imports: true))
 
     refute Map.has_key?(options, @extensions)
     assert [%PB.UnknownField{number: 1159}] = options[PB.UnknownField.key()]
@@ -39,13 +39,14 @@ defmodule PB.Validate.DescriptorImportsTest do
           {@structural, @structural_no_imports},
           {@custom_predefined, @custom_predefined_no_imports}
         ] do
-      assert validate_data(compile(without_imports, plugins: [PB.Validate])) ==
+      assert validate_data(compile(without_imports, plugins: [PB.Validate], allow_missing_imports: true)) ==
                validate_data(compile(with_imports, plugins: [PB.Validate]))
     end
   end
 
   test "without validate.proto in the set, messages validate as with it" do
-    structural = compile(@structural_no_imports, plugins: [PB.Validate])
+    structural =
+      compile(@structural_no_imports, plugins: [PB.Validate], allow_missing_imports: true)
     message = :"validate_structural.StructuralRules"
 
     assert :ok = PB.Validate.validate(%{required_value: "x", choice: {:id, 1}}, structural, message)
@@ -55,7 +56,8 @@ defmodule PB.Validate.DescriptorImportsTest do
 
     assert Enum.map(violations, & &1.rule_id) == ["required", "required"]
 
-    custom = compile(@custom_predefined_no_imports, plugins: [PB.Validate])
+    custom =
+      compile(@custom_predefined_no_imports, plugins: [PB.Validate], allow_missing_imports: true)
     message = :"validate_custom_predefined.CustomPredefinedRules"
 
     assert :ok = PB.Validate.validate(%{value: "good", items: ["fine"], count: 2}, custom, message)
@@ -74,7 +76,10 @@ defmodule PB.Validate.DescriptorImportsTest do
       Code.compile_quoted(
         quote do
           defmodule unquote(mod) do
-            use PB.Schema, descriptor: unquote(@structural_no_imports), plugins: [PB.Validate]
+            use PB.Schema,
+              descriptor: unquote(@structural_no_imports),
+              plugins: [PB.Validate],
+              allow_missing_imports: true
           end
         end
       )
