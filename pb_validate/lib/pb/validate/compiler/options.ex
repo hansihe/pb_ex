@@ -1,22 +1,13 @@
 defmodule PB.Validate.Compiler.Options do
   @moduledoc false
 
-  # Decodes the buf.validate rules of a schema whose descriptor set does not
-  # define the buf.validate extensions, as a set built without
-  # `--include_imports` does not.
+  # Rejects a schema whose buf.validate rules `PB.compile/2` left undecoded.
   #
   # `PB.compile/2` decodes custom options through the extensions the descriptor
-  # set itself defines, so without `buf/validate/validate.proto` in the set the
-  # rules stay unknown fields of the descriptor options. This decodes them
-  # through the standard-rule schema, which merges in the bundled
-  # `buf/validate/validate.proto` (and the set's own extensions of the rule
-  # messages, for predefined rules), and writes them into the options as
-  # `PB.compile/2` would have. A schema whose options carry no unknown
-  # buf.validate fields, such as one compiled from a set built with
-  # `--include_imports`, is returned as it is.
-
-  alias PB.Schema.ExtensionMaterializer
-  alias PB.Validate.Schema, as: ValidateSchema
+  # set defines, and rejects a set without the files its files import, such as
+  # `buf/validate/validate.proto`. Compiled with `allow_missing_imports: true`
+  # instead, such a set keeps its rules as unknown fields of the descriptor
+  # options, where they would silently compile to no rules.
 
   @unknowns PB.UnknownField.key()
   @field_options :"google.protobuf.FieldOptions"
@@ -30,23 +21,35 @@ defmodule PB.Validate.Compiler.Options do
                 |> Enum.group_by(& &1.extendee, & &1.number)
 
   @doc """
-  Returns `schema` with the buf.validate rules in its descriptor options
-  decoded.
+  Returns `schema`, raising `PB.SchemaError` when its descriptor options hold
+  undecoded buf.validate rules.
   """
-  @spec materialize(PB.schema()) :: PB.schema()
-  def materialize(schema) when is_map(schema) do
-    if unknown_rules?(schema) do
-      ExtensionMaterializer.materialize(schema, ValidateSchema.standard_rule_schema(schema))
-    else
-      schema
+  @spec check_decoded!(PB.schema()) :: PB.schema()
+  def check_decoded!(schema) when is_map(schema) do
+    case undecoded_target(schema) do
+      nil ->
+        schema
+
+      target ->
+        raise PB.SchemaError,
+          kind: :invalid_schema,
+          operation: :compile,
+          type_name: target,
+          reason:
+            "its buf.validate rules can't be read, as the descriptor set lacks " <>
+              "buf/validate/validate.proto. Build the set with its imports " <>
+              "(`protoc --include_imports`, or `buf build`, which includes them by default)"
     end
   end
 
-  defp unknown_rules?(schema) do
-    Enum.any?(schema.extensions_by_name, fn {_name, extension} ->
-      unknown_rules?(extension, @field_options)
-    end) or
-      Enum.any?(schema.messages, fn {_fqn, message} -> message_unknown_rules?(message) end)
+  # The name of an extension or message with undecoded rules, if any.
+  defp undecoded_target(schema) do
+    Enum.find_value(schema.extensions_by_name, fn {name, extension} ->
+      if unknown_rules?(extension, @field_options), do: name
+    end) ||
+      Enum.find_value(schema.messages, fn {fqn, message} ->
+        if message_unknown_rules?(message), do: fqn
+      end)
   end
 
   defp message_unknown_rules?(%{fields_by_name: fields} = message) do

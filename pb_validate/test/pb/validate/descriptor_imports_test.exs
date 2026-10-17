@@ -3,8 +3,9 @@ defmodule PB.Validate.DescriptorImportsTest do
   # `buf/validate/validate.proto`, whose extension definitions `PB.compile/2`
   # decodes the rules with. The `*_no_imports` fixtures are the same sets
   # without it (and the other files only it imports), as protoc writes them
-  # without `--include_imports`: their rules stay unknown fields of the options
-  # until `PB.Validate` decodes them with its bundled `validate.proto`.
+  # without `--include_imports`: `PB.compile/2` rejects them, and compiled with
+  # `allow_missing_imports: true` their rules stay unknown fields of the
+  # options, which `PB.Validate` rejects.
   use ExUnit.Case, async: true
 
   @extensions :__extensions__
@@ -27,26 +28,45 @@ defmodule PB.Validate.DescriptorImportsTest do
              required_value_options(compile(@structural))
   end
 
-  test "without validate.proto in the set, PB.compile/2 leaves the rules unknown fields" do
+  test "PB.compile/2 rejects a set without validate.proto" do
+    error =
+      assert_raise PB.SchemaError, fn ->
+        compile(@structural_no_imports, plugins: [PB.Validate])
+      end
+
+    assert error.kind == :missing_imports
+    assert error.reason == [{"proto/validate_structural.proto", ["buf/validate/validate.proto"]}]
+  end
+
+  test "allowed to miss validate.proto, PB.compile/2 leaves the rules unknown fields" do
     options = required_value_options(compile(@structural_no_imports, allow_missing_imports: true))
 
     refute Map.has_key?(options, @extensions)
     assert [%PB.UnknownField{number: 1159}] = options[PB.UnknownField.key()]
   end
 
-  test "without validate.proto in the set, PB.Validate compiles the same rules" do
-    for {with_imports, without_imports} <- [
-          {@structural, @structural_no_imports},
-          {@custom_predefined, @custom_predefined_no_imports}
+  test "allowed to miss validate.proto, PB.Validate rejects the set's undecoded rules" do
+    for {path, target} <- [
+          {@structural_no_imports, ":\"validate_structural.StructuralRules\""},
+          {@custom_predefined_no_imports, ":\"validate_custom_predefined."}
         ] do
-      assert validate_data(compile(without_imports, plugins: [PB.Validate], allow_missing_imports: true)) ==
-               validate_data(compile(with_imports, plugins: [PB.Validate]))
+      error =
+        assert_raise PB.SchemaError, fn ->
+          compile(path, plugins: [PB.Validate], allow_missing_imports: true)
+        end
+
+      assert error.kind == :invalid_schema
+      message = Exception.message(error)
+      assert message =~ "PB failed to compile: invalid schema for #{target}"
+
+      assert message =~
+               "its buf.validate rules can't be read, as the descriptor set lacks " <>
+                 "buf/validate/validate.proto. Build the set with its imports"
     end
   end
 
-  test "without validate.proto in the set, messages validate as with it" do
-    structural =
-      compile(@structural_no_imports, plugins: [PB.Validate], allow_missing_imports: true)
+  test "with validate.proto in the set, messages validate" do
+    structural = compile(@structural, plugins: [PB.Validate])
     message = :"validate_structural.StructuralRules"
 
     assert :ok = PB.Validate.validate(%{required_value: "x", choice: {:id, 1}}, structural, message)
@@ -56,8 +76,7 @@ defmodule PB.Validate.DescriptorImportsTest do
 
     assert Enum.map(violations, & &1.rule_id) == ["required", "required"]
 
-    custom =
-      compile(@custom_predefined_no_imports, plugins: [PB.Validate], allow_missing_imports: true)
+    custom = compile(@custom_predefined, plugins: [PB.Validate])
     message = :"validate_custom_predefined.CustomPredefinedRules"
 
     assert :ok = PB.Validate.validate(%{value: "good", items: ["fine"], count: 2}, custom, message)
@@ -67,37 +86,5 @@ defmodule PB.Validate.DescriptorImportsTest do
 
     assert {:error, %PB.Validate.Error{violations: [%{rule_id: "int64.abs_in"}]}} =
              PB.Validate.validate(%{value: "good", items: ["fine"], count: 3}, custom, message)
-  end
-
-  test "a schema module compiled from a set without validate.proto gets the rules" do
-    mod = Module.concat(__MODULE__, "NoImports#{System.unique_integer([:positive])}")
-
-    [{^mod, _bin}] =
-      Code.compile_quoted(
-        quote do
-          defmodule unquote(mod) do
-            use PB.Schema,
-              descriptor: unquote(@structural_no_imports),
-              plugins: [PB.Validate],
-              allow_missing_imports: true
-          end
-        end
-      )
-
-    message = :"validate_structural.StructuralRules"
-
-    assert :ok = mod.validate(%{required_value: "x", choice: {:id, 1}}, message)
-    assert {:error, %PB.Validate.Error{}} = mod.validate(%{choice: {:id, 1}}, message)
-  end
-
-  # The validation data PB.Validate compiled into the schema's own messages.
-  defp validate_data(schema) do
-    for {fqn, message} <- schema.messages,
-        not String.starts_with?(Atom.to_string(fqn), ["google.", "buf."]),
-        into: %{} do
-      fields = Map.new(message.fields_by_name, fn {name, field} -> {name, field[PB.Validate]} end)
-      oneofs = Map.new(message.oneofs, fn {index, oneof} -> {index, oneof[PB.Validate]} end)
-      {fqn, {message[PB.Validate], fields, oneofs}}
-    end
   end
 end

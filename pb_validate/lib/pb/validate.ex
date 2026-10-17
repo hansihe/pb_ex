@@ -26,7 +26,8 @@ defmodule PB.Validate do
       end
 
   Compiling raises `PB.Validate.CompileError` for rules that are not valid for
-  the schema.
+  the schema, and `PB.SchemaError` for a schema whose rules can't be read, as
+  its descriptor set lacks `buf/validate/validate.proto`.
   """
 
   @behaviour PB.Schema.Plugin

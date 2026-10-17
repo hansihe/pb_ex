@@ -20,10 +20,12 @@ message Person {
 }
 ```
 
-Generate the descriptor set with `--include_imports`, as for any schema. A set
-built without it lacks `buf/validate/validate.proto`, so `PB.compile/2` leaves
-the rules undecoded in the descriptor options; `PB.Validate` then decodes them
-with its own copy of `validate.proto`.
+Generate the descriptor set with `--include_imports`, as for any schema
+(`buf build` includes the imports by default). The rules are read through the
+set's own `buf/validate/validate.proto`, so `PB.compile/2` rejects a set
+without it, as it does any set that lacks an imported file. A set compiled
+anyway, with `allow_missing_imports: true`, can't have its rules read, so
+`PB.Validate` raises a `PB.SchemaError` for it rather than compile no rules.
 
 ## Compile the rules
 
