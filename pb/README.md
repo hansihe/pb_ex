@@ -118,8 +118,7 @@ The upstream protobuf conformance suite is run with
 `scripts/run_protobuf_conformance.sh`. Current results and intentional
 deviations are documented in [Conformance status](guides/reference/conformance.md).
 `build_protos.sh` rebuilds the bundled descriptors and the test fixtures with
-`buf`; `scripts/subset_descriptor_set.exs` builds descriptor sets from the files
-of another set without it.
+`buf`.
 
 `mix dialyzer` should report no warnings; it catches broken typespecs that
 would otherwise only show up in a consumer's Dialyzer run.

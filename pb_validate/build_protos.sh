@@ -18,15 +18,14 @@ buf build proto/validate_structural_oneof_duplicate_invalid.proto --as-file-desc
 buf build proto/validate_structural_oneof_zero_invalid.proto --as-file-descriptor-set -o test/fixtures/schema/validate_structural_oneof_zero_invalid.binpb
 
 # The same sets without buf/validate/validate.proto (and the files only it
-# imports), as a set built without --include_imports lacks it, keeping the
-# well-known types the protos use.
-for name in validate_structural validate_custom_predefined; do
-  (cd ../pb && mix run scripts/subset_descriptor_set.exs \
-    "../pb_validate/test/fixtures/schema/$name.binpb" "proto/$name.proto" \
-    "../pb_validate/test/fixtures/schema/${name}_no_imports.binpb" \
-    --drop buf/validate/validate.proto \
-    --drop google/protobuf/descriptor.proto \
-    --drop google/protobuf/duration.proto \
-    --drop google/protobuf/field_mask.proto \
-    --drop google/protobuf/timestamp.proto)
-done
+# imports), as a set built without its imports lacks it. The set for
+# validate_custom_predefined keeps google/protobuf/wrappers.proto, which the type
+# of one of its extensions comes from, taken from the set with imports. A
+# FileDescriptorSet is one repeated field, so two sets written one after the
+# other read as one set with the files of both.
+buf build proto/validate_structural.proto --as-file-descriptor-set --exclude-imports -o test/fixtures/schema/validate_structural_no_imports.binpb
+{
+  buf build proto/validate_custom_predefined.proto -o - |
+    buf build -#format=binpb --path google/protobuf/wrappers.proto --as-file-descriptor-set -o -
+  buf build proto/validate_custom_predefined.proto --as-file-descriptor-set --exclude-imports -o -
+} > test/fixtures/schema/validate_custom_predefined_no_imports.binpb
