@@ -34,7 +34,8 @@ buf build -o schema.binpb
 ```
 
 buf images are `FileDescriptorSet`-compatible and load the same way. They
-include the imported files unless you pass `--exclude-imports`.
+include the imported files unless you pass `--exclude-imports`, except those
+imported with `import option` (see [Missing imports](#missing-imports)).
 
 ## Missing imports
 
@@ -50,6 +51,12 @@ Without the imported file, the custom options it defines — such as the
 `buf.validate` rules that [pb_validate](https://hexdocs.pm/pb_validate) reads —
 could only stay undecoded, so rebuilding the set with its imports is almost
 always the fix. Weak imports may be missing.
+
+So may the files an edition 2024 file imports with `import option`: `buf build`
+never includes them, even without `--exclude-imports`. The options they define
+then stay unknown fields (`:__unknown_fields__`) of the descriptor options. A set
+built with `protoc --include_imports` includes them, and `PB.compile/2` decodes
+their options.
 
 If the set deliberately leaves out imports that nothing needs, such as an
 option-only import like `google/api/annotations.proto` whose HTTP annotations

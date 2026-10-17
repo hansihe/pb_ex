@@ -27,6 +27,12 @@ without it, as it does any set that lacks an imported file. A set compiled
 anyway, with `allow_missing_imports: true`, can't have its rules read, so
 `PB.Validate` raises a `PB.SchemaError` for it rather than compile no rules.
 
+An edition 2024 file may import `buf/validate/validate.proto` with
+`import option` instead, but `buf build` never includes option imports, and
+`PB.compile/2` allows them to be missing, so `PB.Validate` raises for such a
+set too. Import it with a regular `import`, or build the set with
+`protoc --include_imports`.
+
 ## Compile the rules
 
 `PB.Validate` is a schema plugin (`PB.Schema.Plugin`): list it in `:plugins`

@@ -16,6 +16,9 @@ buf build proto/validate_custom_predefined.proto --as-file-descriptor-set -o tes
 buf build proto/validate_structural.proto --as-file-descriptor-set -o test/fixtures/schema/validate_structural.binpb
 buf build proto/validate_structural_oneof_duplicate_invalid.proto --as-file-descriptor-set -o test/fixtures/schema/validate_structural_oneof_duplicate_invalid.binpb
 buf build proto/validate_structural_oneof_zero_invalid.proto --as-file-descriptor-set -o test/fixtures/schema/validate_structural_oneof_zero_invalid.binpb
+# An edition 2024 file that imports buf/validate/validate.proto with `import
+# option`, which buf never includes in the set.
+buf build proto/validate_option_import.proto --as-file-descriptor-set -o test/fixtures/schema/validate_option_import.binpb
 
 # The same sets without buf/validate/validate.proto (and the files only it
 # imports), as a set built without its imports lacks it. The set for

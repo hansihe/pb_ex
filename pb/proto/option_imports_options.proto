@@ -1,0 +1,9 @@
+edition = "2024";
+
+package option_imports;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MessageOptions {
+  string label = 50002;
+}

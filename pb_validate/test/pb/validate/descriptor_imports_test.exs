@@ -5,7 +5,9 @@ defmodule PB.Validate.DescriptorImportsTest do
   # without it (and the other files only it imports), as protoc writes them
   # without `--include_imports`: `PB.compile/2` rejects them, and compiled with
   # `allow_missing_imports: true` their rules stay unknown fields of the
-  # options, which `PB.Validate` rejects.
+  # options, which `PB.Validate` rejects. `validate_option_import.binpb` is an
+  # edition 2024 file that imports validate.proto with `import option`, built
+  # by buf, which leaves option imports out of the set.
   use ExUnit.Case, async: true
 
   @extensions :__extensions__
@@ -15,6 +17,7 @@ defmodule PB.Validate.DescriptorImportsTest do
   @structural_no_imports "test/fixtures/schema/validate_structural_no_imports.binpb"
   @custom_predefined "test/fixtures/schema/validate_custom_predefined.binpb"
   @custom_predefined_no_imports "test/fixtures/schema/validate_custom_predefined_no_imports.binpb"
+  @option_import "test/fixtures/schema/validate_option_import.binpb"
 
   defp compile(path, opts \\ []),
     do: path |> File.read!() |> PB.decode_descriptor_set!() |> PB.compile(opts)
@@ -61,8 +64,21 @@ defmodule PB.Validate.DescriptorImportsTest do
 
       assert message =~
                "its buf.validate rules can't be read, as the descriptor set lacks " <>
-                 "buf/validate/validate.proto. Build the set with its imports"
+                 "buf/validate/validate.proto. Import it with a regular `import`"
     end
+  end
+
+  test "PB.Validate rejects a set missing validate.proto as an option import" do
+    error = assert_raise PB.SchemaError, fn -> compile(@option_import, plugins: [PB.Validate]) end
+
+    assert error.kind == :invalid_schema
+
+    assert Exception.message(error) ==
+             "PB failed to compile: invalid schema for " <>
+               ":\"validate_option_import.OptionImported\": its buf.validate rules can't be " <>
+               "read, as the descriptor set lacks buf/validate/validate.proto. Import it with " <>
+               "a regular `import`, which `buf build` includes by default (it never includes " <>
+               "`import option` files), or build the set with `protoc --include_imports`"
   end
 
   test "with validate.proto in the set, messages validate" do

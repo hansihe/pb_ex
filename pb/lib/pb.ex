@@ -259,6 +259,12 @@ defmodule PB do
   `kind: :missing_imports` that lists every missing import. Weak imports may
   be missing.
 
+  So may the files an edition 2024 file imports with `import option`, which
+  `buf build` never includes. The options they define then stay unknown fields
+  (`:__unknown_fields__`) of the descriptor options. A set built with
+  `protoc --include_imports` includes them, and `compile/2` decodes their
+  options.
+
   Pass `allow_missing_imports: true` for a set that deliberately leaves out
   imports nothing needs, such as option-only imports like
   `google/api/annotations.proto`. Options defined by a missing file then stay

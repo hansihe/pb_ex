@@ -1,0 +1,12 @@
+edition = "2024";
+
+package option_imports;
+
+import "google/protobuf/timestamp.proto";
+import option "proto/option_imports_options.proto";
+
+message Thing {
+  option (option_imports.label) = "a thing";
+
+  google.protobuf.Timestamp at = 1;
+}

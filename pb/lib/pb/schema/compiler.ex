@@ -37,7 +37,8 @@ defmodule PB.Schema.Compiler do
   imports a file the set doesn't contain, as in a set built without
   `--include_imports`.
 
-  Weak imports are exempt. Every missing import is reported at once.
+  Weak imports and option imports (`import option`) are exempt. Every missing
+  import is reported at once.
   """
   def check_imports!(descriptor_set) do
     files = descriptor_set[:file] || []
@@ -58,7 +59,9 @@ defmodule PB.Schema.Compiler do
     descriptor_set
   end
 
-  # `weak_dependency` holds indexes into `dependency`.
+  # `weak_dependency` holds indexes into `dependency`. Edition 2024's `import
+  # option` files, in `option_dependency`, aren't checked: they may be absent by
+  # design (buf never includes them), and Go and C++ accept their absence.
   defp missing_imports(file, names) do
     weak = file[:weak_dependency] || []
 

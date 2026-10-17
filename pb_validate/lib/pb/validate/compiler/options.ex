@@ -6,8 +6,10 @@ defmodule PB.Validate.Compiler.Options do
   # `PB.compile/2` decodes custom options through the extensions the descriptor
   # set defines, and rejects a set without the files its files import, such as
   # `buf/validate/validate.proto`. Compiled with `allow_missing_imports: true`
-  # instead, such a set keeps its rules as unknown fields of the descriptor
-  # options, where they would silently compile to no rules.
+  # instead, or missing the file because it was imported with `import option`
+  # (which `PB.compile/2` allows, and `buf build` never includes), such a set
+  # keeps its rules as unknown fields of the descriptor options, where they
+  # would silently compile to no rules.
 
   @unknowns PB.UnknownField.key()
   @field_options :"google.protobuf.FieldOptions"
@@ -37,8 +39,9 @@ defmodule PB.Validate.Compiler.Options do
           type_name: target,
           reason:
             "its buf.validate rules can't be read, as the descriptor set lacks " <>
-              "buf/validate/validate.proto. Build the set with its imports " <>
-              "(`protoc --include_imports`, or `buf build`, which includes them by default)"
+              "buf/validate/validate.proto. Import it with a regular `import`, which " <>
+              "`buf build` includes by default (it never includes `import option` files), " <>
+              "or build the set with `protoc --include_imports`"
     end
   end
 
