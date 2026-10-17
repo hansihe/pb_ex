@@ -3,7 +3,7 @@ set -xe
 
 mkdir -p test/fixtures/schema
 
-buf build proto/validate.proto --as-file-descriptor-set -o priv/validate.binpb
+buf build proto/validate.proto --as-file-descriptor-set --exclude-source-info -o priv/validate.binpb
 buf build proto/test.proto --as-file-descriptor-set -o test/fixtures/schema/test.binpb
 buf build proto/protovalidate_probe.proto --as-file-descriptor-set -o test/fixtures/schema/protovalidate_probe.binpb
 buf build proto/validate_phase2.proto --as-file-descriptor-set -o test/fixtures/schema/validate_phase2.binpb
