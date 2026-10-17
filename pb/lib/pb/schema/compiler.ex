@@ -341,8 +341,8 @@ defmodule PB.Schema.Compiler do
          messages
        )
        when cardinality in [:repeated, :map] do
-    case Map.fetch!(messages, type_name) do
-      %{map_entry: true} = map_msg ->
+    case Map.fetch(messages, type_name) do
+      {:ok, %{map_entry: true} = map_msg} ->
         field
         |> Map.put(:cardinality, :map)
         |> Map.put(:encoding, :length_prefixed)
@@ -351,11 +351,16 @@ defmodule PB.Schema.Compiler do
         |> Map.put(:map_key, map_msg.fields_by_name[:key])
         |> Map.put(:map_value, map_msg.fields_by_name[:value])
 
-      %{kind: :message} ->
+      {:ok, %{kind: :message}} ->
         field
         |> Map.delete(:map_entry)
         |> Map.delete(:map_key)
         |> Map.delete(:map_value)
+
+      # The type is missing, as when a file left out under
+      # `allow_missing_imports: true` defines it.
+      :error ->
+        raise PB.SchemaError, kind: :unknown_message, name: type_name, type_name: type_name
     end
   end
 

@@ -269,7 +269,8 @@ defmodule PB do
   imports nothing needs, such as option-only imports like
   `google/api/annotations.proto`. Options defined by a missing file then stay
   unknown fields (`:__unknown_fields__`) of the descriptor options, while a
-  field whose type a missing file defines still fails to compile.
+  field whose type a missing file defines still fails to compile, raising a
+  `PB.SchemaError` that names the type.
 
   ## Errors
 
