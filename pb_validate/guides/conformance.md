@@ -3,7 +3,7 @@
 `PB.Validate` runs the upstream
 [protovalidate](https://github.com/bufbuild/protovalidate) conformance suite
 with `scripts/run_protovalidate_conformance.sh`, which needs Go to build the
-harness.
+harness and `buf` to rebuild the descriptor fixtures.
 
 Expected failures are tracked in
 `test/fixtures/protovalidate_conformance/expected_failures.yaml`. At the pinned

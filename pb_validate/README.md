@@ -63,7 +63,8 @@ rules that don't fit the schema.
 The upstream protovalidate conformance suite runs with
 `scripts/run_protovalidate_conformance.sh`, which builds the Go harness with
 `scripts/build_protovalidate_conformance.sh`. `build_protos.sh` rebuilds the
-bundled descriptors and the test fixtures with `buf`.
+bundled descriptors and the test fixtures with `buf`. The repository's
+`mise.toml` declares Go and `buf`.
 
 ## License
 

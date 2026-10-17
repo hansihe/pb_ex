@@ -115,7 +115,8 @@ under `test/support` and is loaded by `bench/codegen_vs_runtime.exs` only to
 compare the runtime path against the old generated-code reference.
 
 The upstream protobuf conformance suite is run with
-`scripts/run_protobuf_conformance.sh`. Current results and intentional
+`scripts/run_protobuf_conformance.sh`, which needs `buf` and Node.js (the
+repository's `mise.toml` declares both). Current results and intentional
 deviations are documented in [Conformance status](guides/reference/conformance.md).
 `build_protos.sh` rebuilds the bundled descriptors and the test fixtures with
 `buf`.

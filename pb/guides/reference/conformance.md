@@ -2,7 +2,8 @@
 
 PB runs the upstream protobuf conformance suite. This page records the current
 results and the intentionally unsupported areas. The runner scripts and how to
-fetch testdata are documented in the repository (`scripts/`).
+fetch testdata are documented in the repository (`scripts/`); the runner needs
+`buf` and Node.js.
 
 ## Protocol Buffers
 
