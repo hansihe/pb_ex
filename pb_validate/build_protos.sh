@@ -1,6 +1,7 @@
 #!/bin/bash
 set -xe
 
+cd "$(dirname "$0")"
 mkdir -p test/fixtures/schema
 
 buf build proto/validate.proto --as-file-descriptor-set --exclude-source-info -o priv/validate.binpb

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
 PROTOBUF_CONFORMANCE_PACKAGE="${PROTOBUF_CONFORMANCE_PACKAGE:-protobuf-conformance}"
 PROTOBUF_CONFORMANCE_VERSION="${PROTOBUF_CONFORMANCE_VERSION:-34.1.0}"
