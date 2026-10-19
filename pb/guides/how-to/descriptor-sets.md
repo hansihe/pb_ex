@@ -68,8 +68,8 @@ schema = PB.compile(descriptor_set, allow_missing_imports: true)
 
 `use PB.Schema` takes the same option. The options a missing file defines then
 stay unknown fields (`:__unknown_fields__`) of the descriptor options, and a
-field whose type a missing file defines still fails to compile, raising a
-`PB.SchemaError` that names the type.
+field or service method whose type a missing file defines still fails to
+compile, raising a `PB.SchemaError` that names the type.
 
 ## Custom representation options in proto source
 

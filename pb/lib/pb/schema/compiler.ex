@@ -87,6 +87,7 @@ defmodule PB.Schema.Compiler do
       compile_services(file[:service] || [], package, acc)
     end)
     |> attach_extensions()
+    |> check_method_types!()
     |> resolve_map_fields()
   end
 
@@ -274,6 +275,19 @@ defmodule PB.Schema.Compiler do
         acc
       end
     end)
+  end
+
+  # A method's input or output type is missing, as a field's type may be, when a
+  # file left out under `allow_missing_imports: true` defines it.
+  defp check_method_types!(%{services: services, messages: messages} = acc) do
+    for {_service, %{methods: methods}} <- services,
+        {_method, method} <- methods,
+        type_name <- [method.input_type, method.output_type],
+        not Map.has_key?(messages, type_name) do
+      raise PB.SchemaError, kind: :unknown_message, name: type_name, type_name: type_name
+    end
+
+    acc
   end
 
   # Map fields are a descriptor convention: a repeated message field whose

@@ -110,7 +110,7 @@ defmodule PB.Schema.ImportsTest do
     assert PB.decode(encoded, schema, :"imports.Event") == {:ok, %{took: %{seconds: 1}}}
   end
 
-  describe "allow_missing_imports: true with a field whose type a missing file defines" do
+  describe "allow_missing_imports: true with a field or method whose type a missing file defines" do
     test "a singular message field raises" do
       field = Map.merge(gone_field(:LABEL_OPTIONAL), %{name: "gone", number: 1})
 
@@ -153,6 +153,16 @@ defmodule PB.Schema.ImportsTest do
 
         assert_unknown_gone(
           uses_gone(%{syntax: "proto2", message_type: [message], extension: [extension]})
+        )
+      end
+    end
+
+    test "a method raises, by its input or output type" do
+      for {input, output} <- [{".gone.Gone", ".uses.M"}, {".uses.M", ".gone.Gone"}] do
+        service = %{name: "S", method: [%{name: "Call", input_type: input, output_type: output}]}
+
+        assert_unknown_gone(
+          uses_gone(%{syntax: "proto3", message_type: [%{name: "M"}], service: [service]})
         )
       end
     end
