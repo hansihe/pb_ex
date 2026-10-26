@@ -1,7 +1,7 @@
 defmodule CELEx.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
   @source_url "https://github.com/hansihe/pb_ex"
 
   def project do
@@ -39,7 +39,7 @@ defmodule CELEx.MixProject do
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README*"],
+      files: ["lib", "mix.exs", "README*", "LICENSE"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
     ]

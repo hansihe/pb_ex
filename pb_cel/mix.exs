@@ -1,7 +1,7 @@
 defmodule PBCEL.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
   @source_url "https://github.com/hansihe/pb_ex"
 
   def project do
@@ -30,10 +30,9 @@ defmodule PBCEL.MixProject do
   defp deps do
     [
       # PB.CEL implements cel_ex's type provider over pb's prepared schema and
-      # runtime modules, internals of both, so pb_cel will pin pb and cel_ex to
-      # an exact version (`== x.y.z`) when published.
-      {:pb, path: "../pb"},
-      {:cel_ex, path: "../cel_ex"},
+      # runtime modules, internals of both, so it pins them to its own version.
+      sibling(:pb),
+      sibling(:cel_ex),
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
       # CEL conformance uses named time zones.
@@ -41,12 +40,24 @@ defmodule PBCEL.MixProject do
     ]
   end
 
+  # The libraries in this repository are released together at one version.
+  # Consumers evaluate this file too, so the Hex requirement is the default;
+  # inside the repository, mise.toml sets PB_EX_LOCAL=1 to use the sibling
+  # checkouts instead.
+  defp sibling(app) do
+    if System.get_env("PB_EX_LOCAL") == "1" do
+      {app, path: "../#{app}"}
+    else
+      {app, "== #{@version}"}
+    end
+  end
+
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_env), do: ["lib"]
 
   defp package do
     [
-      files: ["lib", "priv", "mix.exs", "README*"],
+      files: ["lib", "priv", "mix.exs", "README*", "LICENSE"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
     ]

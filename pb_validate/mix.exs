@@ -1,7 +1,7 @@
 defmodule PBValidate.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
   @source_url "https://github.com/hansihe/pb_ex"
 
   def project do
@@ -31,14 +31,25 @@ defmodule PBValidate.MixProject do
     [
       # PB.Validate uses internals of pb (the prepared schema and its runtime
       # modules), pb_cel (its CEL message runtime) and cel_ex (the evaluator),
-      # so pb_validate will pin all three to an exact version (`== x.y.z`) when
-      # published.
-      {:pb, path: "../pb"},
-      {:pb_cel, path: "../pb_cel"},
-      {:cel_ex, path: "../cel_ex"},
+      # so it pins all three to its own version.
+      sibling(:pb),
+      sibling(:pb_cel),
+      sibling(:cel_ex),
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false}
     ]
+  end
+
+  # The libraries in this repository are released together at one version.
+  # Consumers evaluate this file too, so the Hex requirement is the default;
+  # inside the repository, mise.toml sets PB_EX_LOCAL=1 to use the sibling
+  # checkouts instead.
+  defp sibling(app) do
+    if System.get_env("PB_EX_LOCAL") == "1" do
+      {app, path: "../#{app}"}
+    else
+      {app, "== #{@version}"}
+    end
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
@@ -46,7 +57,7 @@ defmodule PBValidate.MixProject do
 
   defp package do
     [
-      files: ["lib", "priv", "mix.exs", "README*"],
+      files: ["lib", "priv", "mix.exs", "README*", "LICENSE"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
     ]

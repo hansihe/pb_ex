@@ -1,7 +1,7 @@
 defmodule PB.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
   @source_url "https://github.com/hansihe/pb_ex"
 
   def project do
@@ -39,7 +39,7 @@ defmodule PB.MixProject do
 
   defp package do
     [
-      files: ["lib", "priv", "proto", "mix.exs", "README*"],
+      files: ["lib", "priv", "proto/elixir", "mix.exs", "README*", "LICENSE"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
     ]
