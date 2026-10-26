@@ -1,0 +1,252 @@
+defmodule CEL.WellKnownTypes do
+  @moduledoc false
+
+  # How CEL treats the protobuf well-known types by name: the CEL types the
+  # wrapper, `Timestamp`, `Duration`, `Any`, `Struct`, `Value` and `ListValue`
+  # types stand for, and their message literals, which CEL checks and
+  # evaluates itself, with or without a type provider. These names are CEL's
+  # own, never a provider's. Unpacking an `Any` literal's payload needs its
+  # type, so it goes through the provider's `unpack_any/3`.
+
+  alias CEL.ProtoType
+  alias CEL.Runtime.Time
+  alias CEL.Value
+
+  @timestamp_type "google.protobuf.Timestamp"
+  @duration_type "google.protobuf.Duration"
+
+  @wrapper_types %{
+    "google.protobuf.Int32Value" => :int,
+    "google.protobuf.Int64Value" => :int,
+    "google.protobuf.UInt32Value" => :uint,
+    "google.protobuf.UInt64Value" => :uint,
+    "google.protobuf.FloatValue" => :double,
+    "google.protobuf.DoubleValue" => :double,
+    "google.protobuf.BoolValue" => :bool,
+    "google.protobuf.StringValue" => :string,
+    "google.protobuf.BytesValue" => :bytes
+  }
+
+  @wrapper_defaults %{
+    "google.protobuf.Int32Value" => {:int, 0},
+    "google.protobuf.Int64Value" => {:int, 0},
+    "google.protobuf.UInt32Value" => {:uint, 0},
+    "google.protobuf.UInt64Value" => {:uint, 0},
+    "google.protobuf.FloatValue" => {:double, 0.0},
+    "google.protobuf.DoubleValue" => {:double, 0.0},
+    "google.protobuf.BoolValue" => {:bool, false},
+    "google.protobuf.StringValue" => {:string, ""},
+    "google.protobuf.BytesValue" => {:bytes, ""}
+  }
+
+  # The fields a literal of each well-known type may set, with their CEL types.
+  @literal_fields Map.merge(
+                    Map.new(@wrapper_types, fn {name, type} -> {name, %{"value" => type}} end),
+                    %{
+                      "google.protobuf.Any" => %{"type_url" => :string, "value" => :bytes},
+                      "google.protobuf.ListValue" => %{"values" => {:list, :dyn}},
+                      "google.protobuf.Struct" => %{"fields" => {:map, :string, :dyn}},
+                      "google.protobuf.Value" => %{
+                        "null_value" => :dyn,
+                        "number_value" => :double,
+                        "string_value" => :string,
+                        "bool_value" => :bool,
+                        "struct_value" => {:map, :string, :dyn},
+                        "list_value" => {:list, :dyn}
+                      },
+                      @timestamp_type => %{"seconds" => :int, "nanos" => :int},
+                      @duration_type => %{"seconds" => :int, "nanos" => :int}
+                    }
+                  )
+
+  @min_int32 -2_147_483_648
+  @max_int32 2_147_483_647
+  @max_uint32 4_294_967_295
+  @nanos_per_second 1_000_000_000
+
+  @spec literal_message?(term) :: boolean
+  def literal_message?(name), do: is_map_key(@literal_fields, name)
+
+  @doc """
+  The CEL type of a field a literal of the well-known type `message_name` sets.
+  """
+  @spec literal_field_type(String.t(), String.t()) :: {:ok, CEL.Type.t()} | :error
+  def literal_field_type(message_name, field) do
+    with {:ok, fields} <- Map.fetch(@literal_fields, message_name) do
+      Map.fetch(fields, field)
+    end
+  end
+
+  @doc """
+  The CEL type a well-known type stands for, as a field's or a declaration's
+  type, or `nil` for any other name.
+  """
+  @spec builtin_type(term) :: CEL.Type.t() | nil
+  def builtin_type(name) do
+    cond do
+      wrapper_type = @wrapper_types[name] -> {:wrapper, wrapper_type}
+      name == @timestamp_type -> :timestamp
+      name == @duration_type -> :duration
+      name == "google.protobuf.Any" -> :dyn
+      name == "google.protobuf.ListValue" -> {:list, :dyn}
+      name == "google.protobuf.Struct" -> {:map, :string, :dyn}
+      name == "google.protobuf.Value" -> :dyn
+      true -> nil
+    end
+  end
+
+  @spec literal_type(String.t(), %{String.t() => ProtoType.t()}) :: {:ok, ProtoType.t()} | :error
+  def literal_type(message_name, fields) do
+    cond do
+      wrapper_type = @wrapper_types[message_name] ->
+        {:ok, wrapper_literal_type(wrapper_type)}
+
+      message_name == "google.protobuf.ListValue" ->
+        {:ok, Map.get(fields, "values", ProtoType.list(ProtoType.dyn()))}
+
+      message_name == "google.protobuf.Struct" ->
+        {:ok, Map.get(fields, "fields", ProtoType.map(ProtoType.string(), ProtoType.dyn()))}
+
+      message_name == "google.protobuf.Value" ->
+        {:ok, value_literal_type(fields)}
+
+      message_name == "google.protobuf.Any" ->
+        {:ok, ProtoType.dyn()}
+
+      message_name == @timestamp_type ->
+        {:ok, ProtoType.timestamp()}
+
+      message_name == @duration_type ->
+        {:ok, ProtoType.duration()}
+
+      true ->
+        :error
+    end
+  end
+
+  @spec literal_value(String.t(), %{String.t() => Value.t()}) ::
+          {:ok, Value.t()} | {:error, String.t()}
+  def literal_value(message_name, fields) do
+    cond do
+      Map.has_key?(@wrapper_defaults, message_name) ->
+        fields
+        |> Map.get("value", Map.fetch!(@wrapper_defaults, message_name))
+        |> wrapper_literal_value(message_name)
+
+      message_name == "google.protobuf.ListValue" ->
+        {:ok, Map.get(fields, "values", Value.list([]))}
+
+      message_name == "google.protobuf.Struct" ->
+        {:ok, Map.get(fields, "fields", Value.map(%{}))}
+
+      message_name == "google.protobuf.Value" ->
+        {:ok, value_literal_value(fields)}
+
+      message_name == "google.protobuf.Any" ->
+        any_literal_value(fields)
+
+      message_name == @timestamp_type ->
+        with {:ok, ns} <- time_literal_nanos(fields), do: Time.timestamp(ns)
+
+      message_name == @duration_type ->
+        with {:ok, ns} <- time_literal_nanos(fields), do: Time.duration(ns)
+    end
+  end
+
+  @spec type_denotation(term) :: {:ok, ProtoType.t()} | :error
+  def type_denotation(name) do
+    case name do
+      @timestamp_type -> {:ok, ProtoType.timestamp()}
+      @duration_type -> {:ok, ProtoType.duration()}
+      _other -> :error
+    end
+  end
+
+  # Any host is accepted: the last path segment names the message, as for
+  # ProtoJSON and Go's resolvers.
+  @spec type_url_name(String.t()) :: String.t()
+  def type_url_name(type_url) do
+    case type_url |> String.split("/") |> List.last() do
+      "" -> type_url
+      name -> name
+    end
+  end
+
+  defp wrapper_literal_type(:int), do: ProtoType.int()
+  defp wrapper_literal_type(:uint), do: ProtoType.uint()
+  defp wrapper_literal_type(:double), do: ProtoType.double()
+  defp wrapper_literal_type(:bool), do: ProtoType.bool()
+  defp wrapper_literal_type(:string), do: ProtoType.string()
+  defp wrapper_literal_type(:bytes), do: ProtoType.bytes()
+
+  defp value_literal_type(fields) do
+    cond do
+      Map.has_key?(fields, "null_value") -> ProtoType.null()
+      Map.has_key?(fields, "number_value") -> ProtoType.double()
+      Map.has_key?(fields, "string_value") -> ProtoType.string()
+      Map.has_key?(fields, "bool_value") -> ProtoType.bool()
+      Map.has_key?(fields, "struct_value") -> Map.fetch!(fields, "struct_value")
+      Map.has_key?(fields, "list_value") -> Map.fetch!(fields, "list_value")
+      true -> ProtoType.null()
+    end
+  end
+
+  defp value_literal_value(fields) do
+    cond do
+      Map.has_key?(fields, "null_value") -> Value.null()
+      Map.has_key?(fields, "number_value") -> Map.fetch!(fields, "number_value")
+      Map.has_key?(fields, "string_value") -> Map.fetch!(fields, "string_value")
+      Map.has_key?(fields, "bool_value") -> Map.fetch!(fields, "bool_value")
+      Map.has_key?(fields, "struct_value") -> Map.fetch!(fields, "struct_value")
+      Map.has_key?(fields, "list_value") -> Map.fetch!(fields, "list_value")
+      true -> Value.null()
+    end
+  end
+
+  defp any_literal_value(fields) when fields == %{}, do: {:error, "conversion error"}
+
+  defp any_literal_value(fields) do
+    type_url =
+      case Map.get(fields, "type_url", Value.string("")) do
+        {:string, value} -> value
+        _other -> ""
+      end
+
+    value =
+      case Map.get(fields, "value", Value.bytes("")) do
+        {:bytes, value} -> value
+        _other -> ""
+      end
+
+    {:ok, Value.object(type_url, value)}
+  end
+
+  # A `FloatValue` holds a float32: round as encoding one would, a double out of
+  # float32 range becoming an infinity. `Int32Value` and `UInt32Value` reject
+  # what does not fit their 32 bits, as encoding them would.
+  defp wrapper_literal_value({:double, value}, "google.protobuf.FloatValue")
+       when is_float(value) do
+    case <<value::little-float-32>> do
+      <<0, 0, 128, 127>> -> {:ok, Value.double(:infinity)}
+      <<0, 0, 128, 255>> -> {:ok, Value.double(:negative_infinity)}
+      <<rounded::little-float-32>> -> {:ok, Value.double(rounded)}
+    end
+  end
+
+  defp wrapper_literal_value({:int, value}, "google.protobuf.Int32Value")
+       when value < @min_int32 or value > @max_int32,
+       do: {:error, "int32 value out of range"}
+
+  defp wrapper_literal_value({:uint, value}, "google.protobuf.UInt32Value")
+       when value > @max_uint32,
+       do: {:error, "uint32 value out of range"}
+
+  defp wrapper_literal_value(value, _message_name), do: {:ok, value}
+
+  defp time_literal_nanos(fields) do
+    case {Map.get(fields, "seconds", Value.int(0)), Map.get(fields, "nanos", Value.int(0))} do
+      {{:int, seconds}, {:int, nanos}} -> {:ok, seconds * @nanos_per_second + nanos}
+      _other -> {:error, "invalid time literal"}
+    end
+  end
+end

@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+package test;
+
+import "buf/validate/conformance/harness/harness.proto";
+import "buf/validate/conformance/harness/results.proto";

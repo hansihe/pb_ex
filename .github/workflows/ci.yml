@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # The Publish workflow runs this before publishing.
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # Build pb_cel and pb_validate against the sibling checkouts (see mise.toml).
+  PB_EX_LOCAL: "1"
+  # Keep these in step with mise.toml.
+  OTP_VERSION: "28.5"
+  ELIXIR_VERSION: "1.20.1"
+  BUF_VERSION: "1.72.0"
+  PROTOC_VERSION: "35.1"
+
+jobs:
+  # All four libraries at one version, each changelog with an Unreleased section.
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: scripts/check_versions.sh
+
+  check:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [cel_ex, pb, pb_cel, pb_validate]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      # pb's tests build some descriptor sets with protoc, and skip them without it.
+      - if: matrix.package == 'pb'
+        uses: arduino/setup-protoc@v3
+        with:
+          version: ${{ env.PROTOC_VERSION }}
+          repo-token: ${{ github.token }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ${{ matrix.package }}/deps
+            ${{ matrix.package }}/_build
+            ~/.mix/dialyxir_*
+          key: check-${{ matrix.package }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles(format('{0}/mix.lock', matrix.package)) }}-${{ github.sha }}
+          restore-keys: |
+            check-${{ matrix.package }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles(format('{0}/mix.lock', matrix.package)) }}-
+
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+        env:
+          MIX_ENV: test
+      - run: mix test
+      - run: mix dialyzer --format github
+
+  protobuf-conformance:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pb
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          version: ${{ env.BUF_VERSION }}
+
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: ${{ env.PROTOC_VERSION }}
+          repo-token: ${{ github.token }}
+
+      # Runs protobuf's conformance_test_runner from npm.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24.17.0"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            pb/deps
+            pb/_build
+          key: protobuf-conformance-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('pb/mix.lock') }}-${{ github.sha }}
+          restore-keys: |
+            protobuf-conformance-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('pb/mix.lock') }}-
+
+      - run: mix deps.get
+      - run: scripts/run_protobuf_conformance.sh
+      - name: Check the descriptor sets are up to date
+        run: git diff --exit-code
+
+  protovalidate-conformance:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pb_validate
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          version: ${{ env.BUF_VERSION }}
+
+      # Builds protovalidate's conformance harness.
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.0"
+          cache: false
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            pb_validate/deps
+            pb_validate/_build
+          key: protovalidate-conformance-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('pb_validate/mix.lock') }}-${{ github.sha }}
+          restore-keys: |
+            protovalidate-conformance-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('pb_validate/mix.lock') }}-
+
+      - run: mix deps.get
+      - run: scripts/run_protovalidate_conformance.sh
+      - name: Check the descriptor sets are up to date
+        run: git diff --exit-code

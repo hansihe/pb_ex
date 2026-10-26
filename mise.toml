@@ -1,2 +1,10 @@
 [tools]
+buf = "1.72.0"
 elixir = "1.20.1"
+go = "1.27.0"
+node = "24.17.0"
+
+[env]
+# Build pb_cel and pb_validate against the sibling checkouts instead of Hex,
+# unless PB_EX_LOCAL is already set (scripts/publish.sh sets it to 0).
+PB_EX_LOCAL = "{{ get_env(name='PB_EX_LOCAL', default='1') }}"

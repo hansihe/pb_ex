@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package test;
+
+import "cel/expr/conformance/conformance_service.proto";
+import "cel/expr/conformance/env_config.proto";
+import "cel/expr/conformance/proto2/test_all_types.proto";
+import "cel/expr/conformance/proto2/test_all_types_extensions.proto";
+import "cel/expr/conformance/proto3/test_all_types.proto";
+import "cel/expr/conformance/test/simple.proto";
+import "cel/expr/conformance/test/suite.proto";
+import "test/fixtures/protobuf_conformance/proto/conformance/conformance.proto";
+import "test/fixtures/protobuf_conformance/proto/google/protobuf/test_messages_edition2023.proto";
+import "test/fixtures/protobuf_conformance/proto/google/protobuf/test_messages_proto2.proto";
+import "test/fixtures/protobuf_conformance/proto/google/protobuf/test_messages_proto2_editions.proto";
+import "test/fixtures/protobuf_conformance/proto/google/protobuf/test_messages_proto3.proto";
+import "test/fixtures/protobuf_conformance/proto/google/protobuf/test_messages_proto3_editions.proto";

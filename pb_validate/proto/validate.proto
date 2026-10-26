@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package meta;
+
+import "buf/validate/validate.proto";
+
+// Well-known types that buf/validate/validate.proto does not import itself,
+// for the standard-rule schema PB.Validate type-checks predefined rules with.
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/any.proto";

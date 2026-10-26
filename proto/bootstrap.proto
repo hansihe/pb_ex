@@ -1,6 +1,0 @@
-syntax = "proto3";
-
-package bootstrap;
-
-import "buf/validate/validate.proto";
-import "google/protobuf/descriptor.proto";

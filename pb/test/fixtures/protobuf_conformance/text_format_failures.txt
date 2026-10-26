@@ -1,0 +1,2 @@
+# Text-format conformance cases PB does not pass. The runner fails when a
+# listed case starts passing, so remove entries as support lands.
