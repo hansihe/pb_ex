@@ -20,6 +20,13 @@ env:
   PROTOC_VERSION: "35.1"
 
 jobs:
+  # All four libraries at one version, each changelog with an Unreleased section.
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: scripts/check_versions.sh
+
   check:
     name: ${{ matrix.package }}
     runs-on: ubuntu-latest

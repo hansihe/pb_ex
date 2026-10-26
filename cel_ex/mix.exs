@@ -39,9 +39,12 @@ defmodule CELEx.MixProject do
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README*", "LICENSE"],
+      files: ["lib", "mix.exs", "README*", "LICENSE", "CHANGELOG.md"],
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url}
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "https://hexdocs.pm/cel_ex/changelog.html"
+      }
     ]
   end
 
@@ -69,6 +72,7 @@ defmodule CELEx.MixProject do
   defp extras do
     [
       "README.md",
+      "CHANGELOG.md",
       "guides/evaluating-expressions.md",
       "guides/custom-functions.md"
     ]

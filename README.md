@@ -20,10 +20,15 @@ needs doing; otherwise export it yourself.
 
 ## Releasing
 
-The four libraries are released together at one version.
+The four libraries are released together at one version. Each has a
+`CHANGELOG.md`; note changes under its `## Unreleased` heading as they land.
 
-1. Set `@version` in each `mix.exs` to the new version.
-2. Run `scripts/publish.sh` to build every package without publishing.
-3. Push a `vX.Y.Z` tag. The `Publish` workflow runs CI and then
-   `scripts/publish.sh --yes`, which publishes in dependency order (`cel_ex`,
-   `pb`, `pb_cel`, `pb_validate`) and skips any that are already on Hex.
+1. Run `scripts/bump_version.sh X.Y.Z`. It sets `@version` in each `mix.exs`
+   and moves each changelog's unreleased entries under `## vX.Y.Z (date)`.
+2. Review the changelogs, then run `scripts/publish.sh` to build every package
+   without publishing.
+3. Commit, and push a `vX.Y.Z` tag on that commit. The `Publish` workflow runs
+   CI and then `scripts/publish.sh --yes`. That publishes the packages in
+   dependency order (`cel_ex`, `pb`, `pb_cel`, `pb_validate`), skipping any
+   already on Hex. It refuses to publish if the tag doesn't match the version or
+   a changelog has no section for it.

@@ -57,9 +57,12 @@ defmodule PBCEL.MixProject do
 
   defp package do
     [
-      files: ["lib", "priv", "mix.exs", "README*", "LICENSE"],
+      files: ["lib", "priv", "mix.exs", "README*", "LICENSE", "CHANGELOG.md"],
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url}
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "https://hexdocs.pm/pb_cel/changelog.html"
+      }
     ]
   end
 
@@ -84,6 +87,7 @@ defmodule PBCEL.MixProject do
   defp extras do
     [
       "README.md",
+      "CHANGELOG.md",
       "guides/cel-over-protobuf.md",
       "guides/conformance.md"
     ]

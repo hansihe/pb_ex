@@ -4,13 +4,13 @@
 #   scripts/publish.sh          build each package without publishing
 #   scripts/publish.sh --yes    publish, without prompting
 #
-# The four libraries share one version. Packages already on Hex at that version
-# are skipped, so a run that failed partway can be retried. Set RELEASE_TAG
-# (CI passes the pushed tag) to check that it matches the version.
+# The four libraries share one version, and each changelog needs a section for
+# it (scripts/bump_version.sh adds them). Packages already on Hex at that version
+# are skipped, so a run that failed partway can be retried. Set RELEASE_TAG (CI
+# passes the pushed tag) to check that it matches the version.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PACKAGES=(cel_ex pb pb_cel pb_validate)
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 PUBLISH=0
 case "${1:-}" in
@@ -19,26 +19,22 @@ case "${1:-}" in
   *) echo "usage: $0 [--yes]" >&2; exit 2 ;;
 esac
 
-# Resolve siblings from Hex (see `sibling/1` in pb_cel/mix.exs), and keep the
-# Hex-resolved deps and builds out of the local checkouts' deps/ and _build/.
-export PB_EX_LOCAL=0
-WORK_DIR="$ROOT/tmp/publish"
-
-version_of() {
-  sed -n 's/^  @version "\(.*\)"$/\1/p' "$ROOT/$1/mix.exs"
-}
-
-VERSION="$(version_of pb)"
-for package in "${PACKAGES[@]}"; do
-  if [[ "$(version_of "$package")" != "$VERSION" ]]; then
-    echo "error: $package is at version $(version_of "$package"), pb is at $VERSION" >&2
-    exit 1
-  fi
-done
+VERSION="$("$ROOT/scripts/check_versions.sh")"
 if [[ -n "${RELEASE_TAG:-}" && "$RELEASE_TAG" != "v$VERSION" ]]; then
   echo "error: tag $RELEASE_TAG does not match version $VERSION" >&2
   exit 1
 fi
+for package in "${PACKAGES[@]}"; do
+  if ! grep -qF "## v$VERSION (" "$ROOT/$package/CHANGELOG.md"; then
+    echo "error: $package/CHANGELOG.md has no section for v$VERSION; run scripts/bump_version.sh $VERSION" >&2
+    exit 1
+  fi
+done
+
+# Resolve siblings from Hex (see `sibling/1` in pb_cel/mix.exs), and keep the
+# Hex-resolved deps and builds out of the local checkouts' deps/ and _build/.
+export PB_EX_LOCAL=0
+WORK_DIR="$ROOT/tmp/publish"
 
 published() {
   local status

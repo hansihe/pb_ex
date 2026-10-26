@@ -39,9 +39,12 @@ defmodule PB.MixProject do
 
   defp package do
     [
-      files: ["lib", "priv", "proto/elixir", "mix.exs", "README*", "LICENSE"],
+      files: ["lib", "priv", "proto/elixir", "mix.exs", "README*", "LICENSE", "CHANGELOG.md"],
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url}
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "https://hexdocs.pm/pb/changelog.html"
+      }
     ]
   end
 
@@ -73,6 +76,7 @@ defmodule PB.MixProject do
   defp extras do
     [
       "README.md",
+      "CHANGELOG.md",
       # Tutorial
       "guides/tutorials/getting-started.md",
       # How-to guides
