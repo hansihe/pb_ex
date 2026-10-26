@@ -490,5 +490,4 @@ defmodule CEL.Expr do
   defp ident_scope(:local), do: :local
   defp ident_scope(:type), do: :type
   defp ident_scope(:enum_value), do: :enum
-
 end

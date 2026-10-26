@@ -314,7 +314,8 @@ defmodule PB.TextFormat do
     }
   end
 
-  defp to_error(reason, message_name), do: RuntimeErrors.to_error(reason, @operation, message_name)
+  defp to_error(reason, message_name),
+    do: RuntimeErrors.to_error(reason, @operation, message_name)
 
   defp at_position(error, _text, nil), do: error
 

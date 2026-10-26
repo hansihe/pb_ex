@@ -49,13 +49,14 @@ defmodule CEL.ValueTest do
     test "passes through values with no native form" do
       assert Value.to_native(Value.timestamp(123)) == {:timestamp, 123}
       assert Value.to_native(Value.duration(456)) == {:duration, 456}
+
       assert Value.to_native(Value.object("type.googleapis.com/x", <<>>)) ==
                {:object, "type.googleapis.com/x", <<>>}
-
     end
 
     test "turns a type value into its name" do
       assert Value.to_native({:type, ProtoType.null()}) == "null_type"
+
       assert Value.to_native(CEL.eval!("[type(1), type(optional.of(1))]")) ==
                ["int", "optional_type"]
     end

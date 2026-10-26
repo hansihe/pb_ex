@@ -234,14 +234,16 @@ defmodule PB.RuntimeErrorEncoderTest do
         operation: :decode,
         kind: :invalid_option,
         message_name: :"err.Msg",
-        option: :defaults, value: :yes
+        option: :defaults,
+        value: :yes
       )
 
       assert_error(PB.decode(<<>>, es, :"err.Msg", message_names: :all),
         operation: :decode,
         kind: :invalid_option,
         message_name: :"err.Msg",
-        option: :message_names, value: :all
+        option: :message_names,
+        value: :all
       )
 
       assert_error(PB.decode(<<>>, es, :"err.Msg", :not_a_keyword),
@@ -333,7 +335,8 @@ defmodule PB.RuntimeErrorEncoderTest do
         kind: :invalid_value,
         message_name: :"test.Person",
         path: [],
-        expected: :map, got: :list
+        expected: :map,
+        got: :list
       )
     end
 
@@ -343,7 +346,8 @@ defmodule PB.RuntimeErrorEncoderTest do
         kind: :invalid_value,
         message_name: :"test.Person",
         path: [:scores],
-        expected: :list, got: :integer
+        expected: :list,
+        got: :integer
       )
     end
 
@@ -353,7 +357,8 @@ defmodule PB.RuntimeErrorEncoderTest do
         kind: :invalid_value,
         message_name: :"test.Person",
         path: [:name],
-        expected: :utf8_string, got: :binary
+        expected: :utf8_string,
+        got: :binary
       )
 
       assert_error(PB.decode(<<0x0A, 0x01, 0xFF>>, schema, :"test.Person"),
@@ -371,7 +376,9 @@ defmodule PB.RuntimeErrorEncoderTest do
         kind: :value_out_of_range,
         message_name: :"test.Person",
         path: [:id],
-        min: -2_147_483_648, max: 2_147_483_647, value: 2_147_483_648
+        min: -2_147_483_648,
+        max: 2_147_483_647,
+        value: 2_147_483_648
       )
     end
 
@@ -424,7 +431,8 @@ defmodule PB.RuntimeErrorEncoderTest do
         operation: :encode,
         kind: :invalid_option,
         message_name: :"test.Person",
-        option: :unknown_fields, value: :drop
+        option: :unknown_fields,
+        value: :drop
       )
 
       assert_error(PB.encode(%{}, schema, :"test.Person", [:not_a_keyword]),

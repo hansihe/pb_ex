@@ -41,10 +41,12 @@ defmodule CEL.EvaluatorTest do
     assert CEL.Checked.type(CEL.check!("m.e", env)) == {:enum, "test.E"}
     assert CEL.eval!("m.a + m.child.a", %{m: m}, env) == Value.int(3)
     assert CEL.eval!("m.child.e == E.Y && m.e == E(0)", %{m: m}, env) == Value.bool(true)
+
     assert CEL.eval!("[has(m.e), has(m.a), m.?e.hasValue()]", %{m: m}, env) ==
              Value.list([Value.bool(false), Value.bool(true), Value.bool(false)])
 
     assert CEL.eval!("dyn(m).child.a", %{m: m}, env) == Value.int(2)
+
     assert CEL.eval!("Msg{a: 5, e: E.X}", %{}, env) ==
              {:message, "test.Msg", %{"a" => Value.int(5), "e" => Value.enum("test.E", 1)}}
 
@@ -402,7 +404,14 @@ defmodule CEL.EvaluatorTest do
   test "error messages are strings, with the runtime reason in details" do
     function = %CEL.Function{
       name: "fail",
-      overloads: [%CEL.Function.Overload{id: "fail_int", args: [:int], result: :int, eval: {__MODULE__, :failing}}]
+      overloads: [
+        %CEL.Function.Overload{
+          id: "fail_int",
+          args: [:int],
+          result: :int,
+          eval: {__MODULE__, :failing}
+        }
+      ]
     }
 
     assert {:error,
@@ -419,6 +428,7 @@ defmodule CEL.EvaluatorTest do
     assert CEL.eval!("google.protobuf.StringValue{value: 'a'} == 'a'") == Value.bool(true)
     assert CEL.eval!("google.protobuf.Value{number_value: 1.5}") == Value.double(1.5)
     assert CEL.eval!("google.protobuf.Value{}") == Value.null()
+
     assert CEL.eval!("google.protobuf.ListValue{values: [1, 'a']}") ==
              Value.list([Value.int(1), Value.string("a")])
 

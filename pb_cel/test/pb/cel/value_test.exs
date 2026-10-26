@@ -43,31 +43,27 @@ defmodule PB.CEL.ValueTest do
 
     assert {:ok, timestamp_bytes} = WKTCodec.encode_timestamp(timestamp_message)
 
-    assert ProtoCodec.from_expr_value(
-             %{
-               kind:
-                 {:object_value,
-                  %{
-                    type_url: "type.googleapis.com/google.protobuf.Timestamp",
-                    value: IO.iodata_to_binary(timestamp_bytes)
-                  }}
-             }
-           ) == {:ok, Value.timestamp(1_234_567_890_123_456_789)}
+    assert ProtoCodec.from_expr_value(%{
+             kind:
+               {:object_value,
+                %{
+                  type_url: "type.googleapis.com/google.protobuf.Timestamp",
+                  value: IO.iodata_to_binary(timestamp_bytes)
+                }}
+           }) == {:ok, Value.timestamp(1_234_567_890_123_456_789)}
 
     {:ok, duration_message} = WKTTime.to_proto_duration(Value.duration(123_321_456_789))
 
     assert {:ok, duration_bytes} = WKTCodec.encode_duration(duration_message)
 
-    assert ProtoCodec.from_expr_value(
-             %{
-               kind:
-                 {:object_value,
-                  %{
-                    type_url: "type.googleapis.com/google.protobuf.Duration",
-                    value: IO.iodata_to_binary(duration_bytes)
-                  }}
-             }
-           ) == {:ok, Value.duration(123_321_456_789)}
+    assert ProtoCodec.from_expr_value(%{
+             kind:
+               {:object_value,
+                %{
+                  type_url: "type.googleapis.com/google.protobuf.Duration",
+                  value: IO.iodata_to_binary(duration_bytes)
+                }}
+           }) == {:ok, Value.duration(123_321_456_789)}
   end
 
   test "decodes schema-backed object values" do
@@ -101,8 +97,12 @@ defmodule PB.CEL.ValueTest do
 
   test "resolves object values by the last segment of any type URL" do
     schema = PB.TestSupport.TestSchema.schema()
+
     object = fn type_url, value ->
-      ProtoCodec.from_expr_value(%{kind: {:object_value, %{type_url: type_url, value: value}}}, schema)
+      ProtoCodec.from_expr_value(
+        %{kind: {:object_value, %{type_url: type_url, value: value}}},
+        schema
+      )
     end
 
     assert object.("example.com/a/cel.expr.conformance.proto2.TestAllTypes", <<8, 17>>) ==

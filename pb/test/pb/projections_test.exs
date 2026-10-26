@@ -59,10 +59,10 @@ defmodule PB.ProjectionsTest do
       assert_raise PB.OptionError,
                    ~r/compile :"proj.Msg": .*:projections: cannot set both :struct and :unwrap/,
                    fn ->
-        PB.compile(single_message_descriptor(),
-          projections: [{@message, struct: EventA, unwrap: :value}]
-        )
-      end
+                     PB.compile(single_message_descriptor(),
+                       projections: [{@message, struct: EventA, unwrap: :value}]
+                     )
+                   end
     end
 
     test "rejects aux-only entries with :preserved_unknown_fields and no kind" do

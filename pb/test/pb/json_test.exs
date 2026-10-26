@@ -135,7 +135,8 @@ defmodule PB.JSONTest do
               %PB.ValueError{
                 kind: :unknown_field,
                 path: [:optional_nested_message, "bogus"],
-                protobuf_message: :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
+                protobuf_message:
+                  :"protobuf_test_messages.proto3.TestAllTypesProto3.NestedMessage"
               }} = JSON.from_term(json, schema, @all_types)
     end
 
@@ -320,7 +321,8 @@ defmodule PB.JSONTest do
                  JSON.to_term(%{field => value}, ss, :"s.Scalars"),
                inspect({field, value})
 
-        assert {:error, %PB.ValueError{kind: ^kind}} = PB.encode(%{field => value}, ss, :"s.Scalars")
+        assert {:error, %PB.ValueError{kind: ^kind}} =
+                 PB.encode(%{field => value}, ss, :"s.Scalars")
       end
     end
 

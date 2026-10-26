@@ -194,7 +194,8 @@ defmodule PB.Validate do
     if ValidateSchema.compiled?(schema) do
       schema
     else
-      what = if is_atom(schema_source), do: "schema module #{inspect(schema_source)}", else: "schema"
+      what =
+        if is_atom(schema_source), do: "schema module #{inspect(schema_source)}", else: "schema"
 
       raise ArgumentError,
             "the PB #{what} was not compiled for validation; " <>

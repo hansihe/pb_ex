@@ -314,7 +314,8 @@ defmodule PB.CEL.EvaluatorTest do
       assert CEL.eval("has(msg.#{field})", %{msg: stored}, presence_env()) == {:ok, {:bool, set?}}
     end
 
-    assert CEL.eval("msg.?repeated_int64", %{msg: stored}, presence_env()) == {:ok, {:optional, :none}}
+    assert CEL.eval("msg.?repeated_int64", %{msg: stored}, presence_env()) ==
+             {:ok, {:optional, :none}}
   end
 
   defp env(opts), do: CEL.Env.build(opts)

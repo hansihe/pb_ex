@@ -477,7 +477,10 @@ defmodule CEL.Checker.Types do
     do: list(common_flexible_param(left, right))
 
   defp common_composite({:map, left_key, left_value}, {:map, right_key, right_value}) do
-    map(common_flexible_param(left_key, right_key), common_flexible_param(left_value, right_value))
+    map(
+      common_flexible_param(left_key, right_key),
+      common_flexible_param(left_value, right_value)
+    )
   end
 
   defp common_composite({:optional, left}, {:optional, right}),

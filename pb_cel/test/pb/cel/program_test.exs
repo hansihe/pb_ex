@@ -23,6 +23,7 @@ defmodule PB.CEL.ProgramTest do
         container: "cel.expr.conformance.proto3",
         vars: [n: :int]
       )
+
     assert {:ok, {:bool, true}} = CEL.eval("n == 1", %{n: 1}, env)
 
     {:ok, value} =

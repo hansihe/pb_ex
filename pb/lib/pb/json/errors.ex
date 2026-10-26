@@ -92,7 +92,11 @@ defmodule PB.JSON.Errors do
   end
 
   defp build(:unknown_field, field, opts) do
-    %ValueError{kind: :unknown_field, path: path(opts), protobuf_message: details(opts)[:type_name]}
+    %ValueError{
+      kind: :unknown_field,
+      path: path(opts),
+      protobuf_message: details(opts)[:type_name]
+    }
     |> put_reason(field)
   end
 
@@ -110,7 +114,14 @@ defmodule PB.JSON.Errors do
 
   defp build(:value_out_of_range, value, opts) do
     d = details(opts)
-    %ValueError{kind: :value_out_of_range, path: path(opts), value: value, min: d[:min], max: d[:max]}
+
+    %ValueError{
+      kind: :value_out_of_range,
+      path: path(opts),
+      value: value,
+      min: d[:min],
+      max: d[:max]
+    }
   end
 
   defp build(:unknown_enum_value, value, opts) do

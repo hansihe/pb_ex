@@ -322,8 +322,10 @@ defmodule CEL.CustomFunctionTest do
     env = env(vars: [x: :int], functions: functions)
 
     {:ok, checked} = CEL.check("first(x) && first(2)", env)
+
     [first_call, second_call] =
       for call <- CEL.Checked.references(checked).calls, do: call.expr_id
+
     program = CEL.Program.new(checked, env)
 
     assert CEL.Program.eval(program, %{x: 1}) == {:ok, Value.bool(true)}
@@ -335,6 +337,7 @@ defmodule CEL.CustomFunctionTest do
     assert_received {:called, [int: 2], %{expr_id: ^second_call}, _}
 
     assert CEL.eval("x.second(2)", %{x: 1}, env) == {:ok, Value.bool(true)}
+
     assert_received {:called, [int: 1, int: 2], %{function: "second", overload_id: "second_int"},
                      _}
 

@@ -92,7 +92,8 @@ defmodule PB.DescriptorRuntimeTest do
         kind: :message_name_mismatch,
         message_name: :"test.Person",
         path: [key],
-        expected: :"test.Person", got: :"test.PhoneNumber"
+        expected: :"test.Person",
+        got: :"test.PhoneNumber"
       )
     end
   end

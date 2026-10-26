@@ -29,7 +29,7 @@ defmodule CEL.Library.Intrinsics do
 
   # Ordering is defined within each type, and across the numeric types with
   # cel-go's overload ids (`less_int64_double`, ...).
-  @ordered_pairs (for type <- @ordered_types, do: {type, type, @matcher_suffixes[type]}) ++
+  @ordered_pairs for(type <- @ordered_types, do: {type, type, @matcher_suffixes[type]}) ++
                    for(
                      left <- @numeric_types,
                      right <- @numeric_types,

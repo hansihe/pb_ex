@@ -96,7 +96,13 @@ defmodule PB.ValueError do
     "invalid value at #{PB.Error.format_path(error.path)}#{detail}"
   end
 
-  defp format(%__MODULE__{kind: :value_out_of_range, path: path, min: min, max: max, value: value}) do
+  defp format(%__MODULE__{
+         kind: :value_out_of_range,
+         path: path,
+         min: min,
+         max: max,
+         value: value
+       }) do
     "value out of range at #{PB.Error.format_path(path)}: #{inspect(value)} not in #{min}..#{max}"
   end
 
@@ -104,7 +110,8 @@ defmodule PB.ValueError do
     do: "invalid oneof at #{PB.Error.format_path(path)}: #{inspect(reason)}"
 
   defp format(%__MODULE__{kind: :unknown_enum_value, path: path, value: value, enum: enum}),
-    do: "unknown enum value at #{PB.Error.format_path(path)}: #{inspect(value)} for #{inspect(enum)}"
+    do:
+      "unknown enum value at #{PB.Error.format_path(path)}: #{inspect(value)} for #{inspect(enum)}"
 
   defp format(%__MODULE__{kind: :message_name_mismatch, path: path, expected: expected, got: got}) do
     "message name mismatch at #{PB.Error.format_path(path)}: expected " <>

@@ -110,7 +110,9 @@ defmodule CEL do
     |> Parser.parse(location: opts.location)
     |> expand_macros(opts.macros)
     |> case do
-      {:ok, parsed} -> {:ok, parsed}
+      {:ok, parsed} ->
+        {:ok, parsed}
+
       {:error, %Error{} = error} ->
         error = %{error | location: opts.location}
         {:error, Source.locate(error, Source.line_offsets(source))}

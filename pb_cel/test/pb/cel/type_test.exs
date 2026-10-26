@@ -20,7 +20,10 @@ defmodule PB.CEL.TypeTest do
     # provider's name.
     for declared <- [enum, Atom.to_string(enum)] do
       env =
-        CEL.Env.build(types: PB.CEL.types(PB.TestSupport.TestSchema), vars: [e: {:enum, declared}])
+        CEL.Env.build(
+          types: PB.CEL.types(PB.TestSupport.TestSchema),
+          vars: [e: {:enum, declared}]
+        )
 
       assert CEL.Checked.type(CEL.check!("e", env)) == {:enum, enum}
     end

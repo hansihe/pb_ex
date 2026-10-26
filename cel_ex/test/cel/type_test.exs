@@ -7,9 +7,7 @@ defmodule CEL.TypeTest do
 
   test "the same shorthand declares variables and comes back from checking" do
     env =
-      CEL.Env.build(
-        vars: [at: :timestamp, ttl: :duration, tags: {:map, :string, {:list, :int}}]
-      )
+      CEL.Env.build(vars: [at: :timestamp, ttl: :duration, tags: {:map, :string, {:list, :int}}])
 
     checked = CEL.check!("at + ttl", env)
     assert CEL.Checked.type(checked) == :timestamp
@@ -31,8 +29,10 @@ defmodule CEL.TypeTest do
 
     assert CEL.eval("ttl", %{ttl: %{seconds: 1, nanos: 5}}, env) ==
              {:ok, {:duration, 1_000_000_005}}
+
     assert CEL.eval("any", %{any: ~U[1970-01-01 00:00:05Z]}, env) ==
              {:ok, {:timestamp, 5_000_000_000}}
+
     assert {:error, %CEL.Error{}} = CEL.eval("at", %{at: %{bogus: 1}}, env)
   end
 

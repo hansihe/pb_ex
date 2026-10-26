@@ -164,6 +164,7 @@ defmodule PB.Validate.CompilerTest do
 
     assert email_rule.kind == :predefined
     assert email_rule.id == "string.email"
+
     assert email_rule.vars == %{
              "rules" => {:message, :"buf.validate.StringRules", %{well_known: {:email, true}}},
              "rule" => {:bool, true}
@@ -185,6 +186,7 @@ defmodule PB.Validate.CompilerTest do
     assert %{PB.Validate => %{cel: [%CELOp{} = min_len_rule]}} = min_len
     assert min_len_rule.kind == :predefined
     assert min_len_rule.id == "string.min_len"
+
     assert min_len_rule.vars == %{
              "rules" => {:message, :"buf.validate.StringRules", %{min_len: 3}},
              "rule" => {:uint, 3}
@@ -200,6 +202,7 @@ defmodule PB.Validate.CompilerTest do
     const = message.fields_by_name.const
     assert %{PB.Validate => %{cel: [%CELOp{} = const_rule]}} = const
     assert const_rule.id == "string.const"
+
     assert const_rule.vars == %{
              "rules" => {:message, :"buf.validate.StringRules", %{const: "foo"}},
              "rule" => {:string, "foo"}
@@ -224,7 +227,10 @@ defmodule PB.Validate.CompilerTest do
     message = schema.messages[:"validate_predefined.NestedRules"]
 
     names = message.fields_by_name.names
-    assert %{PB.Validate => %{repeated: %RepeatedRules{items: %RuleSet{cel: [name_rule]}}}} = names
+
+    assert %{PB.Validate => %{repeated: %RepeatedRules{items: %RuleSet{cel: [name_rule]}}}} =
+             names
+
     assert name_rule.id == "string.min_len"
 
     assert name_rule.rule_path == %{
@@ -341,7 +347,9 @@ defmodule PB.Validate.CompilerTest do
            }
   end
 
-  test "PB.Validate.compile/2 annotates native enum defined_only rules", %{predefined_binpb: binpb} do
+  test "PB.Validate.compile/2 annotates native enum defined_only rules", %{
+    predefined_binpb: binpb
+  } do
     {:ok, descriptor_set} = PB.decode_descriptor_set(binpb)
 
     schema = PB.compile(descriptor_set, plugins: [PB.Validate])

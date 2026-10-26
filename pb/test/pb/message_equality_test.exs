@@ -110,7 +110,9 @@ defmodule PB.MessageEqualityTest do
 
   test "raises when an input is not a valid term for the message type" do
     for {left, right} <- [{42, %{}}, {%{}, "nope"}] do
-      error = assert_raise PB.ValueError, fn -> PB.message_equal?(left, right, @schema, @proto2) end
+      error =
+        assert_raise PB.ValueError, fn -> PB.message_equal?(left, right, @schema, @proto2) end
+
       assert error.operation == :message_equal
     end
   end

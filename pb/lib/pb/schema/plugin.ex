@@ -134,7 +134,10 @@ defmodule PB.Schema.Plugin do
 
         schema
         |> strip.()
-        |> Map.update!(:messages, &map_values(&1, fn message -> strip_message(message, strip) end))
+        |> Map.update!(
+          :messages,
+          &map_values(&1, fn message -> strip_message(message, strip) end)
+        )
         |> Map.update!(:extensions_by_name, &map_values(&1, strip))
         |> Map.update!(:enums, &map_values(&1, strip))
     end

@@ -174,5 +174,4 @@ defmodule CEL.Syntax.Builder do
          positions: Map.put(builder.positions, id, pos)
      }}
   end
-
 end

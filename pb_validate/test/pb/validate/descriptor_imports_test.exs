@@ -85,7 +85,8 @@ defmodule PB.Validate.DescriptorImportsTest do
     structural = compile(@structural, plugins: [PB.Validate])
     message = :"validate_structural.StructuralRules"
 
-    assert :ok = PB.Validate.validate(%{required_value: "x", choice: {:id, 1}}, structural, message)
+    assert :ok =
+             PB.Validate.validate(%{required_value: "x", choice: {:id, 1}}, structural, message)
 
     assert {:error, %PB.Validate.Error{violations: violations}} =
              PB.Validate.validate(%{}, structural, message)
@@ -95,7 +96,8 @@ defmodule PB.Validate.DescriptorImportsTest do
     custom = compile(@custom_predefined, plugins: [PB.Validate])
     message = :"validate_custom_predefined.CustomPredefinedRules"
 
-    assert :ok = PB.Validate.validate(%{value: "good", items: ["fine"], count: 2}, custom, message)
+    assert :ok =
+             PB.Validate.validate(%{value: "good", items: ["fine"], count: 2}, custom, message)
 
     assert {:error, %PB.Validate.Error{violations: [%{rule_id: "string.not_bad"}]}} =
              PB.Validate.validate(%{value: "bad", items: ["fine"], count: 2}, custom, message)

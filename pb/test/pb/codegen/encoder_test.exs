@@ -169,7 +169,8 @@ defmodule PB.Codegen.EncoderTest do
       message_name: :"test.Person",
       kind: :invalid_value,
       path: [:name],
-      expected: :utf8_string, got: :binary
+      expected: :utf8_string,
+      got: :binary
     )
   end
 
@@ -361,7 +362,8 @@ defmodule PB.Codegen.EncoderTest do
       kind: :invalid_value,
       message_name: :"test.Person",
       path: [:phones, {:index, 0}, :number],
-      expected: :string, got: :integer
+      expected: :string,
+      got: :integer
     )
   end
 

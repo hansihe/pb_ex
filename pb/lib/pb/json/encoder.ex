@@ -18,7 +18,6 @@ defmodule PB.JSON.Encoder do
   alias PB.Runtime.Scalar
   alias PB.Schema.Features
 
-
   @storage_keys [:__unknown_fields__, :__extensions__, :__message_name__]
 
   @doc false

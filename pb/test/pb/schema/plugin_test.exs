@@ -67,7 +67,9 @@ defmodule PB.Schema.PluginTest do
   @phone :"test.PhoneNumber"
 
   test "plugins run in order on the prepared schema, which records them" do
-    schema = PB.compile(Fixtures.person_descriptor_set(), plugins: [{Counter, mode: :x}, Follower])
+    schema =
+      PB.compile(Fixtures.person_descriptor_set(), plugins: [{Counter, mode: :x}, Follower])
+
     count = map_size(schema.messages)
 
     assert schema.plugins == [{Counter, [mode: :x]}, {Follower, []}]
@@ -120,7 +122,8 @@ defmodule PB.Schema.PluginTest do
   end
 
   test "schema modules compile with the plugins and get their schema functions" do
-    schema = PB.compile(Fixtures.person_descriptor_set(), plugins: [{Counter, mode: :y}, Follower])
+    schema =
+      PB.compile(Fixtures.person_descriptor_set(), plugins: [{Counter, mode: :y}, Follower])
 
     assert CountedSchema.schema() == schema
     assert CountedSchema.plugin_count() == {map_size(schema.messages), [mode: :y]}

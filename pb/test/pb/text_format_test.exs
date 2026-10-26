@@ -373,7 +373,8 @@ defmodule PB.TextFormatTest do
                 kind: :duplicate_field,
                 format: :text,
                 path: [:optional_int32],
-                line: 2, column: 1
+                line: 2,
+                column: 1
               } = error} = decode("optional_int32: 0\noptional_int32: 1")
 
       assert Exception.message(error) =~
@@ -651,8 +652,7 @@ defmodule PB.TextFormatTest do
 
     test "rejects prefixes C++ does not resolve and unknown types" do
       for url <- ["example.com/#{@nested}", "type.googleapis.com/no.Such", "a/b/#{@nested}"] do
-        assert {:error,
-                %DecodeError{kind: :malformed_text, line: 1, column: 16} = error} =
+        assert {:error, %DecodeError{kind: :malformed_text, line: 1, column: 16} = error} =
                  decode("optional_any { [#{url}] {} }"),
                url
 

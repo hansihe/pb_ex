@@ -28,6 +28,7 @@ defmodule PB.Validate.BundledSchemaTest do
     email = get_in(schema, [:messages, :"buf.validate.StringRules", :fields_by_name, :email])
 
     assert schema.plugins == []
+
     assert %{cel: [%{id: "string.email"}, %{id: "string.email_empty"}]} =
              email.options[@extensions][@predefined]
   end

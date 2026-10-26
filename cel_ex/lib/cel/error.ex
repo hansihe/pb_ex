@@ -71,8 +71,10 @@ defmodule CEL.Error do
 
   @impl Exception
   def message(%__MODULE__{message: msg, line: nil, offset: nil}), do: msg
+
   def message(%__MODULE__{message: msg, line: nil, offset: offset}),
     do: "#{msg} at offset #{offset}"
+
   def message(%__MODULE__{message: msg, line: line, column: column}),
     do: "#{msg} at line #{line}, column #{column}"
 end

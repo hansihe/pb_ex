@@ -63,7 +63,9 @@ defmodule PB.Validate.SchemaModuleTest do
   describe "schema module dispatch" do
     test "PB.Validate.validate accepts a schema module compiled with the plugin" do
       assert :ok = PB.Validate.validate(%{text: "hi"}, ValidatedSchema, @message)
-      assert ValidatedSchema.schema() == PB.compile(Fixtures.descriptor_set(), plugins: [PB.Validate])
+
+      assert ValidatedSchema.schema() ==
+               PB.compile(Fixtures.descriptor_set(), plugins: [PB.Validate])
     end
 
     test "PB.Validate.validate rejects a schema compiled without the plugin" do
@@ -87,7 +89,6 @@ defmodule PB.Validate.SchemaModuleTest do
       refute function_exported?(LiteralSchema, :validate!, 3)
       assert function_exported?(ValidatedSchema, :validate, 3)
     end
-
   end
 
   test "a schema module compiled with the project gets validate/2,3" do
