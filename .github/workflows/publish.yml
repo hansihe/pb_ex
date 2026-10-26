@@ -9,26 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: ci
     runs-on: ubuntu-latest
     # Holds HEX_API_KEY; add required reviewers there to gate releases.
     environment: hex
     steps:
       - uses: actions/checkout@v5
 
-      # Keep in step with mise.toml.
+      # Keep in step with mise.toml and ci.yml.
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "28.5"
           elixir-version: "1.20.1"
-
-      - name: Test
-        env:
-          PB_EX_LOCAL: "1"
-        run: |
-          for package in cel_ex pb pb_cel pb_validate; do
-            (cd "$package" && mix deps.get && mix test)
-          done
 
       - name: Publish
         env:
