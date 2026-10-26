@@ -5,6 +5,8 @@ releases and only their most important changes.
 
 ## Unreleased
 
+## v0.2.0 (2026-10-26)
+
 - CEL and protovalidate support moved out into their own packages. The CEL
   evaluator is now `cel_ex`, with modules renamed from `PB.CEL.*` to `CEL.*`.
   `pb_cel` provides `PB.CEL` for CEL over pb messages. `pb_validate` provides
